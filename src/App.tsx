@@ -3,15 +3,37 @@ import { useState, useEffect, useRef } from "react";
 // ── Supabase (loaded via CDN) ──
 var SB_URL='https://mxsdiqrbxlvcwexfdtrj.supabase.co';
 var SB_KEY='sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u';
-var supabase=window.supabase?window.supabase.createClient(SB_URL,SB_KEY):null;
-// Supabase CDN script injected at runtime
-if(!document.getElementById('sb-cdn')){
-  var _s=document.createElement('script');
-  _s.id='sb-cdn';
-  _s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
-  _s.onload=function(){supabase=window.supabase.createClient(SB_URL,SB_KEY);window.__supabaseReady=true;};
-  document.head.appendChild(_s);
+// Supabase — loaded via index.html CDN script tag
+// getSupabase() safely returns client once CDN is ready
+function getSupabase(){
+  if(!window.__sb){
+    if(window.supabase&&window.supabase.createClient){
+      window.__sb=window.supabase.createClient(SB_URL,SB_KEY);
+    }
+  }
+  return window.__sb||null;
 }
+var supabase={
+  auth:{
+    getSession:function(){return getSupabase()?getSupabase().auth.getSession():Promise.resolve({data:{session:null}});},
+    getUser:function(){return getSupabase()?getSupabase().auth.getUser():Promise.resolve({data:{user:null}});},
+    signUp:function(o){return getSupabase()?getSupabase().auth.signUp(o):Promise.resolve({error:{message:'Auth not ready'}});},
+    signInWithPassword:function(o){return getSupabase()?getSupabase().auth.signInWithPassword(o):Promise.resolve({error:{message:'Auth not ready'}});},
+    signOut:function(){return getSupabase()?getSupabase().auth.signOut():Promise.resolve({});},
+    resetPasswordForEmail:function(e){return getSupabase()?getSupabase().auth.resetPasswordForEmail(e):Promise.resolve({error:{message:'Auth not ready'}});},
+    onAuthStateChange:function(cb){if(getSupabase())return getSupabase().auth.onAuthStateChange(cb);return{data:{subscription:{unsubscribe:function(){}}}};}
+  },
+  from:function(table){
+    var client=getSupabase();
+    if(!client){
+      var noop=function(){return Promise.resolve({data:null,error:{message:'DB not ready'}});};
+      var chain={maybeSingle:noop,single:noop,then:function(cb){return Promise.resolve(cb({data:null,error:null}));}};
+      var eqChain=function(){return{eq:function(){return chain;},maybeSingle:noop};};
+      return{select:function(){return{eq:function(){return{eq:eqChain,maybeSingle:noop};},maybeSingle:noop};},upsert:noop,insert:noop};
+    }
+    return client.from(table);
+  }
+};
 
 // ── Storage ──
 function saveLS(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
@@ -373,6 +395,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .col-vis-drop{position:fixed;z-index:400;background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);box-shadow:0 8px 28px rgba(42,31,16,.14);padding:8px;min-width:200px;}
 .col-vis-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;font-size:13px;color:var(--text);}
 .col-vis-item:hover{background:var(--bg2);}
+.auth-grain{position:absolute;inset:0;opacity:.07;mix-blend-mode:multiply;pointer-events:none;z-index:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23g)'/%3E%3C/svg%3E");}
 .coming-soon{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:16px;color:var(--placeholder);}
 .has-tooltip{position:relative;}
 .has-tooltip:hover .tooltip-text{opacity:1;pointer-events:none;}
@@ -386,10 +409,11 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .proj-card-band{position:relative;overflow:hidden;}
 @media(max-width:768px){
   .stat-hide-mobile{display:none;}
+  input,textarea,select{font-size:16px!important;}
   .woven-root{height:auto;min-height:100vh;overflow-y:auto;overflow-x:hidden;}
   .dash-layout{flex:none;overflow:visible;flex-direction:column;height:auto;}
-  .dash-main{flex:none;overflow-y:visible;padding:16px 16px 40px;background:var(--bg0);order:1;}
-  .dash-sidebar{width:100%;max-width:100%;border-left:none;border-bottom:1px solid var(--border);padding:12px 14px;overflow:visible;height:auto;flex:none;min-width:0;background:var(--bg0)!important;order:0;}
+  .dash-main{flex:none;overflow-y:visible;padding:16px 16px 40px;background-color:var(--bg0);background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;order:1;}
+  .dash-sidebar{width:100%;max-width:100%;border-left:none;border-bottom:1px solid var(--border);padding:12px 14px;overflow:visible;height:auto;flex:none;min-width:0;background-color:var(--bg0)!important;background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px)!important;background-size:22px 22px!important;order:0;}
   .stat-cards-mobile{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
   .stat-cards-mobile .stat-card{margin-bottom:0;}
   .stat-num{font-size:24px;}
@@ -923,6 +947,87 @@ function StatusDotWithArchive({draft,app,showLabel}){
   );
 }
 
+
+// ── Export helpers ──
+function stripHtmlForExport(html){
+  if(!html)return'';
+  return html.replace(/<h1[^>]*>(.*?)<\/h1>/gi,'\n\n$1\n').replace(/<h2[^>]*>(.*?)<\/h2>/gi,'\n\n$1\n').replace(/<br\s*\/?>/gi,'\n').replace(/<p[^>]*>(.*?)<\/p>/gi,'$1\n').replace(/<li[^>]*>(.*?)<\/li>/gi,'• $1\n').replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ').trim();
+}
+
+function doExport(format,drafts,project){
+  var title=(project&&project.title)||'Manuscript';
+  if(format==='PDF'){
+    if(!window.jspdf){alert('PDF export is loading, please try again in a moment.');return;}
+    var doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+    var margin=20;var pageW=210-margin*2;var y=margin;
+    var lineH=7;var titleSize=18;var bodySize=12;
+    // Title page
+    doc.setFontSize(titleSize);doc.setFont('helvetica','bold');
+    doc.text(title,105,80,{align:'center'});
+    doc.setFontSize(bodySize);doc.setFont('helvetica','normal');
+    doc.text('Generated by Woven',105,95,{align:'center'});
+    drafts.forEach(function(draft){
+      doc.addPage();y=margin;
+      // Draft title as H1
+      doc.setFontSize(16);doc.setFont('helvetica','bold');
+      var titleLines=doc.splitTextToSize(draft.title||'Untitled',pageW);
+      doc.text(titleLines,margin,y);y+=titleLines.length*8+6;
+      // Body
+      doc.setFontSize(bodySize);doc.setFont('helvetica','normal');
+      var bodyText=stripHtmlForExport(draft.body||'');
+      if(bodyText){
+        var lines=doc.splitTextToSize(bodyText,pageW);
+        lines.forEach(function(line){
+          if(y>280){doc.addPage();y=margin;}
+          doc.text(line,margin,y);y+=lineH;
+        });
+      }
+    });
+    doc.save(title.replace(/\s+/g,'_')+'.pdf');
+  } else {
+    // DOCX: generate as plain HTML and download as .doc (opens in Word)
+    var html='<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Georgia,serif;font-size:12pt;line-height:1.8;max-width:800px;margin:40px auto;} h1{font-size:18pt;page-break-before:always;margin-bottom:12pt;} </style></head><body>';
+    html+='<h1 style="page-break-before:avoid;text-align:center;">'+title+'</h1><p style="text-align:center;color:#999;">Generated by Woven</p>';
+    drafts.forEach(function(draft){
+      html+='<h1>'+(draft.title||'Untitled')+'</h1>';
+      html+=(draft.body||'<p></p>');
+    });
+    html+='</body></html>';
+    var blob=new Blob([html],{type:'application/msword'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');a.href=url;a.download=title.replace(/\s+/g,'_')+'.doc';a.click();
+    URL.revokeObjectURL(url);
+  }
+}
+
+// ── SharedDraftView ──
+function SharedDraftView({shareId}){
+  var sd=useState(null);var data=sd[0];var setData=sd[1];
+  var se=useState(true);var loading=se[0];var setLoading=se[1];
+  var sErr=useState('');var err=sErr[0];var setErr=sErr[1];
+  useEffect(function(){
+    if(!shareId)return;
+    supabase.from('shared_drafts').select('*').eq('id',shareId).maybeSingle().then(function(r){
+      if(r.data)setData(r.data);
+      else setErr('This link has expired or cannot be found.');
+      setLoading(false);
+    });
+  },[shareId]);
+  if(loading)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'var(--serif)',fontSize:20,color:'var(--mid)'}}>Loading...</div>);
+  if(err)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'var(--serif)',fontSize:20,color:'var(--mid)'}}>{err}</div>);
+  if(!data)return null;
+  return(
+<div style={{maxWidth:680,margin:'0 auto',padding:'60px 24px',fontFamily:'var(--serif)',color:'var(--body-text)'}}>
+  <div style={{fontSize:11,color:'var(--mid)',marginBottom:32,textAlign:'center',letterSpacing:'.08em',textTransform:'uppercase'}}>Shared via Woven · Read only</div>
+  <h1 style={{fontSize:32,fontWeight:600,color:'var(--text)',marginBottom:32,lineHeight:1.3}}>{data.title||'Untitled'}</h1>
+  <div style={{fontSize:19,lineHeight:1.9}} dangerouslySetInnerHTML={{__html:data.body||''}}/>
+  <div style={{marginTop:48,paddingTop:24,borderTop:'1px solid var(--border)',textAlign:'center'}}>
+    <a href="/" style={{fontFamily:'var(--serif)',fontSize:14,color:'var(--indigo)',textDecoration:'none'}}>Written in Woven</a>
+  </div>
+</div>
+  );
+}
+
 // ── BindPanel ──
 function BindPanel({app,open,onClose}){
   var s=useState('PDF');var format=s[0];var setFormat=s[1];
@@ -932,7 +1037,7 @@ function BindPanel({app,open,onClose}){
   var totalWords=allSeq.reduce(function(s,d){return s+(d.wordCount||0);},0);
   return(
 <Panel open={open} onClose={onClose} title="Bind your drafts"
-  footer={<button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={function(){alert('Export as '+format+': '+allSeq.length+' drafts, '+totalWords+' words');onClose();}}>Export</button>}>
+  footer={<button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={function(){doExport(format,allSeq,app.currentProject);onClose();}}>Export</button>}>
   <div style={{marginBottom:16}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
       <span className="sect-lbl" style={{margin:0}}>Sequence</span>
@@ -1700,7 +1805,7 @@ function EditorView({app}){
   var isMobile=useIsMobile();
   useEffect(function(){if(!draft)return;if(lastDraftId.current===draft.id)return;lastDraftId.current=draft.id;sessionStartWc.current=draft.wordCount||0;setWc(draft.wordCount||0);if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';},[did]);
   useEffect(function(){if(!draft)return;if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';},[mode,did]);
-  function scheduleSave(html,newWc){if(saveTimer.current)clearTimeout(saveTimer.current);saveTimer.current=setTimeout(function(){app.updateDraft(pid,did,{body:html,wordCount:newWc,updatedAt:new Date().toISOString()});var added=Math.max(0,newWc-sessionStartWc.current);if(added>0)app.recordSession(pid,added);},600);}
+  function scheduleSave(html,newWc){if(saveTimer.current)clearTimeout(saveTimer.current);saveTimer.current=setTimeout(function(){app.updateDraft(pid,did,{body:html,wordCount:newWc,updatedAt:new Date().toISOString()});var added=Math.max(0,newWc-sessionStartWc.current);if(added>0&&added<500){app.recordSession(pid,added);sessionStartWc.current=newWc;}},600);}
   function handleRTInput(){if(!editorRef.current)return;var text=editorRef.current.innerText||editorRef.current.textContent||'';var newWc=countWords(text);setWc(newWc);scheduleSave(editorRef.current.innerHTML,newWc);}
   function handlePaste(e){
     e.preventDefault();
@@ -1790,7 +1895,16 @@ function EditorView({app}){
       </button>
       {shareOpen&&(
 <div style={{position:'fixed',top:sharePos.top,left:sharePos.left,zIndex:400,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:'var(--r)',boxShadow:'0 8px 24px rgba(0,0,0,.5)',minWidth:180}}>
-  <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer',fontSize:13}} onClick={function(){navigator.clipboard&&navigator.clipboard.writeText(window.location.href);alert('Read-only link copied.');setShareOpen(false);}}>
+  <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer',fontSize:13}} onClick={async function(){
+    var sid=genId();
+    var res=await supabase.from('shared_drafts').insert({id:sid,title:draft.title||'Untitled',body:draft.body||''});
+    if(res.error){alert('Could not create share link. Please try again.');return;}
+    var base=window.location.origin+window.location.pathname;
+    var link=base+'?share='+sid;
+    navigator.clipboard&&navigator.clipboard.writeText(link);
+    alert('Read-only link copied to clipboard!');
+    setShareOpen(false);
+  }}>
     <span className="mi" style={{fontSize:18}}>link</span>Copy read-only link
   </div>
   <div style={{borderTop:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer',fontSize:13}} onClick={function(){setShareOpen(false);setExportOpen(true);}}>
@@ -1841,16 +1955,18 @@ function EditorView({app}){
   )}
   {exportOpen&&(
 <Panel open={exportOpen} onClose={function(){setExportOpen(false);}} title="Export Draft"
-  footer={<button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={function(){alert('Export as '+exFormat+': '+draft.title);setExportOpen(false);}}>Export as {exFormat}</button>}>
-  <div><span className="sect-lbl">Format</span>
-    <select value={exFormat} onChange={function(e){setExFormat(e.target.value);}}>
-      <option value="PDF">PDF</option>
-      <option value="Word (.docx)">Word Document (.docx)</option>
-      <option value="Markdown">Markdown (.md)</option>
-      <option value="Plain Text">Plain Text</option>
-    </select>
+  footer={<button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={function(){doExport(exFormat,[draft],app.currentProject);setExportOpen(false);}}>Export as {exFormat}</button>}>
+  <div style={{marginBottom:16}}>
+    <span className="sect-lbl">Format</span>
+    <div style={{display:'flex',gap:8,marginTop:4}}>
+      {['PDF','Word (.docx)'].map(function(f){return(
+<button key={f} className={'btn '+(exFormat===f?'btn-primary':'btn-ghost')} style={{flex:1,justifyContent:'center'}} onClick={function(){setExFormat(f);}}>
+  <span className="mi" style={{fontSize:16}}>{f==='PDF'?'picture_as_pdf':'description'}</span>{f}
+</button>
+      );})}
+    </div>
   </div>
-  <div style={{marginTop:16,fontSize:13,color:'var(--mid)'}}>Exports this draft only: <strong style={{color:'var(--text)'}}>{draft.title||'Untitled'}</strong> ({wc} words)</div>
+  <div style={{fontSize:13,color:'var(--mid)'}}>Exports this draft only: <strong style={{color:'var(--text)'}}>{draft.title||'Untitled'}</strong> ({wc} words)</div>
 </Panel>
   )}
 </div>
@@ -2384,10 +2500,13 @@ function AuthScreen({onAuth}){
   }
   return(
 <div style={{position:'relative',display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--bg0)',fontFamily:'var(--ui)',overflow:'hidden'}}>
-  {/* Amber radial blurs */}
-  <div style={{position:'absolute',top:0,left:0,width:500,height:500,background:'radial-gradient(ellipse at top left, rgba(196,94,40,0.18) 0%, rgba(196,94,40,0) 70%)',pointerEvents:'none',filter:'blur(2px)'}}/>
-  <div style={{position:'absolute',bottom:0,right:0,width:500,height:500,background:'radial-gradient(ellipse at bottom right, rgba(232,160,48,0.15) 0%, rgba(232,160,48,0) 70%)',pointerEvents:'none',filter:'blur(2px)'}}/>
-  <div style={{position:'relative',zIndex:1,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'40px',width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(42,31,16,.12)'}}>
+  {/* Grain overlay */}
+  <div className="auth-grain"/>
+  {/* Amber radial blurs - top left */}
+  <div style={{position:'absolute',top:'-10%',left:'-10%',width:'70vw',height:'70vh',background:'radial-gradient(ellipse, rgba(196,94,40,0.35) 0%, rgba(196,94,40,0.15) 35%, transparent 65%)',pointerEvents:'none',filter:'blur(60px)',zIndex:0}}/>
+  {/* Amber radial blurs - bottom right */}
+  <div style={{position:'absolute',bottom:'-10%',right:'-10%',width:'70vw',height:'70vh',background:'radial-gradient(ellipse, rgba(240,192,80,0.30) 0%, rgba(232,160,48,0.12) 35%, transparent 65%)',pointerEvents:'none',filter:'blur(60px)',zIndex:0}}/>
+  <div style={{position:'relative',zIndex:1,background:'rgba(245,237,224,0.92)',backdropFilter:'blur(12px)',border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'40px',width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(42,31,16,.15)'}}>
     <div style={{textAlign:'center',marginBottom:28}}>
       <div style={{fontFamily:'var(--serif)',fontSize:32,fontWeight:600,color:'var(--indigo)',marginBottom:4}}>Woven</div>
       <div style={{fontSize:14,color:'var(--mid)'}}>Where thinking & writing happen together.</div>
@@ -2451,9 +2570,9 @@ function App(){
   var snp=useState(false);var showNewProject=snp[0];var setShowNewProject=snp[1];
 
   function loadProjectDataById(pid){
-    loadLS('woven:drafts:'+pid,[]).then(function(d){setAllDrafts(function(p){var n=Object.assign({},p);n[pid]=d;return n;});});
-    loadLS('woven:strands:'+pid,{}).then(function(st){setAllStrands(function(p){var n=Object.assign({},p);n[pid]=st;return n;});});
-    loadLS('woven:templates:'+pid,[]).then(function(tm){setAllTemplates(function(p){var n=Object.assign({},p);n[pid]=tm;return n;});});
+    loadDB('woven:drafts:'+pid,[]).then(function(d){setAllDrafts(function(p){var n=Object.assign({},p);n[pid]=Array.isArray(d)?d:[];return n;});});
+    loadDB('woven:strands:'+pid,{}).then(function(st){setAllStrands(function(p){var n=Object.assign({},p);n[pid]=st&&typeof st==='object'?st:{};return n;});});
+    loadDB('woven:templates:'+pid,[]).then(function(tm){setAllTemplates(function(p){var n=Object.assign({},p);n[pid]=Array.isArray(tm)?tm:[];return n;});});
   }
   useEffect(function(){
     // Check existing auth session
@@ -2558,7 +2677,28 @@ function App(){
   function setGoal(v){setGoalState(v);saveDB('woven:goal',v);}
   function updateGlobalLT(id,changes){setGlobalLT(function(prev){var next=Object.assign({},prev);next[id]=Object.assign({},next[id]||{},changes);saveDB('woven:global_lt',next);return next;});}
   function setProfile(p){setProfileState(p);saveDB('woven:profile',p);}
-  function recordSession(pid,wordsAdded){var t=todayStr();setSessions(function(prev){var next=prev.slice();var idx=next.findIndex(function(s){return s.date===t&&s.projId===pid;});if(idx>=0){next[idx]=Object.assign({},next[idx],{words:(next[idx].words||0)+wordsAdded});}else{next.push({id:genId(),date:t,projId:pid,words:wordsAdded});}saveDB('woven:sessions',next);return next;});}
+  function recordSession(pid,wordsAdded){
+    var t=todayStr();
+    // Cap: only keep last 90 days, max 500 words added per call (sanity check)
+    if(wordsAdded>500)return;
+    setSessions(function(prev){
+      var next=prev.slice();
+      var idx=next.findIndex(function(s){return s.date===t&&s.projId===pid;});
+      if(idx>=0){
+        // Cap daily total at 50000 words to prevent runaway counts
+        var current=next[idx].words||0;
+        if(current+wordsAdded>50000)return prev;
+        next[idx]=Object.assign({},next[idx],{words:current+wordsAdded});
+      } else {
+        next.push({id:genId(),date:t,projId:pid,words:wordsAdded});
+      }
+      // Keep only last 90 days
+      var cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);var cutoffStr=cutoff.toISOString().slice(0,10);
+      next=next.filter(function(s){return s.date>=cutoffStr;});
+      saveDB('woven:sessions',next);
+      return next;
+    });
+  }
   function goBack(){setView('dashboard');setProjId(null);setDraftId(null);}
   function openDraft(did){setDraftId(did);setView('editor');}
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
@@ -2567,6 +2707,11 @@ function App(){
   var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser};
 
   function signOut(){supabase.auth.signOut().then(function(){window.__wovenUserId=null;setCurrentUser(null);setView('dashboard');setProjects([]);setAllDrafts({});});}
+
+  // Check for shared draft link
+  var urlParams=new URLSearchParams(window.location.search);
+  var shareId=urlParams.get('share');
+  if(shareId)return(<div className="woven-root"><GlobalStyles/><SharedDraftView shareId={shareId}/></div>);
 
   if(authLoading)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg0)',fontFamily:'var(--serif)',fontSize:24,color:'var(--mid)'}}>Loading...</div>);
   if(!currentUser)return(<div><GlobalStyles/><AuthScreen onAuth={function(user){window.__wovenUserId=user.id;setCurrentUser(user);loadAllData();}}/></div>);
