@@ -1,0 +1,2545 @@
+// @ts-nocheck
+import { useState, useEffect, useRef } from "react";
+// ── Supabase (loaded via CDN) ──
+var SB_URL='https://mxsdiqrbxlvcwexfdtrj.supabase.co';
+var SB_KEY='sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u';
+var supabase=window.supabase?window.supabase.createClient(SB_URL,SB_KEY):null;
+// Supabase CDN script injected at runtime
+if(!document.getElementById('sb-cdn')){
+  var _s=document.createElement('script');
+  _s.id='sb-cdn';
+  _s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
+  _s.onload=function(){supabase=window.supabase.createClient(SB_URL,SB_KEY);window.__supabaseReady=true;};
+  document.head.appendChild(_s);
+}
+
+// ── Storage ──
+function saveLS(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
+function loadLS(key,def){return Promise.resolve().then(function(){try{var v=localStorage.getItem(key);return v?JSON.parse(v):def;}catch(e){return def;}});}
+function saveDB(key,val){
+  var uid=window.__wovenUserId;
+  if(!uid)return saveLS(key,val);
+  saveLS(key,val); // keep local copy too
+  supabase.from('wf_data').upsert({key:key,user_id:uid,value:val,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(r){if(r.error)console.error('saveDB error:',r.error);});
+}
+function loadDB(key,def){
+  var uid=window.__wovenUserId;
+  if(!uid)return loadLS(key,def);
+  return supabase.from('wf_data').select('value').eq('key',key).eq('user_id',uid).maybeSingle().then(function(r){
+    if(r.data&&r.data.value!==undefined)return r.data.value;
+    return loadLS(key,def); // fallback to local
+  });
+}
+
+// ── Utils ──
+function genId(){return '_'+Math.random().toString(36).slice(2)+Date.now().toString(36);}
+function countWords(t){if(!t)return 0;var s=t.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();return s?s.split(' ').filter(function(w){return w.length>0;}).length:0;}
+function stripHtml(html){return html?html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim():'';}
+function todayStr(){return new Date().toISOString().slice(0,10);}
+function dayLbl(offset){var days=['Su','Mo','Tu','We','Th','Fr','Sa'];var d=new Date();d.setDate(d.getDate()-offset);return days[d.getDay()];}
+function initials(name){
+  if(!name||!name.trim())return '?';
+  var p=name.trim().split(/\s+/).filter(function(w){return w.length>0;});
+  if(p.length===0)return '?';
+  if(p.length===1)return p[0].slice(0,1).toUpperCase();
+  if(p.length===2)return(p[0][0]+p[1][0]).toUpperCase();
+  return(p[0][0]+p[1][0]+p[2][0]).toUpperCase();
+}
+function getGreeting(){var h=new Date().getHours();if(h<12)return 'Good morning';if(h<17)return 'Good afternoon';return 'Good evening';}
+function useIsMobile(){var s=useState(window.innerWidth<768);var isMobile=s[0];var setIsMobile=s[1];useEffect(function(){function onResize(){setIsMobile(window.innerWidth<768);}window.addEventListener('resize',onResize);return function(){window.removeEventListener('resize',onResize);};},[]);return isMobile;}
+
+// ── Constants ──
+var STATUSES={loose_thread:{label:'Loose Thread',color:'#d4943e'},first_draft:{label:'First Draft',color:'#2f76e0'},second_draft:{label:'Second Draft',color:'#e02f79'},under_review:{label:'Under Review',color:'#ce2fe0'},complete:{label:'Complete',color:'#64e02f'}};
+// Canvas | Table | Tiles | Cards | (separator) Strands
+var VIEW_MODES=[
+  {key:'canvas', icon:'hub',         label:'Canvas', group:'main'},
+  {key:'table',  icon:'table_rows',  label:'Table',  group:'main'},
+  {key:'cards',  icon:'view_agenda', label:'Cards',  group:'main'},
+  {key:'strands',icon:'share',       label:'Strands',group:'strands'}
+];
+var PRESET_COLORS=['#2f76e0','#64e02f','#ce2fe0','#2fe07f','#e02f79','#c45e28','#e8a030','#2f9966','#b83220','#f0c050'];
+var FIELD_TYPES=[{id:'short_text',label:'Short text'},{id:'long_text',label:'Long text'},{id:'number',label:'Number'},{id:'boolean',label:'Yes / No'},{id:'select',label:'Dropdown'}];
+var PROJ_TYPES=[
+  {id:'fiction',    label:'Fiction',     icon:'auto_stories',colls:['Characters','Locations','Lore & World'],desc:'Novels, short fiction, narrative'},
+  {id:'nonfiction', label:'Non-Fiction', icon:'article',     colls:['Sources','Interviews','Subjects'],      desc:'Essays, memoir, journalism'},
+  {id:'research',   label:'Research',   icon:'science',     colls:['Sources','Reports','Interviews'],        desc:'Academic or investigative writing'},
+  {id:'blog',       label:'Blog Series',icon:'rss_feed',    colls:['Topics','Sources','Audience Notes'],     desc:'Posts, columns, newsletters'},
+  {id:'screenplay', label:'Screenplay', icon:'movie',       colls:['Characters','Locations','Scenes'],       desc:'Film, TV, stage scripts'},
+  {id:'other',      label:'Other',      icon:'edit_note',   colls:['Characters','Sources'],                  desc:'Everything else'}
+];
+var COLL_FIELDS={
+  'Characters':[{id:'aliases',label:'Aliases',type:'short_text'},{id:'role',label:'Role',type:'short_text'},{id:'personality',label:'Personality',type:'long_text'},{id:'appearance',label:'Physical Description',type:'long_text'}],
+  'Locations':[{id:'type',label:'Type',type:'short_text'},{id:'description',label:'Description',type:'long_text'}],
+  'Lore & World':[{id:'category',label:'Category',type:'short_text'},{id:'notes',label:'Notes',type:'long_text'}],
+  'Sources':[{id:'author',label:'Author',type:'short_text'},{id:'url',label:'URL',type:'short_text'},{id:'notes',label:'Notes',type:'long_text'}],
+  'Interviews':[{id:'subject',label:'Subject',type:'short_text'},{id:'date',label:'Date',type:'short_text'},{id:'notes',label:'Notes',type:'long_text'}],
+  'Scenes':[{id:'location',label:'Location',type:'short_text'},{id:'notes',label:'Notes',type:'long_text'}]
+};
+function defaultFields(c){return COLL_FIELDS[c]||[{id:'notes',label:'Notes',type:'long_text'}];}
+var DEFAULT_TABLE_COLS=['title','synopsis','status','strandTags'];
+
+// ── Seed Data ──
+function makeSeedData(pid){
+  var now=new Date().toISOString();
+  var drafts=[
+    {id:'d1',projectId:pid,title:'The Arrival',synopsis:'Eldric arrives at the farmstead to find it eerily silent.',status:'second_draft',order:1,parentId:null,nestExpanded:true,body:'<p>The farmstead appeared through the fog as Eldric crested the hill. He had not expected the silence.</p><p>"Maren?" His voice was swallowed by the grey.</p>',wordCount:32,strandTags:['s1','s2'],pov:'s1',customFields:{},createdAt:now,updatedAt:now},
+    {id:'d1a',projectId:pid,title:'The Farmstead at Dawn',synopsis:'A nested scene — Eldric searches the outbuildings.',status:'first_draft',order:1.1,parentId:'d1',nestExpanded:true,body:'',wordCount:0,strandTags:['s1'],pov:'s1',customFields:{},createdAt:now,updatedAt:now},
+    {id:'d2',projectId:pid,title:'The Keep at Ironveil',synopsis:'Lord Vasher summons the council. Maren must attend or raise suspicion.',status:'first_draft',order:2,parentId:null,nestExpanded:true,body:'<p>The great hall was lit by torchlight even at midday. Maren took her place where the shadows were deepest.</p>',wordCount:27,strandTags:['s2','s3'],pov:'s2',customFields:{},createdAt:now,updatedAt:now},
+    {id:'d3',projectId:pid,title:'First Light',synopsis:'Eldric remembers the archive before the fire.',status:'first_draft',order:3,parentId:null,nestExpanded:true,body:'<p>He had loved the archive most at dawn, when the light caught the dust motes like suspended snow.</p>',wordCount:24,strandTags:['s1'],pov:'s1',customFields:{},createdAt:now,updatedAt:now},
+    {id:'d4',projectId:pid,title:'The Council Meets',synopsis:'Something is decided that cannot be undone.',status:'first_draft',order:4,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:['s2','s3'],pov:'s2',customFields:{},createdAt:now,updatedAt:now},
+    {id:'d5',projectId:pid,title:"Eldric's Secret",synopsis:'The truth about the archive fire is finally revealed.',status:'complete',order:5,parentId:null,nestExpanded:true,body:'<p>Eldric had not started the fire. But he had known it was coming.</p>',wordCount:18,strandTags:['s1'],pov:'s1',customFields:{},createdAt:now,updatedAt:now},
+    {id:'lt1',projectId:pid,title:'The Dream Sequence',synopsis:'Maren keeps having the same dream. Magical or psychological?',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:now,updatedAt:now},
+    {id:'lt2',projectId:pid,title:'',synopsis:'Where does Vasher finally show his hand?',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:now,updatedAt:now}
+  ];
+  var templates=[
+    {id:'t1',projectId:pid,name:'Characters',fields:COLL_FIELDS['Characters'],sharedWith:[]},
+    {id:'t2',projectId:pid,name:'Locations',fields:COLL_FIELDS['Locations'],sharedWith:[]},
+    {id:'t3',projectId:pid,name:'Plot Threads',fields:[{id:'notes',label:'Notes',type:'long_text'}],sharedWith:[]}
+  ];
+  var strandsObj={
+    'Characters':[
+      {id:'s1',templateId:'t1',collectionName:'Characters',name:'Eldric',color:'#6366f1',image:null,fields:{aliases:'El, the Archivist',role:'Protagonist',personality:"Quiet, methodical, haunted by survivor's guilt.",appearance:'Mid-40s, silver-streaked hair, ink-stained fingers.'},createdAt:now},
+      {id:'s2',templateId:'t1',collectionName:'Characters',name:'Maren',color:'#2dd4bf',image:null,fields:{aliases:'',role:'Deuteragonist',personality:'Sharp, politically savvy, protective to the point of self-destruction.',appearance:'Late 30s, dark braided hair, a scar along her jaw.'},createdAt:now},
+      {id:'s3',templateId:'t1',collectionName:'Characters',name:'Lord Vasher',color:'#f87171',image:null,fields:{aliases:'The Warden',role:'Antagonist',personality:'Utterly convinced of his own righteousness.',appearance:'Older, impeccably dressed, silver-tipped cane he does not need.'},createdAt:now}
+    ],
+    'Locations':[
+      {id:'l1',templateId:'t2',collectionName:'Locations',name:'The Keep at Ironveil',color:'#818cf8',image:null,fields:{type:'Fortress',description:'Stone keep built into the northern cliff face.'},createdAt:now},
+      {id:'l2',templateId:'t2',collectionName:'Locations',name:'The Farmstead',color:'#a5b4fc',image:null,fields:{type:'Rural property',description:"Maren's childhood home. Remote, fog-prone."},createdAt:now}
+    ],
+    'Plot Threads':[{id:'pt1',templateId:'t3',collectionName:'Plot Threads',name:'The Archive Fire',color:'#38bdf8',image:null,fields:{notes:'What started the fire?'},createdAt:now}]
+  };
+  return{drafts:drafts,templates:templates,strandsObj:strandsObj};
+}
+
+// ── Draft tree helpers ──
+function buildTree(drafts){
+  // Returns top-level drafts with .children array, sorted by order
+  var byId={};
+  drafts.forEach(function(d){byId[d.id]=Object.assign({},d,{children:[]});});
+  var roots=[];
+  drafts.forEach(function(d){
+    if(d.parentId&&byId[d.parentId]){byId[d.parentId].children.push(byId[d.id]);}
+    else{roots.push(byId[d.id]);}
+  });
+  roots.sort(function(a,b){return (a.order||0)-(b.order||0);});
+  roots.forEach(function(r){r.children.sort(function(a,b){return (a.order||0)-(b.order||0);});});
+  return roots;
+}
+function draftLabel(draft,parentDraft){
+  if(!draft.parentId){
+    return ''+Math.floor(draft.order||0);
+  }
+  if(parentDraft){
+    var pn=Math.floor(parentDraft.order||0);
+    var idx=parentDraft.children?parentDraft.children.findIndex(function(c){return c.id===draft.id;}):-1;
+    return pn+'.'+(idx>=0?idx+1:1);
+  }
+  return ''+draft.order;
+}
+
+// ── CSS ──
+var CSS=`
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&family=Caveat:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+
+:root {
+  --bg0:#fdf8f0; --bg1:#f5ede0; --bg2:#ede0cc; --bg3:#e2d0b8; --bg4:#d4b896;
+  --indigo:#c45e28; --indigoL:#e8a030; --amber-gold:#f0c050; --amber-dark:#8a3a10;
+  --text:#2a1f10; --body-text:#4a3520; --mid:#7a5a38; --placeholder:#a88060;
+  --border:#e2d0b8; --teal:#2f9966; --danger:#b83220;
+  --serif:'Crimson Text',Georgia,serif;
+  --ui:'DM Sans',system-ui,sans-serif;
+  --mono:'Courier New',monospace;
+  --scribble:'Caveat',cursive;
+  --r:8px; --rl:12px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg0);}
+.woven-root{display:flex;flex-direction:column;height:100vh;overflow:hidden;background:var(--bg0);color:var(--text);font-family:var(--ui);font-size:16px;-webkit-font-smoothing:antialiased;position:relative;}
+.woven-root::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23g)'/%3E%3C/svg%3E");mix-blend-mode:multiply;opacity:.07;}
+button{font-family:var(--ui);cursor:pointer;border:none;background:none;color:inherit;font-size:14px;}
+input,textarea,select{font-family:var(--ui);font-size:14px;color:var(--text);background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;width:100%;}
+input::placeholder,textarea::placeholder{color:var(--placeholder);opacity:1;}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--indigo);outline-offset:-1px;background:var(--bg0);}
+textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
+::-webkit-scrollbar{width:4px;height:4px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px;}
+.mi{font-family:'Material Icons';font-style:normal;font-size:20px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--r);font-size:14px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:all .15s;white-space:nowrap;}
+.btn-primary{background:var(--indigo);color:#fff;box-shadow:0 1px 4px rgba(42,31,16,.15);}.btn-primary:hover{background:var(--amber-dark);color:#fff;}
+.btn-ghost{color:var(--mid);border-color:var(--border);background:var(--bg1);}.btn-ghost:hover{color:var(--text);border-color:var(--bg4);background:var(--bg2);}
+.btn-danger{color:var(--danger);border-color:var(--danger);}.btn-danger:hover{background:rgba(184,50,32,.08);}
+.btn-sm{padding:5px 11px;font-size:13px;}.btn-icon{padding:5px;border-radius:var(--r);color:var(--mid);display:inline-flex;align-items:center;}.btn-icon:hover{background:var(--bg2);color:var(--text);}
+.nav{display:flex;align-items:center;padding:0 14px;height:54px;background:var(--bg1);border-bottom:1px solid var(--border);flex-shrink:0;gap:10px;box-shadow:0 1px 4px rgba(42,31,16,.05);}
+.wordmark{font-family:var(--serif);font-size:22px;font-weight:600;color:var(--indigo);cursor:pointer;user-select:none;}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;cursor:pointer;}
+.view-switcher{display:flex;align-items:center;background:var(--bg2);border-radius:var(--r);padding:3px;gap:1px;border:1px solid var(--border);}
+.view-seg{height:32px;width:36px;display:flex;align-items:center;justify-content:center;border-radius:6px;cursor:pointer;transition:all .15s;color:var(--mid);position:relative;flex-shrink:0;}
+.view-seg:hover{color:var(--text);}
+.view-seg.active{background:var(--bg0);color:var(--indigo);box-shadow:0 1px 4px rgba(42,31,16,.08);}
+.view-seg .mi{font-size:18px;}
+.view-seg-tip{position:absolute;bottom:-30px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg0);font-size:11px;padding:3px 8px;border-radius:4px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .1s;z-index:100;}
+.view-seg:hover .view-seg-tip{opacity:1;}
+.view-sep{width:1px;height:20px;background:var(--border);margin:0 3px;flex-shrink:0;}
+.proj-title-inp{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--text);background:transparent;border:none;padding:2px 4px;border-radius:4px;min-width:60px;max-width:200px;}
+.proj-title-inp:focus{outline:1px solid var(--indigo);background:var(--bg1);}
+.proj-title-inp::placeholder{color:var(--placeholder);}
+.panel-overlay{position:fixed;inset:0;z-index:200;display:flex;justify-content:flex-end;}
+.panel-backdrop{position:absolute;inset:0;background:rgba(42,31,16,.25);}
+.panel-box{position:relative;width:380px;max-width:92vw;background:var(--bg1);border-left:1px solid var(--border);display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(42,31,16,.10);overflow:hidden;}
+.panel-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.panel-title{font-family:var(--serif);font-size:19px;font-weight:600;color:var(--text);}
+.panel-body{flex:1;overflow-y:auto;padding:18px;}
+.panel-footer{padding:14px 18px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:8px;justify-content:flex-end;}
+.modal-overlay{position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;}
+.modal-backdrop{position:absolute;inset:0;background:rgba(42,31,16,.3);}
+.modal-box{position:relative;background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);padding:28px;width:480px;max-width:92vw;box-shadow:0 20px 60px rgba(42,31,16,.15);max-height:88vh;overflow-y:auto;}
+.sect-lbl{font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px;display:block;}
+.dot-grid{background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;}
+.dash-layout{display:flex;flex:1;overflow:hidden;background:var(--bg0);align-items:stretch;}
+.dash-main{flex:2;overflow-y:auto;padding:40px 36px 80px;min-width:0;background-color:var(--bg0);background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;}
+.dash-sidebar{flex:1;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;background:var(--bg1);padding:24px;min-width:220px;max-width:280px;}
+.dash-greeting{font-family:var(--serif);font-size:28px;font-weight:600;color:var(--text);margin-bottom:4px;}
+.dash-subtitle{font-size:14px;color:var(--mid);margin-bottom:24px;font-weight:300;}
+.proj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
+.proj-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s;box-shadow:0 1px 4px rgba(42,31,16,.05);}
+.proj-card:hover{border-color:var(--indigo);transform:translateY(-2px);box-shadow:0 8px 24px rgba(42,31,16,.10);}
+.proj-card-band{height:64px;background:linear-gradient(135deg,var(--bg3),var(--bg4));display:flex;align-items:center;padding:12px;font-family:var(--serif);font-size:26px;color:rgba(42,31,16,.2);font-weight:600;position:relative;overflow:hidden;}
+.proj-card-body{padding:12px 14px;}
+.proj-card-title{font-family:var(--serif);font-size:16px;font-weight:600;margin-bottom:5px;color:var(--text);}
+.proj-card-syn{font-size:12px;color:var(--mid);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-height:54px;margin-bottom:8px;}
+.proj-card-footer{display:flex;justify-content:space-between;font-size:11px;color:var(--placeholder);}
+.add-proj{border:2px dashed var(--border);border-radius:var(--rl);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:155px;transition:all .15s;}
+.add-proj:hover{border-color:var(--indigo);background:rgba(196,94,40,.04);}
+.stat-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
+.stat-card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.stat-card-title{font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;}
+.stat-num{font-family:var(--serif);font-size:36px;font-weight:600;line-height:1;color:var(--text);}
+.stat-sub{font-size:12px;color:var(--mid);margin-top:3px;}
+.progress-bar-bg{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:8px;}
+.progress-bar-fill{height:100%;background:var(--indigo);border-radius:2px;transition:width .3s;}
+.week-chart{display:flex;align-items:flex-end;gap:3px;height:44px;margin-top:8px;}
+.week-bar{width:100%;border-radius:2px 2px 0 0;background:var(--bg3);min-height:2px;}
+.week-bar.today{background:var(--indigo);}
+.week-day-lbl{font-size:9px;color:var(--mid);}
+.view-hdr{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg1);flex-wrap:wrap;}
+.filter-btn{display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:var(--r);border:1px solid var(--border);font-size:13px;color:var(--mid);cursor:pointer;background:var(--bg0);transition:all .15s;}
+.filter-btn:hover{border-color:var(--bg4);color:var(--text);background:var(--bg1);}
+.filter-btn.active{border-color:var(--indigo);color:var(--indigo);background:rgba(196,94,40,.06);}
+.sort-select{width:auto;padding:6px 10px;font-size:13px;color:var(--mid);background:var(--bg0);border:1px solid var(--border);border-radius:var(--r);}
+.filter-dropdown{position:fixed;z-index:400;background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);box-shadow:0 8px 28px rgba(42,31,16,.14);min-width:240px;max-height:360px;overflow-y:auto;padding:8px;}
+.filter-coll-lbl{font-size:10px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;padding:8px 8px 4px;display:block;}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;border:1px solid transparent;}
+.view-layout{display:flex;flex-direction:column;flex:1;overflow:hidden;position:relative;}
+.view-area{flex:1;overflow-y:auto;padding:16px 16px 80px;}
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
+.draft-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s,box-shadow .15s;height:196px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
+.draft-card:hover{box-shadow:0 4px 12px rgba(42,31,16,.08);}
+.draft-card.drag-over{border-color:var(--indigo);background:rgba(196,94,40,.03);}
+.draft-card.nest-target{border-color:var(--teal);border-style:dashed;}
+.card-hdr{height:44px;background:linear-gradient(135deg,var(--bg2),var(--bg3));display:flex;align-items:center;justify-content:space-between;padding:0 10px;flex-shrink:0;}
+.card-seq{font-family:var(--scribble);font-size:15px;font-weight:600;color:var(--mid);}
+.card-body{flex:1;padding:8px 10px;overflow:hidden;display:flex;flex-direction:column;gap:4px;}
+.card-title-f{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--text);width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;}
+.card-title-f:focus{background:var(--bg2);outline:1px solid var(--indigo);}
+.card-title-f::placeholder{color:var(--placeholder);}
+.card-syn-f{font-size:12px;color:var(--mid);flex:1;resize:none;overflow:hidden;width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;font-family:var(--ui);line-height:1.4;}
+.card-syn-f:focus{background:var(--bg2);outline:1px solid var(--indigo);}
+.card-syn-f::placeholder{color:var(--placeholder);}
+.strand-chips{display:flex;flex-wrap:wrap;gap:3px;}
+.card-footer{display:flex;align-items:center;gap:6px;padding:6px 10px;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg0);}
+.card-wc{font-size:11px;color:var(--placeholder);}
+.card-open{padding:3px 8px;background:var(--bg2);border-radius:4px;font-size:11px;color:var(--indigo);margin-left:auto;border:1px solid var(--border);}
+.card-open:hover{background:var(--bg3);}
+.arrow-btn{width:22px;height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--mid);transition:all .15s;flex-shrink:0;}
+.arrow-btn:hover{background:var(--bg2);color:var(--text);}
+.nest-indent{margin-left:24px;position:relative;}
+.nest-indent::before{content:'';position:absolute;left:-12px;top:0;bottom:0;width:1px;background:var(--border);}
+.lt-section{margin-top:24px;border-top:1px solid var(--border);padding-top:18px;}
+.lt-hdr{display:flex;align-items:center;gap:7px;padding:0 0 10px;cursor:pointer;}
+.lt-tilde{color:var(--teal);font-size:20px;font-weight:600;line-height:1;font-family:var(--scribble);}
+.lt-label{font-size:13px;font-weight:600;color:var(--mid);flex:1;}
+.lt-chevron{color:var(--mid);font-size:20px;transition:transform .2s;}
+.lt-chevron.open{transform:rotate(90deg);}
+.add-lt{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--mid);padding:8px 2px;cursor:pointer;margin-top:6px;}
+.add-lt:hover{color:var(--teal);}
+.empty-view{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:48px 24px;gap:12px;color:var(--placeholder);text-align:center;}
+.table-wrap{flex:1;overflow:auto;}
+.wt{border-collapse:collapse;width:100%;table-layout:fixed;}
+.wt th{background:var(--bg1);border-bottom:2px solid var(--border);padding:9px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;position:sticky;top:0;z-index:2;white-space:nowrap;user-select:none;overflow:hidden;position:relative;}
+.wt th.resizable{resize:horizontal;overflow:hidden;min-width:60px;}
+.col-resize-handle{position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;background:transparent;z-index:3;}
+.col-resize-handle:hover{background:var(--indigo);opacity:.3;}
+.wt td{padding:9px 12px;border-bottom:1px solid var(--bg2);font-size:13px;vertical-align:middle;color:var(--body-text);}
+.wt tr:hover td{background:rgba(196,94,40,.03);}
+.wt tr.drag-over td{background:rgba(196,94,40,.06);}
+.wt tr.nest-row td{background:rgba(42,31,16,.02);}
+.tbl-inp{background:transparent;border:none;padding:0;font-size:13px;color:var(--text);font-family:var(--ui);}
+.tbl-inp:focus{background:var(--bg1);border-radius:3px;padding:2px 5px;outline:1px solid var(--indigo);}
+.tbl-inp::placeholder{color:var(--placeholder);}
+.tbl-inp.syn{color:var(--mid);font-size:12px;}
+.bind-draft-list{border:1px solid var(--border);border-radius:var(--r);overflow-y:auto;max-height:240px;background:var(--bg0);}
+.bind-draft-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--bg2);font-size:13px;}
+.bind-draft-row:last-child{border-bottom:none;}
+.editor-layout{display:flex;flex-direction:column;flex:1;overflow:hidden;}
+.editor-topbar{display:flex;align-items:center;gap:8px;padding:0 14px;height:54px;background:var(--bg1);border-bottom:1px solid var(--border);flex-shrink:0;box-shadow:0 1px 4px rgba(42,31,16,.05);}
+.editor-topbar-row1{display:contents;}
+.editor-topbar-row2{display:contents;}
+.editor-back{font-size:20px;color:var(--mid);cursor:pointer;padding:4px 6px;border-radius:6px;display:flex;align-items:center;}
+.editor-back:hover{background:var(--bg2);color:var(--text);}
+.editor-title-inp{font-family:var(--serif);font-size:19px;font-weight:600;flex:1;background:transparent;border:none;color:var(--text);padding:2px 4px;border-radius:4px;}
+.editor-title-inp:focus{outline:1px solid var(--indigo);background:var(--bg1);}
+.editor-title-inp::placeholder{color:var(--placeholder);}
+.editor-main{display:flex;flex:1;overflow:hidden;}
+.editor-center{flex:1;overflow-y:auto;display:flex;flex-direction:column;position:relative;}
+.editor-body{flex:1;padding:48px 64px;font-family:var(--serif);line-height:1.9;color:var(--body-text);min-height:300px;font-size:19px;}
+.editor-body:focus{outline:none;}
+.editor-body:empty:before{content:attr(data-placeholder);color:var(--placeholder);pointer-events:none;}
+.editor-body h1{font-family:var(--serif);font-size:30px;font-weight:600;margin-bottom:14px;color:var(--text);}
+.editor-body h2{font-family:var(--serif);font-size:23px;font-weight:600;margin-bottom:10px;color:var(--text);}
+.editor-body p{margin-bottom:14px;}
+.editor-body ul{margin:0 0 14px 24px;list-style-type:disc;}.editor-body ol{margin:0 0 14px 24px;list-style-type:decimal;}.editor-body li{display:list-item;}
+.editor-body hr{border:none;border-top:1px solid var(--border);margin:24px 0;}
+.editor-body mark{border-radius:3px;padding:0 3px;background:rgba(240,192,80,.4);}
+.editor-body a{color:var(--indigo);text-decoration:underline;}
+.editor-md{flex:1;padding:48px 64px;font-family:var(--mono);font-size:14px;line-height:1.7;color:var(--body-text);background:var(--bg0);border:none;resize:none;min-height:300px;width:100%;}
+.editor-md:focus{outline:none;}
+.editor-md::placeholder{color:var(--placeholder);}
+.editor-bottombar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:var(--bg1);border-top:1px solid var(--border);flex-shrink:0;font-size:12px;color:var(--mid);}
+.editor-bottombar input[type=range]{accent-color:var(--indigo);background:transparent;}
+.editor-bottombar input[type=range]::-webkit-slider-runnable-track{background:var(--bg3);height:4px;border-radius:2px;}
+.editor-bottombar input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--indigo);margin-top:-5px;cursor:pointer;}
+.toggle-btn{display:flex;align-items:center;gap:2px;background:var(--bg2);border-radius:6px;padding:2px;border:1px solid var(--border);}
+.toggle-opt{padding:4px 10px;border-radius:5px;font-size:13px;cursor:pointer;color:var(--mid);transition:all .15s;}
+.toggle-opt.active{background:var(--bg0);color:var(--text);box-shadow:0 1px 3px rgba(42,31,16,.08);}
+.editor-drawer{width:280px;border-left:1px solid var(--border);background:var(--bg1);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;}
+.edrawer-hdr{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:sticky;top:0;background:var(--bg1);z-index:1;}
+.edrawer-title{font-size:14px;font-weight:600;color:var(--text);}
+.edrawer-section{padding:12px 14px;border-bottom:1px solid var(--border);}
+.edrawer-lbl{font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px;display:block;}
+.adv-toggle{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mid);cursor:pointer;padding:10px 14px;border-bottom:1px solid var(--border);}
+.adv-toggle:hover{color:var(--text);}
+.float-toolbar{position:fixed;z-index:500;background:var(--text);border:none;border-radius:var(--r);padding:4px;box-shadow:0 4px 16px rgba(42,31,16,.25);display:flex;align-items:center;gap:2px;}
+.float-btn{width:28px;height:28px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--bg2);cursor:pointer;flex-shrink:0;}
+.float-btn:hover{background:rgba(255,255,255,.15);color:#fff;}
+.float-btn.mi-btn{font-family:'Material Icons';font-size:16px;font-weight:normal;}
+.float-sep{width:1px;height:16px;background:rgba(255,255,255,.2);margin:0 2px;flex-shrink:0;}
+.float-strand-drop{position:absolute;top:calc(100% + 6px);left:0;background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);box-shadow:0 8px 28px rgba(42,31,16,.14);max-height:220px;overflow-y:auto;min-width:200px;z-index:10;display:flex;flex-direction:column;}
+.float-strand-item{display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;font-size:13px;color:var(--text);}
+.float-strand-item:hover{background:var(--bg2);}
+.float-strand-new{border-top:1px solid var(--border);padding:8px 10px;cursor:pointer;font-size:13px;color:var(--teal);display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.float-strand-new:hover{background:var(--bg2);}
+.strands-subnav{display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--bg1);padding:0 16px;flex-shrink:0;height:44px;gap:4px;}
+.strands-tab{padding:0 14px;height:100%;font-size:13px;font-weight:500;cursor:pointer;color:var(--mid);border-bottom:2px solid transparent;white-space:nowrap;display:flex;align-items:center;transition:color .15s;}
+.strands-tab.active{color:var(--indigo);border-bottom-color:var(--indigo);}
+.strands-tab:hover:not(.active){color:var(--text);}
+.strands-layout{display:flex;flex:1;overflow:hidden;}
+.strands-left{width:256px;border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;background:var(--bg1);}
+.strands-list{flex:1;overflow-y:auto;padding:8px;}
+.strand-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;transition:background .15s;}
+.strand-item:hover{background:var(--bg2);}
+.strand-item.active{background:var(--bg2);border:1px solid var(--border);}
+.strand-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0;overflow:hidden;}
+.strands-add-btn{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--teal);cursor:pointer;border-radius:6px;padding:7px 10px;margin:3px;}
+.strands-add-btn:hover{background:rgba(47,153,102,.1);}
+.strands-detail{flex:1;overflow-y:auto;padding:24px;}
+.strand-detail-hdr{display:flex;align-items:flex-start;gap:16px;margin-bottom:20px;}
+.strand-av-wrap{position:relative;width:64px;height:64px;border-radius:50%;overflow:hidden;cursor:pointer;flex-shrink:0;}
+.strand-av-overlay{position:absolute;inset:0;background:rgba(42,31,16,.4);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;font-size:11px;color:#fff;}
+.strand-av-wrap:hover .strand-av-overlay{opacity:1;}
+.strand-name-inp{font-family:var(--serif);font-size:22px;font-weight:600;color:var(--text);background:transparent;border:none;padding:0;flex:1;}
+.strand-name-inp:focus{outline:none;border-bottom:1px solid var(--indigo);}
+.strand-name-inp::placeholder{color:var(--placeholder);}
+.color-swatches{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.color-swatch{width:18px;height:18px;border-radius:50%;cursor:pointer;transition:transform .15s;flex-shrink:0;}
+.color-swatch:hover{transform:scale(1.25);}
+.color-swatch.sel{box-shadow:0 0 0 2px var(--bg1),0 0 0 4px var(--text);}
+.strand-field-row{margin-bottom:14px;}
+.appears-section{margin-top:20px;padding-top:20px;border-top:1px solid var(--border);}
+.appears-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.appears-chip{font-size:12px;padding:3px 10px;border-radius:12px;background:var(--bg2);color:var(--mid);border:1px solid var(--border);cursor:pointer;}
+.appears-chip:hover{border-color:var(--indigo);color:var(--indigo);}
+.field-edit-row{display:flex;align-items:center;gap:7px;padding:8px 0;border-bottom:1px solid var(--bg2);}
+.wizard-dots{display:flex;justify-content:center;gap:7px;margin-top:20px;}
+.wizard-dot{width:8px;height:8px;border-radius:50%;background:var(--bg3);transition:all .2s;}
+.wizard-dot.active{background:var(--indigo);width:22px;border-radius:4px;}
+.wizard-type-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;}
+.wizard-type-card{background:var(--bg0);border:2px solid var(--border);border-radius:var(--rl);padding:16px;cursor:pointer;transition:all .15s;}
+.wizard-type-card:hover{border-color:var(--indigoL);}
+.wizard-type-card.sel{border-color:var(--indigo);background:rgba(196,94,40,.05);}
+.wizard-coll-tags{display:flex;flex-wrap:wrap;gap:8px;}
+.wizard-coll-tag{padding:7px 14px;border:1px solid var(--border);border-radius:20px;font-size:13px;cursor:pointer;transition:all .15s;color:var(--mid);background:var(--bg0);}
+.wizard-coll-tag.sel{background:rgba(196,94,40,.08);border-color:var(--indigo);color:var(--indigo);}
+.wizard-coll-tag:hover{border-color:var(--bg4);color:var(--text);}
+.col-vis-drop{position:fixed;z-index:400;background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);box-shadow:0 8px 28px rgba(42,31,16,.14);padding:8px;min-width:200px;}
+.col-vis-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;font-size:13px;color:var(--text);}
+.col-vis-item:hover{background:var(--bg2);}
+.coming-soon{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:16px;color:var(--placeholder);}
+.has-tooltip{position:relative;}
+.has-tooltip:hover .tooltip-text{opacity:1;pointer-events:none;}
+.tooltip-text{position:fixed;background:var(--text);color:var(--bg0);font-size:11px;font-family:var(--ui);padding:4px 10px;border-radius:4px;white-space:nowrap;opacity:0;transition:opacity .15s;pointer-events:none;z-index:9999;transform:translateX(-50%) translateY(-100%);margin-top:-6px;max-width:220px;text-align:center;white-space:normal;line-height:1.4;}
+.custom-select-wrap{position:relative;display:inline-flex;align-items:center;cursor:pointer;}
+.custom-select-wrap select{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;z-index:2;}
+.week-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;position:relative;}
+.week-bar-tip{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg0);font-size:10px;padding:2px 6px;border-radius:3px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .1s;margin-bottom:3px;z-index:50;}
+.week-bar-wrap:hover .week-bar-tip{opacity:1;}
+.proj-card-hover:hover .proj-edit-btn{opacity:1!important;}
+.proj-card-band{position:relative;overflow:hidden;}
+@media(max-width:768px){
+  .stat-hide-mobile{display:none;}
+  .woven-root{height:auto;min-height:100vh;overflow-y:auto;overflow-x:hidden;}
+  .dash-layout{flex:none;overflow:visible;flex-direction:column;height:auto;}
+  .dash-main{flex:none;overflow-y:visible;padding:16px 16px 40px;background:var(--bg0);order:1;}
+  .dash-sidebar{width:100%;max-width:100%;border-left:none;border-bottom:1px solid var(--border);padding:12px 14px;overflow:visible;height:auto;flex:none;min-width:0;background:var(--bg0)!important;order:0;}
+  .stat-cards-mobile{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .stat-cards-mobile .stat-card{margin-bottom:0;}
+  .stat-num{font-size:24px;}
+  .stat-card{padding:10px 12px;}
+  .proj-grid{grid-template-columns:1fr;}
+  .cards-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:7px;}
+  .draft-card{height:auto;min-height:140px;}
+  .strands-left{width:100%;}
+  .editor-body,.editor-md{padding:20px;}
+  .editor-topbar{height:auto;flex-wrap:wrap;padding:0;}
+  .editor-topbar-row1{display:flex;align-items:center;gap:6px;padding:6px 10px;width:100%;border-bottom:1px solid var(--border);}
+  .editor-topbar-row2{display:flex;align-items:center;gap:6px;padding:6px 10px;width:100%;overflow-x:auto;}
+  .editor-drawer{position:fixed;top:54px;bottom:0;left:0;right:0;z-index:50;width:100%;border-left:none;}
+  .panel-overlay{align-items:stretch;justify-content:flex-end;}
+  .panel-box{width:100%;max-width:100%;border-left:none;border-top:none;border-radius:0;max-height:100%;}
+  .modal-box{width:100%;max-width:100%;border-radius:0;margin:0;height:100%;max-height:100%;}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .view-switcher{flex:1;}
+  .view-seg{flex:1;width:auto;}
+  .proj-title-inp{max-width:120px;}
+  .dash-greeting-desktop{display:none;}
+  .dash-greeting-mobile{display:block;margin-bottom:12px;}
+}
+.dash-greeting-mobile{display:none;}`;
+function GlobalStyles(){return <style dangerouslySetInnerHTML={{__html:CSS}}/>;}
+
+// ── ArchiveConfirmModal ──
+function ArchiveConfirmModal({draft,allDrafts,onConfirm,onCancel}){
+  var children=(allDrafts||[]).filter(function(d){return d.parentId===draft.id&&!d.archived;});
+  var hasChildren=children.length>0;
+  return(
+<div className="modal-overlay">
+  <div className="modal-backdrop" onClick={onCancel}/>
+  <div className="modal-box" style={{maxWidth:420}}>
+    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
+      <span className="mi" style={{fontSize:28,color:'var(--indigo)'}}>inventory_2</span>
+      <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,color:'var(--text)'}}>Archive this draft?</div>
+    </div>
+    <div style={{fontSize:14,color:'var(--body-text)',lineHeight:1.6,marginBottom:12}}>
+      <strong style={{color:'var(--text)'}}>{draft.title||'Untitled'}</strong> will be hidden from all views and moved to your Archive.
+    </div>
+    {hasChildren&&(
+<div style={{background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:'var(--r)',padding:'10px 14px',fontSize:13,color:'var(--mid)',marginBottom:12}}>
+  <span className="mi" style={{fontSize:16,verticalAlign:'middle',marginRight:6}}>info</span>
+  This draft has {children.length} nested {children.length===1?'draft':'drafts'} — {children.length===1?'it':'they'} will also be archived.
+</div>
+    )}
+    <div style={{fontSize:13,color:'var(--mid)',marginBottom:20}}>You can restore it any time from <strong>Your Archive</strong> on the dashboard.</div>
+    <div style={{display:'flex',gap:8}}>
+      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onCancel}>Cancel</button>
+      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={onConfirm}>
+        <span className="mi" style={{fontSize:16}}>inventory_2</span>Archive
+      </button>
+    </div>
+  </div>
+</div>
+  );
+}
+
+// ── ArchiveProjectConfirmModal ──
+function ArchiveProjectConfirmModal({proj,onConfirm,onCancel}){
+  return(
+<div className="modal-overlay">
+  <div className="modal-backdrop" onClick={onCancel}/>
+  <div className="modal-box" style={{maxWidth:420}}>
+    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
+      <span className="mi" style={{fontSize:28,color:'var(--indigo)'}}>inventory_2</span>
+      <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,color:'var(--text)'}}>Archive this project?</div>
+    </div>
+    <div style={{fontSize:14,color:'var(--body-text)',lineHeight:1.6,marginBottom:12}}>
+      <strong style={{color:'var(--text)'}}>{proj.title||'Untitled'}</strong> and all its content will be hidden from your dashboard.
+    </div>
+    <div style={{fontSize:13,color:'var(--mid)',marginBottom:20}}>You can restore it any time from <strong>Your Archive</strong> on the dashboard.</div>
+    <div style={{display:'flex',gap:8}}>
+      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onCancel}>Cancel</button>
+      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={onConfirm}>
+        <span className="mi" style={{fontSize:16}}>inventory_2</span>Archive project
+      </button>
+    </div>
+  </div>
+</div>
+  );
+}
+
+
+// ── OverflowTooltip ──
+function OverflowTooltip({label,names}){
+  var sr=useRef(null);var tt=useRef(null);
+  function show(){
+    if(!sr.current||!tt.current)return;
+    var r=sr.current.getBoundingClientRect();
+    tt.current.style.left=(r.left+r.width/2)+'px';
+    tt.current.style.top=(r.top-6)+'px';
+    tt.current.style.opacity='1';
+  }
+  function hide(){if(tt.current)tt.current.style.opacity='0';}
+  return(
+<span ref={sr} className="chip" style={{background:'var(--bg3)',color:'var(--mid)',borderColor:'var(--border)',borderWidth:1,borderStyle:'solid',cursor:'default'}} onMouseEnter={show} onMouseLeave={hide}>
+  {label}
+  <span ref={tt} className="tooltip-text">{names.join(', ')}</span>
+</span>
+  );
+}
+
+// ── StatusDot ──
+function StatusDot({status,onChange}){
+  var s=useState(false);var open=s[0];var setOpen=s[1];
+  var p=useState({top:0,left:0});var pos=p[0];var setPos=p[1];
+  var ref=useRef(null);
+  var info=STATUSES[status]||STATUSES.first_draft;
+  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
+  function handleClick(e){e.stopPropagation();var r=e.currentTarget.getBoundingClientRect();setPos({top:r.bottom+5,left:r.left});setOpen(!open);}
+  return(
+<div ref={ref} style={{display:'inline-flex',alignItems:'center'}}>
+  <div style={{width:10,height:10,borderRadius:'50%',background:info.color,cursor:'pointer',flexShrink:0}} onClick={handleClick} title={info.label}/>
+  {open&&<div style={{position:'fixed',top:pos.top,left:pos.left,zIndex:9999,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:8,overflow:'hidden',boxShadow:'0 8px 22px rgba(0,0,0,.5)',minWidth:170}}>
+    {Object.keys(STATUSES).map(function(k){var si=STATUSES[k];return(
+<div key={k} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',cursor:'pointer',background:k===status?'var(--bg3)':'transparent',fontSize:14}} onClick={function(){onChange(k);setOpen(false);}}>
+  <div style={{width:8,height:8,borderRadius:'50%',background:si.color,flexShrink:0}}/>
+  <span>{si.label}</span>
+</div>
+    );})}
+    <div style={{height:1,background:'var(--border)',margin:'3px 0'}}/>
+    <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',cursor:'pointer',fontSize:14,color:'var(--mid)'}} onClick={function(){onChange('archive');setOpen(false);}}>
+      <span className="mi" style={{fontSize:15,color:'var(--mid)'}}>inventory_2</span>
+      <span>Archive</span>
+    </div>
+  </div>}
+</div>
+  );
+}
+
+// ── Panel (full overlay, doesn't cover nav) ──
+function Panel({open,onClose,title,children,footer}){
+  if(!open)return null;
+  return(
+<div className="panel-overlay">
+  <div className="panel-backdrop" onClick={onClose}/>
+  <div className="panel-box">
+    <div className="panel-hdr">
+      <span className="panel-title">{title}</span>
+      <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
+    </div>
+    <div className="panel-body">{children}</div>
+    {footer&&<div className="panel-footer">{footer}</div>}
+  </div>
+</div>
+  );
+}
+
+// ── ViewSwitcher ──
+function ViewSwitcher({view,setView}){
+  var mainModes=VIEW_MODES.filter(function(m){return m.group==='main';});
+  var strandMode=VIEW_MODES.find(function(m){return m.group==='strands';});
+  return(
+<div className="view-switcher">
+  {mainModes.map(function(m){return(
+<div key={m.key} className={'view-seg'+(view===m.key?' active':'')} onClick={function(){setView(m.key);}}>
+  <span className="mi">{m.icon}</span>
+  <span className="view-seg-tip">{m.label}</span>
+</div>
+  );})}
+  <div className="view-sep"/>
+  <div className={'view-seg'+(view===strandMode.key?' active':'')} onClick={function(){setView(strandMode.key);}}>
+    <span className="mi">{strandMode.icon}</span>
+    <span className="view-seg-tip">{strandMode.label}</span>
+  </div>
+</div>
+  );
+}
+
+// ── StatsSection ──
+function StatsSection({app,onOpenProfile,greeting}){
+  var sessions=app.sessions;var goal=app.goal;
+  var todayWords=sessions.filter(function(s){return s.date===todayStr();}).reduce(function(sum,s){return sum+(s.words||0);},0);
+  var pct=goal>0?Math.round(todayWords/goal*100):0;
+  var weekData=[];
+  for(var i=6;i>=0;i--){var dd=new Date();dd.setDate(dd.getDate()-i);var ds=dd.toISOString().slice(0,10);var dw=sessions.filter(function(s){return s.date===ds;}).reduce(function(sum,s){return sum+(s.words||0);},0);weekData.push({date:ds,words:dw,isToday:i===0,label:dayLbl(i)});}
+  var maxW=weekData.reduce(function(m,d){return Math.max(m,d.words);},1);
+  var streak=0;var sd=new Date();
+  for(var j=0;j<60;j++){var sds=sd.toISOString().slice(0,10);if(sessions.filter(function(s){return s.date===sds;}).length>0){streak++;sd.setDate(sd.getDate()-1);}else if(j===0){sd.setDate(sd.getDate()-1);}else break;}
+  var weekStart=new Date();weekStart.setDate(weekStart.getDate()-6);weekStart.setHours(0,0,0,0);
+  var ltCount=0;Object.keys(app.allDrafts).forEach(function(pid){(app.allDrafts[pid]||[]).forEach(function(d){
+    if(d.status==='loose_thread'&&!d.archived){
+      var created=new Date(d.createdAt||0);
+      if(created>=weekStart)ltCount++;
+    }
+  });});
+  return(
+<div>
+  <div className="dash-greeting dash-greeting-mobile">{greeting||''}</div>
+  <div className="dash-subtitle dash-greeting-mobile" style={{marginBottom:10}}>What will you weave today?</div>
+  <div className="stat-cards-mobile">
+    <div className="stat-card">
+      <div className="stat-card-hdr">
+        <span className="stat-card-title">Words Today</span>
+        <button className="btn-icon" style={{padding:2}} onClick={function(){onOpenProfile('goal');}}><span className="mi" style={{fontSize:18}}>settings</span></button>
+      </div>
+      <div className="stat-num">{todayWords}</div>
+      <div className="progress-bar-bg"><div className="progress-bar-fill" style={{width:Math.min(100,pct)+'%'}}/></div>
+      <div className="stat-sub">{pct+'% of '+goal}</div>
+    </div>
+    <div className="stat-card">
+      <div className="stat-card-hdr">
+        <span className="stat-card-title">Streak</span>
+        <button className="btn-icon" style={{padding:2}} onClick={function(){onOpenProfile('reminder');}} title="Reminder settings"><span className="mi" style={{fontSize:18}}>notifications</span></button>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <div className="stat-num">{streak}</div>
+        {streak>7&&<span className="mi" style={{fontSize:24,color:'#f97316'}}>local_fire_department</span>}
+      </div>
+      <div className="stat-sub">{streak===1?'day':'days'}</div>
+    </div>
+  </div>
+  <div className="stat-card stat-hide-mobile">
+    <div className="stat-card-hdr"><span className="stat-card-title">Loose Threads</span></div>
+    <div className="stat-num">{ltCount}</div>
+    <div className="stat-sub">{ltCount===1?'thread this week':'threads this week'}</div>
+  </div>
+  <div className="stat-card stat-hide-mobile">
+    <div className="stat-card-hdr"><span className="stat-card-title">This Week</span></div>
+    <div className="week-chart">
+      {weekData.map(function(d){var barH=maxW>0?Math.max(3,Math.round(d.words/maxW*42)):3;return(
+<div key={d.date} className="week-bar-wrap">
+  <div className="week-bar-tip">{d.words>0?d.words+' words':'No words'}</div>
+  <div className={'week-bar'+(d.isToday?' today':'')} style={{height:barH,cursor:'pointer'}} onMouseOver={function(e){e.currentTarget.style.background='var(--indigoL)';}} onMouseOut={function(e){e.currentTarget.style.background=d.isToday?'var(--indigo)':'var(--bg3)';}}>
+  </div>
+  <div className="week-day-lbl">{d.label}</div>
+</div>
+      );})}
+    </div>
+  </div>
+</div>
+  );
+}
+
+// ── ProjectEditPanel ──
+function ProjectEditPanel({proj,app,onClose}){
+  var st=useState(proj.title||'');var title=st[0];var setTitle=st[1];
+  var ss=useState(proj.synopsis||'');var synopsis=ss[0];var setSynopsis=ss[1];
+  var si=useState(proj.image||null);var image=si[0];var setImage=si[1];
+  var spa=useState(false);var projArchiveConfirm=spa[0];var setProjArchiveConfirm=spa[1];
+  var spt=useState(proj.type||'Fiction');var projType=spt[0];var setProjType=spt[1];
+  function save(){
+    app.updateProjectTitle(proj.id,title.trim()||proj.title);
+    app.updateProjectSynopsis(proj.id,synopsis);
+    app.updateProjectImage(proj.id,image);
+    app.updateProjectType(proj.id,projType);
+    onClose();
+  }
+  return(
+<Panel open={true} onClose={onClose} title="Edit Project"
+  footer={<div style={{display:'flex',gap:8,width:'100%'}}><button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onClose}>Cancel</button><button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={save}>Save</button></div>}>
+  <div style={{marginBottom:16}}>
+    <span className="sect-lbl">Cover image</span>
+    <div style={{display:'flex',alignItems:'center',gap:10}}>
+      {image&&<img src={image} alt="" style={{width:64,height:44,objectFit:'cover',borderRadius:6,flexShrink:0}}/>}
+      <label style={{cursor:'pointer'}}>
+        <span className="btn btn-ghost btn-sm">{image?'Change':'Upload cover'}</span>
+        <input type="file" accept="image/*" style={{display:'none'}} onChange={function(e){
+          var file=e.target.files&&e.target.files[0];if(!file)return;
+          if(file.size>3*1024*1024){alert('Image must be under 3 MB.');return;}
+          var reader=new FileReader();reader.onload=function(ev){setImage(ev.target.result);};reader.readAsDataURL(file);
+        }}/>
+      </label>
+      {image&&<button className="btn-icon" onClick={function(){setImage(null);}}><span className="mi" style={{fontSize:16}}>delete</span></button>}
+    </div>
+  </div>
+  <div style={{marginBottom:16}}><span className="sect-lbl">Title</span><input value={title} onChange={function(e){setTitle(e.target.value);}}/></div>
+  <div style={{marginBottom:16}}><span className="sect-lbl">Synopsis</span><textarea value={synopsis} onChange={function(e){setSynopsis(e.target.value);}} rows={4}/></div>
+  <div style={{marginBottom:16}}>
+    <span className="sect-lbl">Type</span>
+    <select value={projType} onChange={function(e){setProjType(e.target.value);}}>
+      {PROJ_TYPES.map(function(t){return <option key={t.id} value={t.label}>{t.label}</option>;})}
+    </select>
+  </div>
+  <div style={{paddingTop:16,borderTop:'1px solid var(--border)'}}>
+    <button className="btn btn-danger" style={{width:'100%',justifyContent:'center'}} onClick={function(){setProjArchiveConfirm(true);}}>
+      <span className="mi" style={{fontSize:16}}>inventory_2</span>Archive project
+    </button>
+  </div>
+  {projArchiveConfirm&&<ArchiveProjectConfirmModal proj={proj} onCancel={function(){setProjArchiveConfirm(false);}} onConfirm={function(){app.archiveProject(proj.id);setProjArchiveConfirm(false);onClose();}}/>}
+</Panel>
+  );
+}
+
+
+// ── GlobalLooseThreads ──
+function GlobalLooseThreads({app}){
+  // Global LTs are stored in app.globalLT (keyed by id), not tied to any project
+  var allLT=Object.values(app.globalLT||{}).filter(function(d){return !d.archived;});
+  var activeProjects=app.projects.filter(function(p){return !p.archived;});
+  function updateLT(id,changes){app.updateGlobalLT(id,changes);}
+  function addLT(){
+    var id=genId();
+    app.updateGlobalLT(id,{id:id,title:'',synopsis:'',createdAt:new Date().toISOString(),archived:false});
+  }
+  function moveToProject(ltId,targetPid){
+    if(!targetPid)return;
+    var lt=app.globalLT[ltId];if(!lt)return;
+    app.addDraft(targetPid,{id:genId(),projectId:targetPid,title:lt.title||'',synopsis:lt.synopsis||'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+    app.updateGlobalLT(ltId,{archived:true});
+  }
+  return(
+<div style={{marginTop:24}}>
+  <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Loose Threads</div>
+  <div className="cards-grid">
+    {allLT.map(function(d){return(
+<div key={d.id} className="draft-card" style={{height:'auto',minHeight:120}}>
+  <div className="card-body" style={{padding:'10px 12px'}}>
+    <input className="card-title-f" defaultValue={d.title} placeholder="Untitled loose thread" onBlur={function(e){updateLT(d.id,{title:e.target.value});}} style={{marginBottom:4}}/>
+    <textarea className="card-syn-f" defaultValue={d.synopsis} placeholder="Add a note..." rows={2} onBlur={function(e){updateLT(d.id,{synopsis:e.target.value});}}/>
+  </div>
+  <div className="card-footer">
+    <select style={{fontSize:11,flex:1,padding:'3px 6px',background:'var(--bg0)',border:'1px solid var(--border)',borderRadius:'var(--r)',color:'var(--mid)',fontFamily:'var(--ui)'}} defaultValue="" onChange={function(e){if(e.target.value){moveToProject(d.id,e.target.value);}}} title="Add to a project">
+      <option value="">Add to project...</option>
+      {activeProjects.map(function(p){return <option key={p.id} value={p.id}>{p.title}</option>;})}
+    </select>
+  </div>
+</div>
+    );})}
+    <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:8,display:'flex',flexDirection:'column',boxShadow:'none',height:'auto',minHeight:100}} onClick={addLT}>
+      <span className="mi" style={{fontSize:24,color:'var(--placeholder)'}}>add_circle_outline</span>
+      <span style={{fontSize:13,color:'var(--placeholder)'}}>New loose thread</span>
+    </div>
+  </div>
+</div>
+  );
+}
+
+// ── Dashboard ──
+function Dashboard({app,onOpenProfile,onNewProject}){
+  var profile=app.profile||{};
+  var firstName=profile.firstName||'';
+  var greeting=getGreeting()+(firstName?', '+firstName:'');
+  var sep=useState(null);var editingProjId=sep[0];var setEditingProjId=sep[1];
+  var sar=useState(false);var archiveOpen=sar[0];var setArchiveOpen=sar[1];
+  var archivedCount=Object.values(app.allDrafts).flat().filter(function(d){return d.archived;}).length+(app.projects.filter(function(p){return p.archived;}).length);
+  function getWC(pid){return(app.allDrafts[pid]||[]).reduce(function(s,d){return s+(d.wordCount||0);},0);}
+  function openProject(pid){app.loadProjectData(pid);app.setProjId(pid);app.setView('cards');}
+  var editProj=editingProjId?app.projects.find(function(p){return p.id===editingProjId;}):null;
+  return(
+<div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+  <nav className="nav" style={{justifyContent:'space-between'}}>
+    <span className="wordmark">Woven</span>
+    <div style={{display:'flex',alignItems:'center',gap:8}}>
+      <button className="btn-icon" title="Sign out" onClick={function(){app.signOut();}}><span className="mi" style={{fontSize:20}}>logout</span></button>
+      <div className="avatar" onClick={function(){onOpenProfile(null);}}>{initials(firstName+' '+(profile.lastName||''))}</div>
+    </div>
+  </nav>
+  <div className="dash-layout">
+    <div className="dash-main dot-grid">
+      <div className="dash-greeting dash-greeting-desktop">{greeting}</div>
+      <div className="dash-subtitle dash-greeting-desktop">What will you weave today?</div>
+      <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Your Projects</div>
+      <div className="proj-grid">
+        {app.projects.filter(function(p){return !p.archived;}).map(function(p){var wc=getWC(p.id);return(
+<div key={p.id} className="proj-card proj-card-hover" style={{position:'relative'}}>
+  <div className="proj-card-band" onClick={function(){openProject(p.id);}}>
+    {p.image?<img src={p.image} alt={p.title} style={{width:'100%',height:'100%',objectFit:'cover',position:'absolute',inset:0}}/>:null}
+    {!p.image&&<span className="mi" style={{position:'relative',zIndex:1,fontSize:28,color:'rgba(42,31,16,.25)'}}>photo_camera</span>}
+  </div>
+  <div className="proj-card-body" onClick={function(){openProject(p.id);}}>
+    <div className="proj-card-title">{p.title||'Untitled'}</div>
+    <div className="proj-card-syn">{p.synopsis||'No synopsis yet.'}</div>
+    <div className="proj-card-footer"><span>{p.type||'Fiction'}</span><span>{wc>0?wc+' words':'Empty'}</span></div>
+  </div>
+  <button className="proj-edit-btn btn-icon" style={{position:'absolute',top:8,right:8,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:6,opacity:0,transition:'opacity .15s',color:'var(--mid)'}} onClick={function(e){e.stopPropagation();setEditingProjId(p.id);}} title="Edit project">
+    <span className="mi" style={{fontSize:16}}>edit</span>
+  </button>
+</div>
+        );})}<div className="add-proj" onClick={onNewProject}>
+          <span className="mi" style={{fontSize:28,color:'var(--mid)'}}>add_circle_outline</span>
+          <div style={{fontSize:13,color:'var(--mid)'}}>New project</div>
+        </div>
+      </div>
+      <GlobalLooseThreads app={app}/>
+      <div style={{marginTop:20,border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'12px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,background:'var(--bg1)',transition:'border-color .15s'}} onClick={function(){setArchiveOpen(true);}}>
+        <span className="mi" style={{fontSize:24,color:'var(--placeholder)',flexShrink:0}}>inventory_2</span>
+        <div style={{flex:1}}>
+          <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>Your Archive</div>
+          <div style={{fontSize:12,color:'var(--mid)'}}>Where shelved ideas stay safe.{archivedCount>0?' '+archivedCount+' item'+(archivedCount!==1?'s':'')+' archived.':''}</div>
+        </div>
+        <span className="mi" style={{fontSize:20,color:'var(--border)'}}>chevron_right</span>
+      </div>
+    </div>
+    <div className="dash-sidebar">
+      <StatsSection app={app} onOpenProfile={onOpenProfile} greeting={greeting}/>
+    </div>
+  </div>
+  {editProj&&<ProjectEditPanel proj={editProj} app={app} onClose={function(){setEditingProjId(null);}}/>}
+  <ArchiveDrawer app={app} open={archiveOpen} onClose={function(){setArchiveOpen(false);}}/>
+</div>
+  );
+}
+
+// ── ProjectNav ──
+function ProjectNav({app,onOpenProfile}){
+  var proj=app.currentProject;
+  var s=useState(false);var editing=s[0];var setEditing=s[1];
+  function commitTitle(e){var val=e.target.value.trim();if(val&&proj)app.updateProjectTitle(proj.id,val);setEditing(false);}
+  return(
+<nav className="nav">
+  <button className="btn-icon" onClick={app.goBack}><span className="mi">arrow_back</span></button>
+  <div style={{display:'flex',alignItems:'center',flexShrink:0}}>
+    {editing?(
+<input className="proj-title-inp" defaultValue={proj?proj.title:''} onBlur={commitTitle} onKeyDown={function(e){if(e.key==='Enter')commitTitle(e);if(e.key==='Escape')setEditing(false);}} autoFocus/>
+    ):(
+<span className="proj-title-inp" style={{cursor:'text',border:'1px solid transparent'}} onClick={function(){setEditing(true);}}>{proj?proj.title:'Project'}</span>
+    )}
+  </div>
+  <div style={{flex:1,display:'flex',justifyContent:'center'}}>
+    <ViewSwitcher view={app.view} setView={app.setView}/>
+  </div>
+  <div className="avatar" onClick={function(){onOpenProfile(null);}}>{initials(((app.profile||{}).firstName||'')+' '+((app.profile||{}).lastName||''))}</div>
+</nav>
+  );
+}
+
+
+// ── SortDropdown ──
+function SortDropdown({sort,setSort}){
+  var ss=useState(false);var open=ss[0];var setOpen=ss[1];
+  var sp=useState({top:0,left:0});var pos=sp[0];var setPos=sp[1];
+  var ref=useRef(null);
+  var opts=[['order','Sequence'],['title','Title A–Z'],['status','Status'],['words','Word count']];
+  var label=opts.find(function(o){return o[0]===sort;})||opts[0];
+  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
+  return(
+<div ref={ref} style={{position:'relative'}}>
+  <div className={'filter-btn'+(sort!=='order'?' active':'')} onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setPos({top:r.bottom+4,left:r.left});setOpen(!open);}} style={{userSelect:'none'}}>
+    <span className="mi" style={{fontSize:16}}>sort</span>
+    <span>{label[1]}</span>
+    <span className="mi" style={{fontSize:14,marginLeft:2}}>arrow_drop_down</span>
+  </div>
+  {open&&(
+<div style={{position:'fixed',top:pos.top,left:pos.left,zIndex:400,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--rl)',boxShadow:'0 8px 28px rgba(42,31,16,.14)',minWidth:140,overflow:'hidden'}}>
+  {opts.map(function(o){return(
+<div key={o[0]} style={{padding:'9px 14px',fontSize:13,cursor:'pointer',fontFamily:'var(--ui)',color:sort===o[0]?'var(--indigo)':'var(--text)',background:sort===o[0]?'rgba(196,94,40,.06)':'transparent',fontWeight:sort===o[0]?600:400}} onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}} onMouseOut={function(e){e.currentTarget.style.background=sort===o[0]?'rgba(196,94,40,.06)':'transparent';}} onClick={function(){setSort(o[0]);setOpen(false);}}>
+  {o[1]}
+</div>
+  );})}
+</div>
+  )}
+</div>
+  );
+}
+
+// ── ViewHeader ──
+function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind}){
+  var s=useState(false);var filterOpen=s[0];var setFilterOpen=s[1];
+  var p=useState({top:0,left:0});var filterPos=p[0];var setFilterPos=p[1];
+  var filterRef=useRef(null);
+  var projStrands=app.allStrands[app.projId]||{};
+  useEffect(function(){if(!filterOpen)return;function onDown(e){
+    if(filterRef.current&&filterRef.current.contains(e.target))return;
+    // Also allow clicks on the dropdown itself (it's fixed-position, outside filterRef)
+    var drop=document.querySelector('.filter-dropdown');
+    if(drop&&drop.contains(e.target))return;
+    setFilterOpen(false);
+  }document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[filterOpen]);
+  function openFilter(e){var r=e.currentTarget.getBoundingClientRect();setFilterPos({top:r.bottom+4,left:r.left});setFilterOpen(!filterOpen);}
+  var hasFilter=!!filter;
+  return(
+<div className="view-hdr">
+  <div style={{position:'relative',display:'inline-flex'}}>
+    <button ref={filterRef} className={'filter-btn'+(hasFilter?' active':'')} onClick={openFilter}>
+      <span className="mi" style={{fontSize:16}}>filter_alt</span>
+      <span>Refine Arc</span>
+    </button>
+    {hasFilter&&<span style={{position:'absolute',top:-6,right:-6,background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:16,height:16,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>1</span>}
+  </div>
+  {filterOpen&&(
+<div className="filter-dropdown" style={{top:filterPos.top,left:filterPos.left}}>
+  <div style={{padding:'6px 8px 2px',fontSize:12,color:'var(--mid)'}}>Filter by strand</div>
+  {hasFilter&&<div style={{padding:'4px 8px'}}><button className="btn btn-ghost btn-sm" onClick={function(){setFilter(null);setFilterOpen(false);}}>Clear filter</button></div>}
+  {Object.keys(projStrands).map(function(coll){var collStrands=projStrands[coll]||[];if(collStrands.length===0)return null;return(
+<div key={coll}>
+  <span className="filter-coll-lbl">{coll}</span>
+  <div style={{display:'flex',flexWrap:'wrap',gap:4,padding:'0 8px 8px'}}>
+    {collStrands.map(function(st){var isActive=filter===st.id;var bg=isActive?st.color:'transparent';var col=isActive?'#fff':st.color;return(
+<span key={st.id} className="chip" style={{background:bg,color:col,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid',cursor:'pointer'}} onMouseDown={function(e){e.preventDefault();e.stopPropagation();setFilter(isActive?null:st.id);setFilterOpen(false);}}>
+  {st.name}
+</span>
+    );})}
+  </div>
+</div>
+  );})}
+  {Object.values(projStrands).flat().length===0&&<div style={{padding:'8px 12px',fontSize:13,color:'var(--mid)'}}>No strands yet.</div>}
+</div>
+  )}
+  <SortDropdown sort={sort} setSort={setSort}/>
+  <div style={{flex:1}}/>
+  <button className="btn btn-ghost btn-sm" onClick={onBind}>Bind</button>
+  <button className="btn btn-primary btn-sm" onClick={onAddDraft}>
+    <span className="mi" style={{fontSize:16}}>add</span>New draft
+  </button>
+</div>
+  );
+}
+
+
+// ── StatusDotWithArchive ──
+function StatusDotWithArchive({draft,app,showLabel}){
+  var sac=useState(false);var showConfirm=sac[0];var setShowConfirm=sac[1];
+  var info=STATUSES[draft.status]||STATUSES.first_draft;
+  function handleChange(s){
+    if(s==='archive'){setShowConfirm(true);return;}
+    var ch={status:s};
+    if(s==='loose_thread'){ch.order=null;ch.parentId=null;}
+    else if(draft.status==='loose_thread'){
+      var seqCount=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).length;
+      ch.order=seqCount+1;
+    }
+    app.updateDraft(app.projId,draft.id,ch);
+  }
+  function doArchive(){
+    var allDr=app.allDrafts[app.projId]||[];
+    var children=allDr.filter(function(d){return d.parentId===draft.id&&!d.archived;});
+    app.updateDraft(app.projId,draft.id,{archived:true});
+    children.forEach(function(c){app.updateDraft(app.projId,c.id,{archived:true});});
+    setShowConfirm(false);
+  }
+  var dotRef=useRef(null);
+  return(
+<div style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}} onClick={function(e){if(dotRef.current)dotRef.current.querySelector('[title]').click();}}>
+  <div ref={dotRef}><StatusDot status={draft.status} onChange={handleChange}/></div>
+  {showLabel&&<span style={{fontSize:13,color:info.color,pointerEvents:'none'}}>{info.label}</span>}
+  {showConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[app.projId]||[]} onConfirm={doArchive} onCancel={function(){setShowConfirm(false);}}/>}
+</div>
+  );
+}
+
+// ── BindPanel ──
+function BindPanel({app,open,onClose}){
+  var s=useState('PDF');var format=s[0];var setFormat=s[1];
+  var si=useState(false);var inclNested=si[0];var setInclNested=si[1];
+  var parents=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
+  var allSeq=inclNested?(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread';}):(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;});
+  var totalWords=allSeq.reduce(function(s,d){return s+(d.wordCount||0);},0);
+  return(
+<Panel open={open} onClose={onClose} title="Bind your drafts"
+  footer={<button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={function(){alert('Export as '+format+': '+allSeq.length+' drafts, '+totalWords+' words');onClose();}}>Export</button>}>
+  <div style={{marginBottom:16}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+      <span className="sect-lbl" style={{margin:0}}>Sequence</span>
+      <span style={{fontSize:12,color:'var(--mid)'}}>{allSeq.length}{' draft'+(allSeq.length!==1?'s':'')}{' · '}{totalWords}{' words'}</span>
+    </div>
+    <div className="bind-draft-list">
+      {parents.map(function(d,i){var info=STATUSES[d.status]||STATUSES.first_draft;var children=(app.allDrafts[app.projId]||[]).filter(function(c){return c.parentId===d.id;});return(
+<div key={d.id}>
+  <div className="bind-draft-row">
+    <span style={{fontSize:11,color:'var(--mid)',width:28}}>{i+1}</span>
+    <div style={{width:9,height:9,borderRadius:'50%',background:info.color,flexShrink:0}}/>
+    <span style={{flex:1}}>{d.title||'Untitled'}</span>
+  </div>
+  {inclNested&&children.map(function(c,ci){var ci2=STATUSES[c.status]||STATUSES.first_draft;return(
+<div key={c.id} className="bind-draft-row" style={{paddingLeft:32,background:'rgba(7,13,26,.2)'}}>
+  <span style={{fontSize:11,color:'var(--mid)',width:28}}>{(i+1)+'.'+(ci+1)}</span>
+  <div style={{width:9,height:9,borderRadius:'50%',background:ci2.color,flexShrink:0}}/>
+  <span style={{flex:1,fontSize:12,color:'var(--mid)'}}>{c.title||'Untitled'}</span>
+</div>
+  );})}
+</div>
+      );})}
+      {parents.length===0&&<div style={{padding:'12px',fontSize:13,color:'var(--mid)'}}>No drafts to bind.</div>}
+    </div>
+    <div style={{fontSize:12,color:'var(--mid)',marginTop:6}}>Loose Threads are always excluded.</div>
+  </div>
+  <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderTop:'1px solid var(--border)',borderBottom:'1px solid var(--border)',marginBottom:14,cursor:'pointer'}} onClick={function(){setInclNested(!inclNested);}}>
+    <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(inclNested?'var(--indigo)':'var(--border)'),background:inclNested?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
+      {inclNested&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
+    </span>
+    <span style={{fontSize:13,color:'var(--text)'}}>Include nested drafts</span>
+  </div>
+  <div>
+    <span className="sect-lbl">Format</span>
+    <div style={{display:'flex',gap:8,marginTop:4}}>
+      {['PDF','Word (.docx)'].map(function(f){return(
+<button key={f} className={'btn '+(format===f?'btn-primary':'btn-ghost')} style={{flex:1,justifyContent:'center'}} onClick={function(){setFormat(f);}}>
+  <span className="mi" style={{fontSize:16}}>{f==='PDF'?'picture_as_pdf':'description'}</span>{f}
+</button>
+      );})}
+    </div>
+  </div>
+</Panel>
+  );
+}
+// ── applyFS ──
+function applyFS(drafts,filter,sort){
+  // drafts here are tree nodes (with .children). Filter matches parent or any child.
+  var d=filter?drafts.filter(function(x){
+    var matchSelf=(x.strandTags||[]).includes(filter);
+    var matchChild=(x.children||[]).some(function(c){return (c.strandTags||[]).includes(filter);});
+    return matchSelf||matchChild;
+  }):drafts;
+  return d.slice().sort(function(a,b){
+    if(sort==='title')return (a.title||'').localeCompare(b.title||'');
+    if(sort==='status')return Object.keys(STATUSES).indexOf(a.status)-Object.keys(STATUSES).indexOf(b.status);
+    if(sort==='words')return (b.wordCount||0)-(a.wordCount||0);
+    return (a.order||999)-(b.order||999);
+  });
+}
+
+// ── DraftCard ──
+function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqCount}){
+  var isMobile=useIsMobile();
+  var so=useState(false);var over=so[0];var setOver=so[1];
+  var sn=useState(false);var nestTarget=sn[0];var setNestTarget=sn[1];
+  var sac=useState(false);var archiveConfirm=sac[0];var setArchiveConfirm=sac[1];
+  var nestTimer=useRef(null);
+  var projStrands=app.allStrands[app.projId]||{};
+  var tagged=[];
+  Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id))tagged.push(st);});});
+  function update(changes){app.updateDraft(app.projId,draft.id,changes);}
+  function onStatusChange(s){
+    if(s==='archive'){setArchiveConfirm(true);return;}
+    var ch={status:s};
+    if(s==='loose_thread'){ch.order=null;ch.parentId=null;}
+    else if(draft.status==='loose_thread'){ch.order=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length+1;}
+    update(ch);
+  }
+  function doArchive(){
+    var allDr=app.allDrafts[app.projId]||[];
+    var children=allDr.filter(function(d){return d.parentId===draft.id&&!d.archived;});
+    app.updateDraft(app.projId,draft.id,{archived:true});
+    children.forEach(function(c){app.updateDraft(app.projId,c.id,{archived:true});});
+    setArchiveConfirm(false);
+  }
+  function handleDragOver(e){
+    e.preventDefault();setOver(true);
+    if(!nestTimer.current){
+      nestTimer.current=setTimeout(function(){setNestTarget(true);},700);
+    }
+  }
+  function handleDragLeave(){
+    setOver(false);setNestTarget(false);
+    if(nestTimer.current){clearTimeout(nestTimer.current);nestTimer.current=null;}
+  }
+  function handleDrop(e){
+    e.preventDefault();
+    var fromId=e.dataTransfer.getData('draftId');
+    if(fromId&&fromId!==draft.id){
+      var fromDraft=(app.allDrafts[app.projId]||[]).find(function(d){return d.id===fromId;});
+      var isLT=fromDraft&&fromDraft.status==='loose_thread';
+      if(nestTarget&&!draft.parentId&&!isLT){
+        // Nest the dragged draft under this one (never nest a LT)
+        app.nestDraft(app.projId,fromId,draft.id);
+      } else if(isLT){
+        // Always promote loose thread to sequence (ignore nestTarget)
+        var seqCount=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;
+        app.updateDraft(app.projId,fromId,{status:'first_draft',order:draft.order||seqCount+1,parentId:null});
+      } else {
+        app.reorderDraft(app.projId,fromId,draft.order||0);
+      }
+    }
+    setOver(false);setNestTarget(false);
+    if(nestTimer.current){clearTimeout(nestTimer.current);nestTimer.current=null;}
+  }
+  var chips=tagged.slice(0,2);
+  var cardCls='draft-card'+(over?' drag-over':'')+(nestTarget?' nest-target':'');
+  var cardEl=(
+<div className={cardCls} draggable={true}
+  onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}}
+  onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+  <div className="card-hdr" style={{backgroundImage:draft.thumbnail?'url('+draft.thumbnail+')':undefined,backgroundSize:'cover',backgroundPosition:'center'}}>
+    <div style={{display:'flex',alignItems:'center',gap:5,background:draft.thumbnail?'rgba(253,248,240,.75)':'transparent',borderRadius:4,padding:'2px 5px'}}>
+      <span className="card-seq" style={{color:'var(--text)',background:draft.thumbnail?'rgba(253,248,240,.8)':'transparent',borderRadius:4,padding:draft.thumbnail?'1px 6px':undefined}}>{label}</span>
+      {childCount>0&&(
+<div style={{display:'flex',alignItems:'center',gap:2,cursor:'pointer'}}
+  onClick={function(e){e.stopPropagation();app.setView('table');app.updateDraft(app.projId,draft.id,{nestExpanded:true});}}>
+  <span className="mi" style={{fontSize:13,color:'var(--indigo)'}}>account_tree</span>
+  <span style={{fontSize:10,color:'var(--indigo)',fontWeight:600}}>{childCount}</span>
+</div>
+      )}
+    </div>
+    {nestTarget&&<span style={{fontSize:10,color:'var(--teal)',fontWeight:600}}>nest here</span>}
+    {isMobile&&!draft.parentId?(
+<div style={{display:'flex',gap:2}}>
+  <button className="arrow-btn" onClick={function(){onMoveUp&&onMoveUp(draft.id);}}><span className="mi" style={{fontSize:16}}>keyboard_arrow_up</span></button>
+  <button className="arrow-btn" onClick={function(){onMoveDown&&onMoveDown(draft.id);}}><span className="mi" style={{fontSize:16}}>keyboard_arrow_down</span></button>
+</div>
+    ):<span style={{color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:16}}>drag_indicator</span></span>}
+  </div>
+  <div className="card-body">
+    <input className="card-title-f" defaultValue={draft.title} placeholder="Untitled draft" onBlur={function(e){update({title:e.target.value});}}/>
+    <textarea className="card-syn-f" defaultValue={draft.synopsis} placeholder="Add a synopsis..." rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
+    {chips.length>0&&(
+<div className="strand-chips">
+  {chips.map(function(st){var bg=st.color+'26';return <span key={st.id} className="chip" style={{background:bg,color:st.color,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid'}}>{st.name}</span>;})}
+  {tagged.length>2&&(
+<OverflowTooltip label={'+'+(tagged.length-2)} names={tagged.slice(2).map(function(s){return s.name;})}/>
+  )}
+</div>
+    )}
+  </div>
+  <div className="card-footer">
+    <StatusDot status={draft.status} onChange={onStatusChange}/>
+    <span className="card-wc" style={{marginLeft:6}}>{draft.wordCount>0?draft.wordCount+' w':'Empty'}</span>
+    <button className="card-open" onClick={function(){app.openDraft(draft.id);}}>Draft</button>
+  </div>
+</div>
+  );
+  return(<div>{cardEl}{archiveConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[app.projId]||[]} onConfirm={doArchive} onCancel={function(){setArchiveConfirm(false);}}/>}</div>);
+}
+
+// ── LooseThreadsSection ──
+function LooseThreadsSection({threads,app,view}){
+  var s=useState(true);var open=s[0];var setOpen=s[1];
+  function addLT(){app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
+  var isTile=view==='tiles';var isTable=view==='table';
+  return(
+<div className="lt-section"
+  onDragOver={function(e){e.preventDefault();}}
+  onDrop={function(e){
+    e.preventDefault();
+    var fromId=e.dataTransfer.getData('draftId');
+    if(!fromId) return;
+    var allDr=app.allDrafts[app.projId]||[];
+    var fromDraft=allDr.find(function(d){return d.id===fromId;});
+    if(!fromDraft) return;
+    // If seq draft dropped on LT section → demote to loose thread
+    if(fromDraft.status!=='loose_thread'){
+      app.updateDraft(app.projId,fromId,{status:'loose_thread',order:null,parentId:null});
+    }
+  }}>
+  <div className="lt-hdr" onClick={function(){setOpen(!open);}}>
+    <span className="lt-tilde">~</span>
+    <span className="lt-label">Loose Threads</span>
+    {threads.length>0&&<span style={{fontSize:13,color:'var(--mid)'}}>{threads.length}</span>}
+    <span className={'lt-chevron mi'+(open?' open':'')}>chevron_right</span>
+  </div>
+  {open&&(
+<div>
+  {isTable?(
+<div>
+  {threads.map(function(d){return(
+<div key={d.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderBottom:'1px solid var(--bg2)'}}
+  draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',d.id);}}>
+  <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab'}}>drag_indicator</span>
+  <span style={{color:'var(--teal)',fontSize:16,fontWeight:600,width:24}}>~</span>
+  <input className="tbl-inp" defaultValue={d.title} placeholder="Untitled loose thread" onBlur={function(e){app.updateDraft(app.projId,d.id,{title:e.target.value});}} style={{maxWidth:180}}/>
+  <input className="tbl-inp syn" defaultValue={d.synopsis} placeholder="Note..." onBlur={function(e){app.updateDraft(app.projId,d.id,{synopsis:e.target.value});}} style={{flex:1}}/>
+  <button className="card-open" onClick={function(){app.openDraft(d.id);}}>Draft</button>
+</div>
+  );})}
+</div>
+  ):isTile?(
+<div className="tiles-grid">
+  {threads.map(function(d){return(
+<div key={d.id} className="tile" draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',d.id);}}
+  onDragOver={function(e){e.preventDefault();}} onClick={function(){app.openDraft(d.id);}}>
+  <div className="tile-top"><span style={{color:'var(--teal)',fontWeight:700,fontSize:14}}>~</span></div>
+  <div className="tile-title">{d.title||'Untitled'}</div>
+  <div className="tile-syn">{d.synopsis||''}</div>
+</div>
+  );})}
+</div>
+  ):(
+<div className="cards-grid">
+  {threads.map(function(d){return <DraftCard key={d.id} draft={d} label="~" app={app}/>;} )}
+</div>
+  )}
+  <div className="cards-grid" style={{marginTop:8}}>
+    <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:8,display:'flex',flexDirection:'column',boxShadow:'none'}} onClick={addLT}>
+      <span className="mi" style={{fontSize:28,color:'var(--placeholder)'}}>add_circle_outline</span>
+      <span style={{fontSize:13,color:'var(--mid)'}}>New loose thread</span>
+    </div>
+  </div>
+</div>
+  )}
+</div>
+  );
+}
+
+// ── Empty state ──
+function EmptyDrafts({onAdd}){
+  return(
+<div className="empty-view">
+  <span className="mi" style={{fontSize:48,color:'var(--placeholder)'}}>edit_note</span>
+  <div style={{fontFamily:'var(--serif)',fontSize:22,color:'var(--mid)'}}>No drafts yet</div>
+  <div style={{fontSize:14,color:'var(--mid)',marginBottom:12}}>Start writing by adding your first draft.</div>
+  <button className="btn btn-primary" onClick={onAdd}><span className="mi" style={{fontSize:16}}>add</span>Add first draft</button>
+</div>
+  );
+}
+
+// ── CardsView ──
+function CardsView({app}){
+  var sf=useState(null);var filter=sf[0];var setFilter=sf[1];
+  var ss=useState('order');var sort=ss[0];var setSort=ss[1];
+  var sb=useState(false);var bindOpen=sb[0];var setBindOpen=sb[1];
+  var allDrafts=app.allDrafts[app.projId]||[];
+  var seqDrafts=allDrafts.filter(function(d){return !d.archived&&d.status!=='loose_thread'&&!d.parentId;});
+  var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
+  var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
+  function addDraft(){app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqDrafts.length+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
+  function moveUp(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<=0)return;app.reorderDraft(app.projId,did,sorted[idx-1].order||0);}
+  function moveDown(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<0||idx>=sorted.length-1)return;app.reorderDraft(app.projId,did,sorted[idx+1].order||0);}
+  var displayed=applyFS(tree,filter,sort);
+  return(
+<div className="view-layout">
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
+  <div className="view-area dot-grid">
+    {tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
+<div className="cards-grid">
+  {displayed.map(function(parent,i){
+    var childCount=parent.children?parent.children.length:0;
+    return <DraftCard key={parent.id} draft={parent} label={''+(i+1)} childCount={childCount} app={app} onMoveUp={moveUp} onMoveDown={moveDown}/>;
+  })}
+  <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:8,display:'flex',flexDirection:'column',boxShadow:'none'}} onClick={addDraft}>
+    <span className="mi" style={{fontSize:28,color:'var(--placeholder)'}}>add_circle_outline</span>
+    <span style={{fontSize:13,color:'var(--placeholder)'}}>New draft</span>
+  </div>
+</div>
+    )}
+    <LooseThreadsSection threads={ltDrafts} app={app} view="cards"/>
+  </div>
+  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}}/>
+</div>
+  );
+}
+
+// ── TilesView ──
+function TilesView({app}){
+  var sf=useState(null);var filter=sf[0];var setFilter=sf[1];
+  var ss=useState('order');var sort=ss[0];var setSort=ss[1];
+  var sb=useState(false);var bindOpen=sb[0];var setBindOpen=sb[1];
+  var so2=useState(null);var dragOver=so2[0];var setDragOver=so2[1];
+  var sn=useState(null);var nestTarget=sn[0];var setNestTarget=sn[1];
+  var nestTimer=useRef(null);
+  var allDrafts=app.allDrafts[app.projId]||[];
+  var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
+  var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
+  function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
+  var displayed=applyFS(tree,filter,sort);
+  return(
+<div className="view-layout">
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
+  <div className="view-area dot-grid">
+    {tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
+<div>
+  <div className="tiles-grid">
+    {displayed.map(function(parent,i){
+      var info=STATUSES[parent.status]||STATUSES.first_draft;
+      var isNT=nestTarget===parent.id;var isDO=dragOver===parent.id;
+      return(
+<div key={parent.id} className={'tile'+(isDO?' drag-over':'')+(isNT?' nest-target':'')}
+  draggable={true}
+  onDragStart={function(e){e.dataTransfer.setData('draftId',parent.id);}}
+  onDragOver={function(e){e.preventDefault();setDragOver(parent.id);if(!nestTimer.current){nestTimer.current=setTimeout(function(){setNestTarget(parent.id);},700);}}}
+  onDragLeave={function(){setDragOver(null);setNestTarget(null);if(nestTimer.current){clearTimeout(nestTimer.current);nestTimer.current=null;}}}
+  onDrop={function(e){e.preventDefault();var fromId=e.dataTransfer.getData('draftId');if(fromId&&fromId!==parent.id){if(isNT){app.nestDraft(app.projId,fromId,parent.id);}else{app.reorderDraft(app.projId,fromId,parent.order||0);}}setDragOver(null);setNestTarget(null);if(nestTimer.current){clearTimeout(nestTimer.current);nestTimer.current=null;}}}
+  onClick={function(){app.openDraft(parent.id);}}>
+  <div className="tile-top">
+    <span style={{fontSize:11,color:'var(--mid)'}}>{'#'+(i+1)}</span>
+    <div style={{display:'flex',alignItems:'center',gap:4}}>
+      {parent.children&&parent.children.length>0&&<span style={{fontSize:9,color:'var(--mid)'}}>{parent.children.length}</span>}
+      <div style={{width:8,height:8,borderRadius:'50%',background:info.color}}/>
+    </div>
+  </div>
+  <div className="tile-title">{parent.title||'Untitled'}</div>
+  <div className="tile-syn">{parent.synopsis||''}</div>
+  {isNT&&<div style={{fontSize:10,color:'var(--teal)',marginTop:'auto'}}>nest here</div>}
+</div>
+      );
+    })}
+  </div>
+    <LooseThreadsSection threads={ltDrafts} app={app} view="tiles"/>
+</div>
+    )}
+  </div>
+  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}}/>
+</div>
+  );
+}
+
+// ── TableView ──
+function TableView({app}){
+  var sf=useState(null);var filter=sf[0];var setFilter=sf[1];
+  var ss=useState('order');var sort=ss[0];var setSort=ss[1];
+  var sb=useState(false);var bindOpen=sb[0];var setBindOpen=sb[1];
+  var so2=useState(null);var dragOver=so2[0];var setDragOver=so2[1];
+  var sco=useState(false);var colOpen=sco[0];var setColOpen=sco[1];
+  var scp=useState({top:0,left:0,right:0});var colPos=scp[0];var setColPos=scp[1];
+  var colRef=useRef(null);
+  // Column visibility
+  var projKey='colvis:'+app.projId;
+  var svc=useState(function(){try{var v=localStorage.getItem(projKey);return v?JSON.parse(v):DEFAULT_TABLE_COLS;}catch(e){return DEFAULT_TABLE_COLS;}});
+  var visCols=svc[0];var setVisCols=svc[1];
+  var scw=useState({title:160,synopsis:260,status:130,strandTags:160,wordCount:64,pov:90});
+  var colWidths=scw[0];var setColWidths=scw[1];
+  var resizing=useRef(null);
+  function startResize(col,e){
+    e.preventDefault();
+    resizing.current={col:col,startX:e.clientX,startW:colWidths[col]||160};
+    function onMove(e2){if(!resizing.current)return;var diff=e2.clientX-resizing.current.startX;var nw=Math.max(60,resizing.current.startW+diff);setColWidths(function(prev){var n=Object.assign({},prev);n[resizing.current.col]=nw;return n;});}
+    function onUp(){resizing.current=null;document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);}
+    document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+  }
+  var project=app.currentProject||{};
+  var draftFieldDefs=project.draftFieldDefs||[];
+  var allAvailCols=[
+    {id:'title',label:'Title'},
+    {id:'status',label:'Status'},
+    {id:'wordCount',label:'Words'},
+    {id:'synopsis',label:'Synopsis'},
+    {id:'pov',label:'POV'}
+    ,{id:'strandTags',label:'Strands'}
+  ].concat(draftFieldDefs.map(function(f){return{id:'cf_'+f.id,label:f.label};}));
+  function toggleCol(id){var next=visCols.includes(id)?visCols.filter(function(c){return c!==id;}):visCols.concat([id]);setVisCols(next);try{localStorage.setItem(projKey,JSON.stringify(next));}catch(e){}}
+  useEffect(function(){if(!colOpen)return;function onDown(e){if(colRef.current&&!colRef.current.contains(e.target))setColOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[colOpen]);
+  var allDrafts=app.allDrafts[app.projId]||[];
+  var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
+  var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
+  var displayed=applyFS(tree,filter,sort);
+  function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
+  function renderCell(col,draft){
+    if(col==='title')return <input className="tbl-inp" style={{fontFamily:'var(--serif)',fontWeight:600,fontSize:14}} defaultValue={draft.title} placeholder="Untitled" onBlur={function(e){app.updateDraft(app.projId,draft.id,{title:e.target.value});}}/>;
+    if(col==='status'){return <StatusDotWithArchive draft={draft} app={app} showLabel={true}/>;}
+    if(col==='wordCount')return <span style={{fontSize:12,color:'var(--mid)'}}>{draft.wordCount||0}</span>;
+    if(col==='synopsis')return <input className="tbl-inp syn" defaultValue={draft.synopsis} placeholder="Synopsis..." onBlur={function(e){app.updateDraft(app.projId,draft.id,{synopsis:e.target.value});}} style={{width:'100%'}}/>;
+    if(col==='strandTags'){var ps2=app.allStrands[app.projId]||{};var ts2=[];Object.keys(ps2).forEach(function(c){(ps2[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id))ts2.push(st);});});return(<div style={{display:'flex',flexWrap:'wrap',gap:3}}>{ts2.map(function(st){var bg=st.color+'26';return <span key={st.id} className="chip" style={{background:bg,color:st.color,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid',fontSize:11}}>{st.name}</span>;})}</div>);}
+    if(col==='pov'){var projStrands=app.allStrands[app.projId]||{};var taggedStrands=[];Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id))taggedStrands.push(st);});});return(
+<select style={{background:'transparent',border:'none',padding:0,fontSize:12,color:'var(--mid)',width:90}} value={draft.pov||''} onChange={function(e){app.updateDraft(app.projId,draft.id,{pov:e.target.value});}}>
+  <option value="">—</option>
+  {taggedStrands.map(function(st){return <option key={st.id} value={st.id}>{st.name}</option>;})}
+</select>
+    );}
+    if(col.startsWith('cf_')){var fid=col.slice(3);return <input className="tbl-inp syn" defaultValue={draft.customFields&&draft.customFields[fid]?draft.customFields[fid]:''} placeholder="—" onBlur={function(e){var cf=Object.assign({},draft.customFields||{});cf[fid]=e.target.value;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{width:90}}/>;}
+    return null;
+  }
+  function renderRow(draft,label,isNested,parentIdx,childIdx,hasChildren,isExpanded){return(
+<tr key={draft.id} className={(dragOver===draft.id?'drag-over ':'')+(isNested?'nest-row':'')}
+  onDragOver={function(e){e.preventDefault();setDragOver(draft.id);}}
+  onDragLeave={function(){setDragOver(null);}}
+  onDrop={function(e){e.preventDefault();setDragOver(null);var fromId=e.dataTransfer.getData('draftId');if(fromId&&fromId!==draft.id){var fromDraft=(app.allDrafts[app.projId]||[]).find(function(d){return d.id===fromId;});if(fromDraft&&fromDraft.status==='loose_thread'){app.updateDraft(app.projId,fromId,{status:'first_draft',order:draft.order||0,parentId:null});}else{app.reorderDraft(app.projId,fromId,draft.order||0);}}}}>
+  <td><span draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}} style={{cursor:'grab',color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:18}}>drag_indicator</span></span></td>
+  <td style={{color:'var(--mid)',fontSize:11,whiteSpace:'nowrap',paddingLeft:isNested?28:12}}>
+    <div style={{display:'flex',alignItems:'center',gap:2}}>
+      {hasChildren&&<span className="mi" style={{fontSize:16,cursor:'pointer',color:'var(--mid)',flexShrink:0,lineHeight:1}} onClick={function(){app.updateDraft(app.projId,draft.id,{nestExpanded:!isExpanded});}}>{isExpanded?'expand_less':'expand_more'}</span>}
+      {isNested&&<span className="mi" style={{fontSize:12,color:'var(--border)',flexShrink:0}}>subdirectory_arrow_right</span>}
+      {label}
+    </div>
+  </td>
+  {visCols.map(function(col){return <td key={col}>{renderCell(col,draft)}</td>;})}
+  <td><button className="card-open" onClick={function(){app.openDraft(draft.id);}}>Draft</button></td>
+</tr>
+  );}
+  return(
+<div className="view-layout">
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
+  <div className="table-wrap" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto'}}>
+    {tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
+<div>
+  <table className="wt">
+    <thead>
+      <tr>
+        <th style={{width:32}}/>
+        <th style={{width:48}}>#</th>
+        {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});return(
+<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160}} className="resizable">
+  {av?av.label:col}
+  <div className="col-resize-handle" onMouseDown={function(e){startResize(col,e);}}/>
+</th>
+        );})}
+        <th style={{width:54}}>
+          <button ref={colRef} className="btn-icon" style={{padding:2,color:'var(--mid)'}} onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setColPos({top:r.bottom+4,right:window.innerWidth-r.right});setColOpen(!colOpen);}} title="Edit columns">
+            <span className="mi" style={{fontSize:18}}>settings</span>
+          </button>
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      {displayed.map(function(parent,i){
+        var isExpanded=parent.nestExpanded!==false;
+        var hasChildren=parent.children&&parent.children.length>0;
+        var rows=[renderRow(parent,''+(i+1),false,i,null,hasChildren,isExpanded)];
+        if(hasChildren&&isExpanded){parent.children.forEach(function(child,ci){rows.push(renderRow(child,(i+1)+'.'+(ci+1),true,i,ci,false,false));});}
+        return rows;
+      })}
+    </tbody>
+  </table>
+  <div style={{padding:'9px 12px'}}><button className="btn btn-ghost btn-sm" onClick={addDraft}>+ Add draft</button></div>
+  <div style={{padding:'0 16px'}}><LooseThreadsSection threads={ltDrafts} app={app} view="table"/></div>
+</div>
+    )}
+  </div>
+  {colOpen&&(
+<div className="col-vis-drop" style={{top:colPos.top,right:colPos.right,maxHeight:'60vh',overflowY:'auto'}}>
+  <div style={{padding:'4px 8px 6px',fontSize:11,color:'var(--mid)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.06em'}}>Columns</div>
+  {allAvailCols.map(function(col){var isVis=visCols.includes(col.id);return(
+<div key={col.id} className="col-vis-item" onClick={function(){toggleCol(col.id);}}>
+  <span style={{width:18,height:18,borderRadius:4,border:'1px solid var(--border)',background:isVis?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
+    {isVis&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
+  </span>
+  <span>{col.label}</span>
+</div>
+  );})}
+</div>
+  )}
+  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}}/>
+</div>
+  );
+}
+
+// ── Editor ──
+function PropertiesDrawer({draft,app,onClose,onOpenStrandDetail}){
+  var s1=useState(false);var advOpen=s1[0];var setAdvOpen=s1[1];
+  var s2=useState(false);var addChipOpen=s2[0];var setAddChipOpen=s2[1];
+  if(!draft)return null;
+  var projStrands=app.allStrands[app.projId]||{};
+  var allStrandsList=[];
+  Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){allStrandsList.push(Object.assign({},st,{collectionName:c}));});});
+  var taggedStrands=allStrandsList.filter(function(st){return (draft.strandTags||[]).includes(st.id);});
+  var untaggedStrands=allStrandsList.filter(function(st){return !(draft.strandTags||[]).includes(st.id);});
+  function update(changes){app.updateDraft(app.projId,draft.id,changes);}
+  function removeStrand(sid){update({strandTags:(draft.strandTags||[]).filter(function(t){return t!==sid;})});}
+  function addStrand(sid){update({strandTags:(draft.strandTags||[]).concat([sid])});setAddChipOpen(false);}
+  var allDrafts=app.allDrafts[app.projId]||[];
+  var parentOptions=allDrafts.filter(function(d){return d.status!=='loose_thread'&&d.id!==draft.id&&!d.parentId;});
+  var project=app.currentProject||{};
+  var draftFieldDefs=project.draftFieldDefs||[];
+  return(
+<div className="editor-drawer">
+  <div className="edrawer-hdr">
+    <span className="edrawer-title">Properties</span>
+    <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
+  </div>
+  <div className="edrawer-section">
+    <span className="edrawer-lbl">Title</span>
+    <input key={draft.id+'-pt'} defaultValue={draft.title||''} placeholder="Untitled draft" onBlur={function(e){update({title:e.target.value});app.updateDraft(app.projId,draft.id,{title:e.target.value,updatedAt:new Date().toISOString()});}}/>
+  </div>
+  <div className="edrawer-section">
+    <span className="edrawer-lbl">Synopsis</span>
+    <textarea key={draft.id+'-ps'} defaultValue={draft.synopsis} placeholder="Brief synopsis..." rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
+  </div>
+  <div className="edrawer-section">
+    <span className="edrawer-lbl">Thumbnail</span>
+    <div style={{display:'flex',alignItems:'center',gap:10}}>
+      {draft.thumbnail&&<img src={draft.thumbnail} alt="" style={{width:56,height:40,objectFit:'cover',borderRadius:6,flexShrink:0}}/>}
+      <label style={{cursor:'pointer'}}>
+        <span className="btn btn-ghost btn-sm">{draft.thumbnail?'Change image':'Upload image'}</span>
+        <input type="file" accept="image/*" style={{display:'none'}} onChange={function(e){
+          var file=e.target.files&&e.target.files[0];
+          if(!file)return;
+          if(file.size>2*1024*1024){alert('Image must be under 2 MB.');return;}
+          var reader=new FileReader();
+          reader.onload=function(ev){update({thumbnail:ev.target.result});};
+          reader.readAsDataURL(file);
+        }}/>
+      </label>
+      {draft.thumbnail&&<button className="btn-icon" onClick={function(){update({thumbnail:null});}}><span className="mi" style={{fontSize:16}}>delete</span></button>}
+    </div>
+  </div>
+  <div className="edrawer-section">
+    <span className="edrawer-lbl">Status</span>
+    <div style={{display:'flex',alignItems:'center',gap:10}}>
+      <StatusDotWithArchive draft={draft} app={app} showLabel={true}/>
+    </div>
+  </div>
+  <div className="edrawer-section">
+    <span className="edrawer-lbl">Nested under</span>
+    <select value={draft.parentId||''} onChange={function(e){update({parentId:e.target.value||null});}}>
+      <option value="">None (top level)</option>
+      {parentOptions.map(function(d){return <option key={d.id} value={d.id}>{d.title||'Untitled'}</option>;})}
+    </select>
+  </div>
+  <div className="edrawer-section">
+    <span className="edrawer-lbl">Tagged Strands</span>
+    <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:8}}>
+      {taggedStrands.map(function(st){var bg=st.color+'26';return(
+<span key={st.id} className="chip" style={{background:bg,color:st.color,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid',cursor:'pointer'}} onClick={function(){onOpenStrandDetail&&onOpenStrandDetail(st.id);}}>
+  {st.name}
+  <span style={{marginLeft:3,opacity:.6,fontSize:11}} onClick={function(e){e.stopPropagation();removeStrand(st.id);}}>×</span>
+</span>
+      );})}
+      <div style={{position:'relative'}}>
+        <span className="chip" style={{background:'var(--bg3)',color:'var(--mid)',borderColor:'var(--border)',borderWidth:1,borderStyle:'solid',cursor:'pointer'}} onClick={function(){setAddChipOpen(!addChipOpen);}}>
+          <span className="mi" style={{fontSize:14}}>add</span>
+        </span>
+        {addChipOpen&&untaggedStrands.length>0&&(
+<div style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:50,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:'var(--r)',boxShadow:'0 4px 16px rgba(0,0,0,.4)',minWidth:180,maxHeight:200,overflowY:'auto'}}>
+  {untaggedStrands.map(function(st){return(
+<div key={st.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',cursor:'pointer',fontSize:13}} onClick={function(){addStrand(st.id);}} onMouseOver={function(e){e.currentTarget.style.background='var(--bg3)';}} onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  <div style={{width:8,height:8,borderRadius:'50%',background:st.color}}/>
+  <span>{st.name}</span>
+  <span style={{fontSize:11,color:'var(--mid)',marginLeft:'auto'}}>{st.collectionName}</span>
+</div>
+  );})}
+  {untaggedStrands.length===0&&<div style={{padding:'8px 10px',fontSize:13,color:'var(--mid)'}}>All strands tagged.</div>}
+</div>
+        )}
+        {addChipOpen&&untaggedStrands.length===0&&<div/>}
+      </div>
+    </div>
+    {allStrandsList.length===0&&<span style={{fontSize:12,color:'var(--mid)'}}>No strands yet. Go to the Strands view.</span>}
+  </div>
+  <div className="adv-toggle" onClick={function(){setAdvOpen(!advOpen);}}>
+    <span className="mi" style={{fontSize:16}}>{advOpen?'expand_less':'expand_more'}</span>
+    <span>Advanced</span>
+  </div>
+  {advOpen&&(
+<div>
+  <div className="edrawer-section">
+    <span className="edrawer-lbl">POV</span>
+    <select value={draft.pov||''} onChange={function(e){update({pov:e.target.value});}}>
+      <option value="">None</option>
+      {taggedStrands.map(function(st){return <option key={st.id} value={st.id}>{st.name}</option>;})}
+    </select>
+    {taggedStrands.length===0&&<div style={{fontSize:12,color:'var(--mid)',marginTop:4}}>Tag strands above to set POV.</div>}
+  </div>
+  {draftFieldDefs.map(function(f){var val=draft.customFields&&draft.customFields[f.id]?draft.customFields[f.id]:'';return(
+<div key={f.id} className="edrawer-section">
+  <span className="edrawer-lbl">{f.label}</span>
+  <input defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} onBlur={function(e){var cf=Object.assign({},draft.customFields||{});cf[f.id]=e.target.value;update({customFields:cf});}}/>
+</div>
+  );})}
+  <div className="edrawer-section">
+    <span className="edrawer-lbl" style={{marginBottom:8}}>Custom draft fields</span>
+    <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={function(){var name=prompt('Field name:');if(name&&name.trim()){app.addDraftFieldDef(app.projId,{id:genId(),label:name.trim(),type:'short_text'});}}}>
+      <span className="mi" style={{fontSize:14}}>add</span> Add field
+    </button>
+  </div>
+</div>
+  )}
+</div>
+  );
+}
+
+function StrandDetailDrawer({strandId,app,onClose}){
+  var pid=app.projId;
+  var projStrands=app.allStrands[pid]||{};
+  var strand=null;var collName='';
+  Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){if(st.id===strandId){strand=st;collName=c;}});});
+  if(!strand)return null;
+  var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.id===strand.templateId;})||null;
+  var fields=tpl?tpl.fields:[];
+  function updateField(fieldId,val){
+    var nf=Object.assign({},strand.fields||{});nf[fieldId]=val;
+    app.updateStrand(pid,collName,strandId,{fields:nf});
+  }
+  return(
+<div className="editor-drawer">
+  <div className="edrawer-hdr">
+    <div style={{display:'flex',alignItems:'center',gap:8}}>
+      <div style={{width:24,height:24,borderRadius:'50%',background:strand.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600,color:'#fff',flexShrink:0}}>{initials(strand.name)}</div>
+      <span className="edrawer-title">{strand.name}</span>
+    </div>
+    <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
+  </div>
+  <div style={{padding:'12px 14px',flex:1,overflowY:'auto'}}>
+    <div style={{fontSize:11,color:'var(--mid)',marginBottom:12,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}>{collName}</div>
+    {fields.map(function(f){var val=(strand.fields&&strand.fields[f.id])||'';return(
+<div key={f.id} style={{marginBottom:12}}>
+  <span className="edrawer-lbl">{f.label}</span>
+  {f.type==='long_text'
+    ?<textarea defaultValue={val} rows={3} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
+    :<input defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
+  }
+</div>
+    );})}
+  </div>
+</div>
+  );
+}
+
+function StrandsDropdown({allStrandsList,onSelect,onCreateNew}){
+  return(
+<div className="float-strand-drop" style={{display:'flex',flexDirection:'column'}}>
+  <div style={{flex:1,overflowY:'auto',maxHeight:160}}>
+    {allStrandsList.map(function(st){return(
+<div key={st.id} className="float-strand-item" onMouseDown={function(e){e.preventDefault();onSelect(st);}}>
+  <div style={{width:10,height:10,borderRadius:'50%',background:st.color,flexShrink:0}}/>
+  <span>{st.name}</span>
+  <span style={{fontSize:11,color:'var(--mid)',marginLeft:'auto'}}>{st.collectionName}</span>
+</div>
+    );})}
+    {allStrandsList.length===0&&<div style={{padding:'8px 10px',fontSize:12,color:'var(--mid)'}}>No strands yet.</div>}
+  </div>
+  <div className="float-strand-new" style={{borderTop:'1px solid var(--border)',flexShrink:0}} onMouseDown={function(e){e.preventDefault();onCreateNew();}}>
+    <span className="mi" style={{fontSize:16}}>add</span>New strand...
+  </div>
+</div>
+  );
+}
+
+function EditorStrandsPanel({draft,app,onClose,onOpenStrand}){
+  var projStrands=app.allStrands[app.projId]||{};
+  var taggedIds=draft.strandTags||[];
+  var tagged=[];var untagged=[];
+  Object.keys(projStrands).forEach(function(c){
+    (projStrands[c]||[]).forEach(function(st){
+      if(taggedIds.includes(st.id)) tagged.push(Object.assign({},st,{collectionName:c}));
+      else untagged.push(Object.assign({},st,{collectionName:c}));
+    });
+  });
+  var ssi=useState(null);var selectedStrandId=ssi[0];var setSelectedStrandId=ssi[1];
+  var ssa=useState(false);var showAvatarEdit=ssa[0];var setShowAvatarEdit=ssa[1];
+  // If a strand is selected, show its detail inline
+  if(selectedStrandId){
+    var pid=app.projId;
+    var projS=app.allStrands[pid]||{};
+    var strand=null;var collName='';
+    Object.keys(projS).forEach(function(c){(projS[c]||[]).forEach(function(st){if(st.id===selectedStrandId){strand=st;collName=c;}});});
+    if(!strand){setSelectedStrandId(null);return null;}
+    var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.id===strand.templateId;})||null;
+    var fields=tpl?tpl.fields:[];
+    function updateField(fid,val){var nf=Object.assign({},strand.fields||{});nf[fid]=val;app.updateStrand(pid,collName,selectedStrandId,{fields:nf});}
+    return(
+<div className="editor-drawer">
+  <div className="edrawer-hdr">
+    <div style={{display:'flex',alignItems:'center',gap:6}}>
+      <button className="btn-icon" onClick={function(){setSelectedStrandId(null);setShowAvatarEdit(false);}}><span className="mi" style={{fontSize:18}}>arrow_back</span></button>
+      <div style={{width:24,height:24,borderRadius:'50%',background:strand.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600,color:'#fff',flexShrink:0,cursor:'pointer',overflow:'hidden'}} onClick={function(){setShowAvatarEdit(true);}}>
+        {strand.image?<img src={strand.image} alt={strand.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:strand.emoji?<span style={{fontSize:14}}>{strand.emoji}</span>:initials(strand.name)}
+      </div>
+      <span className="edrawer-title">{strand.name}</span>
+    </div>
+    <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
+  </div>
+  <div style={{padding:'12px 14px',flex:1,overflowY:'auto'}}>
+    <div style={{fontSize:11,color:'var(--mid)',marginBottom:12,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}>{collName}</div>
+    {fields.map(function(f){var val=(strand.fields&&strand.fields[f.id])||'';return(
+<div key={f.id} style={{marginBottom:12}}>
+  <span className="edrawer-lbl">{f.label}</span>
+  {f.type==='long_text'
+    ?<textarea defaultValue={val} rows={3} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
+    :<input defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
+  }
+</div>
+    );})}
+  </div>
+  {showAvatarEdit&&<AvatarEditModal strand={strand} onClose={function(){setShowAvatarEdit(false);}} onSave={function(updates){app.updateStrand(pid,collName,selectedStrandId,updates);setShowAvatarEdit(false);}}/>}
+</div>
+    );
+  }
+  return(
+<div className="editor-drawer">
+  <div className="edrawer-hdr">
+    <span className="edrawer-title">Strands</span>
+    <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
+  </div>
+  {tagged.length===0&&(
+<div style={{padding:'12px 14px',fontSize:13,color:'var(--mid)'}}>
+  No strands tagged yet. Tap a strand below to add it to this draft.
+</div>
+  )}
+  {tagged.map(function(st){return(
+<div key={st.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--border)',cursor:'pointer'}} onClick={function(){setSelectedStrandId(st.id);}}>
+  <div style={{width:28,height:28,borderRadius:'50%',background:st.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#fff',flexShrink:0,overflow:'hidden'}}>
+    {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:16}}>{st.emoji}</span>:initials(st.name)}
+  </div>
+  <div style={{flex:1,minWidth:0}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>{st.name}</div>
+    <div style={{fontSize:11,color:'var(--mid)'}}>{st.collectionName}</div>
+  </div>
+  <span className="mi" style={{fontSize:16,color:'var(--border)'}}>chevron_right</span>
+</div>
+  );})}
+  {untagged.length>0&&(
+<div>
+  <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.06em',borderTop:'1px solid var(--border)'}}>Add strands</div>
+  {untagged.map(function(st){return(
+<div key={st.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderBottom:'1px solid var(--border)',cursor:'pointer'}} onClick={function(){var tags=draft.strandTags||[];if(!tags.includes(st.id))app.updateDraft(app.projId,draft.id,{strandTags:tags.concat([st.id])});}}>
+  <div style={{width:28,height:28,borderRadius:'50%',background:st.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#fff',flexShrink:0,overflow:'hidden'}}>
+    {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:16}}>{st.emoji}</span>:initials(st.name)}
+  </div>
+  <div style={{flex:1,minWidth:0}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:14,color:'var(--mid)'}}>{st.name}</div>
+    <div style={{fontSize:11,color:'var(--placeholder)'}}>{st.collectionName}</div>
+  </div>
+  <span className="mi" style={{fontSize:16,color:'var(--teal)'}}>add_circle_outline</span>
+</div>
+  );})}
+</div>
+  )}
+</div>
+  );
+}
+
+function EditorView({app}){
+  var pid=app.projId;var did=app.draftId;
+  var draft=(app.allDrafts[pid]||[]).find(function(d){return d.id===did;})||null;
+  var mode=(app.profile&&app.profile.editorMode)||'rt';
+  var sp=useState(false);var showProps=sp[0];var setShowProps=sp[1];
+  var ssd=useState(null);var strandDetailId=ssd[0];var setStrandDetailId=ssd[1];
+  var sstr=useState(false);var showStrands=sstr[0];var setShowStrands=sstr[1];
+  var swc=useState(draft?(draft.wordCount||0):0);var wc=swc[0];var setWc=swc[1];
+  var sz=useState(100);var zoom=sz[0];var setZoom=sz[1];
+  var sft=useState(null);var floatToolbar=sft[0];var setFloatToolbar=sft[1];
+  var ssd2=useState(false);var showStrandDrop=ssd2[0];var setShowStrandDrop=ssd2[1];
+  var editorRef=useRef(null);var saveTimer=useRef(null);var lastDraftId=useRef(null);var sessionStartWc=useRef(0);
+  var isMobile=useIsMobile();
+  useEffect(function(){if(!draft)return;if(lastDraftId.current===draft.id)return;lastDraftId.current=draft.id;sessionStartWc.current=draft.wordCount||0;setWc(draft.wordCount||0);if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';},[did]);
+  useEffect(function(){if(!draft)return;if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';},[mode,did]);
+  function scheduleSave(html,newWc){if(saveTimer.current)clearTimeout(saveTimer.current);saveTimer.current=setTimeout(function(){app.updateDraft(pid,did,{body:html,wordCount:newWc,updatedAt:new Date().toISOString()});var added=Math.max(0,newWc-sessionStartWc.current);if(added>0)app.recordSession(pid,added);},600);}
+  function handleRTInput(){if(!editorRef.current)return;var text=editorRef.current.innerText||editorRef.current.textContent||'';var newWc=countWords(text);setWc(newWc);scheduleSave(editorRef.current.innerHTML,newWc);}
+  function handlePaste(e){
+    e.preventDefault();
+    var html=e.clipboardData.getData('text/html');
+    if(html){
+      var cleaned=html
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'')
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'')
+        .replace(/(<[a-z][^>]*?)\s+style="[^"]*"/gi,'$1')
+        .replace(/(<[a-z][^>]*?)\s+class="[^"]*"/gi,'$1')
+        .replace(/<font[^>]*>/gi,'').replace(/<\/font>/gi,'')
+        .replace(/<span[^>]*>/gi,'').replace(/<\/span>/gi,'')
+        .replace(/<div[^>]*>/gi,'<p>').replace(/<\/div>/gi,'</p>')
+        .replace(/<!--[\s\S]*?-->/g,'');
+      document.execCommand('insertHTML',false,cleaned);
+      return;
+    }
+    var text=e.clipboardData.getData('text/plain');
+    if(!text)return;
+    var out=text.split('\n\n').map(function(para){
+      return '<p>'+para.split('\n').join('<br>')+'</p>';
+    }).join('');
+    document.execCommand('insertHTML',false,out);
+  }
+  function handleMDChange(e){var newWc=countWords(e.target.value);setWc(newWc);scheduleSave(e.target.value,newWc);}
+  function fmt(cmd,val){if(editorRef.current){editorRef.current.focus();document.execCommand(cmd,false,val||null);}}
+  // Markdown shortcuts: "- " → bullet list, "1. " → numbered list
+  function handleKeyDown(e){
+    if(e.key!==' ')return;
+    if(!editorRef.current)return;
+    var sel=window.getSelection();
+    if(!sel||!sel.rangeCount)return;
+    var range=sel.getRangeAt(0);
+    var node=range.startContainer;
+    if(node.nodeType!==3)return;
+    // Only trigger at very start of a block (entire text node is just the trigger)
+    var fullText=node.textContent;
+    var offset=range.startOffset;
+    if(offset===1&&fullText==='-'){
+      e.preventDefault();node.textContent='';document.execCommand('insertUnorderedList',false,null);
+    } else if(offset===2&&fullText==='1.'){
+      e.preventDefault();node.textContent='';document.execCommand('insertOrderedList',false,null);
+    }
+  }
+  var sshare=useState(false);var shareOpen=sshare[0];var setShareOpen=sshare[1];
+  var ssharePos=useState({top:0,left:0});var sharePos=ssharePos[0];var setSharePos=ssharePos[1];
+  var sExport=useState(false);var exportOpen=sExport[0];var setExportOpen=sExport[1];
+  var sExFormat=useState('PDF');var exFormat=sExFormat[0];var setExFormat=sExFormat[1];
+  var shareRef=useRef(null);
+  useEffect(function(){if(!shareOpen)return;function onDown(e){if(shareRef.current&&!shareRef.current.contains(e.target))setShareOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[shareOpen]);
+  function handleSelectionChange(){var sel=window.getSelection();if(!sel||sel.isCollapsed||!sel.rangeCount||!editorRef.current){setFloatToolbar(null);return;}try{var range=sel.getRangeAt(0);if(!editorRef.current.contains(range.commonAncestorContainer)){setFloatToolbar(null);return;}var rect=range.getBoundingClientRect();setFloatToolbar({top:rect.top-46,left:Math.max(4,rect.left+rect.width/2-100)});setShowStrandDrop(false);}catch(e){setFloatToolbar(null);}}
+  useEffect(function(){document.addEventListener('selectionchange',handleSelectionChange);return function(){document.removeEventListener('selectionchange',handleSelectionChange);};},[]);
+  var projStrands=app.allStrands[pid]||{};
+  var allStrandsList=[];
+  Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){allStrandsList.push(Object.assign({},st,{collectionName:c}));});});
+  function tagStrand(st){var sel=window.getSelection();if(sel&&!sel.isCollapsed&&sel.rangeCount>0){var range=sel.getRangeAt(0);var mark=document.createElement('mark');mark.style.background=st.color+'33';mark.style.color=st.color;mark.style.borderRadius='3px';mark.style.padding='0 2px';mark.dataset.strandId=st.id;try{range.surroundContents(mark);}catch(e){}}var tags=draft.strandTags||[];if(!tags.includes(st.id))app.updateDraft(pid,did,{strandTags:tags.concat([st.id])});setShowStrandDrop(false);setFloatToolbar(null);}
+  function createNewStrand(){
+    var sel=window.getSelection();
+    var selectedText=sel&&!sel.isCollapsed?sel.toString().trim():'';
+    // Clear selection highlight
+    if(sel)sel.removeAllRanges();
+    var colls=Object.keys(projStrands);var coll=colls.length>0?colls[0]:'Characters';
+    var ns={id:genId(),templateId:'',collectionName:coll,name:selectedText||'New Strand',color:PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};
+    app.addStrand(pid,coll,ns);
+    setShowStrandDrop(false);
+    setFloatToolbar(null);
+    // Open properties and strand detail for the new strand
+    setStrandDetailId(ns.id);
+    setShowProps(false);
+  }
+  if(!draft)return <div style={{display:'flex',flexDirection:'column',flex:1,alignItems:'center',justifyContent:'center'}}><div style={{color:'var(--mid)'}}>Draft not found.</div><button className="btn btn-ghost" style={{marginTop:12}} onClick={function(){app.setView('cards');}}>Go back</button></div>;
+  var bodyFontSize=Math.round(19*zoom/100);
+  // Both props and strands can be open simultaneously on wide screens
+  return(
+<div className="editor-layout">
+  <div className="editor-topbar">
+    <div className="editor-topbar-row1">
+      <button className="editor-back" onClick={function(){if(saveTimer.current)clearTimeout(saveTimer.current);app.setView('cards');app.setDraftId(null);}}><span className="mi">arrow_back</span></button>
+      <input key={draft.id+'-et-'+draft.title} className="editor-title-inp" defaultValue={draft.title} placeholder="Untitled draft" onBlur={function(e){app.updateDraft(pid,did,{title:e.target.value,updatedAt:new Date().toISOString()});}}/>
+    </div>
+    <div className="editor-topbar-row2">
+    <button className="btn btn-ghost btn-sm" style={showProps?{borderColor:'var(--indigo)',color:'var(--indigo)'}:{}} onClick={function(){setShowProps(!showProps);setStrandDetailId(null);}}>Properties</button>
+    <button className="btn btn-ghost btn-sm" style={showStrands?{borderColor:'var(--indigo)',color:'var(--indigo)'}:{}} onClick={function(){setShowStrands(!showStrands);setStrandDetailId(null);}}>Strands</button>
+    <div ref={shareRef} style={{position:'relative'}}>
+      <button className="btn btn-ghost btn-sm" onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setSharePos({top:r.bottom+4,left:r.right-180});setShareOpen(!shareOpen);}}>
+        Share<span className="mi" style={{fontSize:14,marginLeft:2}}>arrow_drop_down</span>
+      </button>
+      {shareOpen&&(
+<div style={{position:'fixed',top:sharePos.top,left:sharePos.left,zIndex:400,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:'var(--r)',boxShadow:'0 8px 24px rgba(0,0,0,.5)',minWidth:180}}>
+  <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer',fontSize:13}} onClick={function(){navigator.clipboard&&navigator.clipboard.writeText(window.location.href);alert('Read-only link copied.');setShareOpen(false);}}>
+    <span className="mi" style={{fontSize:18}}>link</span>Copy read-only link
+  </div>
+  <div style={{borderTop:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer',fontSize:13}} onClick={function(){setShareOpen(false);setExportOpen(true);}}>
+    <span className="mi" style={{fontSize:18}}>download</span>Export this draft
+  </div>
+</div>
+      )}
+    </div>
+    </div>
+  </div>
+  <div className="editor-main">
+    <div className="editor-center">
+      {mode==='rt'?(
+<div ref={editorRef} className="editor-body" contentEditable={true} suppressContentEditableWarning={true} data-placeholder="Start writing..." style={{fontSize:bodyFontSize,lineHeight:1.9}} onInput={handleRTInput} onKeyDown={handleKeyDown} onPaste={handlePaste}/>
+      ):(
+<textarea className="editor-md" defaultValue={stripHtml(draft.body||'')} onChange={handleMDChange} placeholder="Write in Markdown..."/>
+      )}
+    </div>
+    {showProps&&<PropertiesDrawer draft={draft} app={app} onClose={function(){setShowProps(false);}} onOpenStrandDetail={function(sid){setStrandDetailId(sid);}}/>}
+    {strandDetailId&&<StrandDetailDrawer strandId={strandDetailId} app={app} onClose={function(){setStrandDetailId(null);}}/>}
+    {showStrands&&<EditorStrandsPanel draft={draft} app={app} onClose={function(){setShowStrands(false);}} onOpenStrand={function(sid){setStrandDetailId(sid);}}/>}
+  </div>
+  <div className="editor-bottombar">
+    <span>{wc} words</span>
+    <div style={{display:'flex',alignItems:'center',gap:8}}>
+      <span style={{fontSize:12}}>{zoom}%</span>
+      <input type="range" min={70} max={150} step={10} value={zoom} onChange={function(e){setZoom(parseInt(e.target.value,10));}} style={{width:72}}/>
+    </div>
+  </div>
+  {floatToolbar&&mode==='rt'&&(
+<div className="float-toolbar" style={{top:floatToolbar.top,left:floatToolbar.left}}>
+  <button className="float-btn" title="Bold" onMouseDown={function(e){e.preventDefault();fmt('bold');}}>B</button>
+  <button className="float-btn" title="Italic" onMouseDown={function(e){e.preventDefault();fmt('italic');}} style={{fontStyle:'italic'}}>I</button>
+  <button className="float-btn" title="Underline" onMouseDown={function(e){e.preventDefault();fmt('underline');}} style={{textDecoration:'underline'}}>U</button>
+  <div className="float-sep"/>
+  <button className="float-btn" onMouseDown={function(e){e.preventDefault();fmt('formatBlock','h1');}}>H1</button>
+  <button className="float-btn" onMouseDown={function(e){e.preventDefault();fmt('formatBlock','h2');}}>H2</button>
+  <button className="float-btn mi-btn" title="Link" onMouseDown={function(e){e.preventDefault();var url=prompt('Enter URL:');if(url)fmt('createLink',url);}}>link</button>
+  <div className="float-sep"/>
+  <button className="float-btn mi-btn" title="Bullet list" onMouseDown={function(e){e.preventDefault();document.execCommand('insertUnorderedList',false,null);}}>format_list_bulleted</button>
+  <button className="float-btn mi-btn" title="Numbered list" onMouseDown={function(e){e.preventDefault();document.execCommand('insertOrderedList',false,null);}}>format_list_numbered</button>
+  <div className="float-sep"/>
+  <div style={{position:'relative'}}>
+    <button className="float-btn mi-btn" title="Tag strand" onMouseDown={function(e){e.preventDefault();setShowStrandDrop(!showStrandDrop);}}>share</button>
+    {showStrandDrop&&<StrandsDropdown allStrandsList={allStrandsList} onSelect={tagStrand} onCreateNew={createNewStrand}/>}
+  </div>
+</div>
+  )}
+  {exportOpen&&(
+<Panel open={exportOpen} onClose={function(){setExportOpen(false);}} title="Export Draft"
+  footer={<button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={function(){alert('Export as '+exFormat+': '+draft.title);setExportOpen(false);}}>Export as {exFormat}</button>}>
+  <div><span className="sect-lbl">Format</span>
+    <select value={exFormat} onChange={function(e){setExFormat(e.target.value);}}>
+      <option value="PDF">PDF</option>
+      <option value="Word (.docx)">Word Document (.docx)</option>
+      <option value="Markdown">Markdown (.md)</option>
+      <option value="Plain Text">Plain Text</option>
+    </select>
+  </div>
+  <div style={{marginTop:16,fontSize:13,color:'var(--mid)'}}>Exports this draft only: <strong style={{color:'var(--text)'}}>{draft.title||'Untitled'}</strong> ({wc} words)</div>
+</Panel>
+  )}
+</div>
+  );
+}
+
+
+// ── AvatarEditModal ──
+var QUICK_EMOJIS=['⚔️','🗡️','🏰','🌲','🔥','💀','👑','🗺️','📜','🌙','⭐','🧙','🐉','🏺','🔮','💎','🌊','🦅','🐺','🌹','🕯️','⚡','🌑','🛡️','🗝️','🎭','📖','🩸','🌿','❄️'];
+
+function AvatarEditModal({strand,onSave,onClose}){
+  var sc=useState(strand.color||PRESET_COLORS[0]);var color=sc[0];var setColor=sc[1];
+  var si=useState(strand.image||null);var image=si[0];var setImage=si[1];
+  var se=useState(strand.emoji||null);var emoji=se[0];var setEmoji=se[1];
+  function handleFile(e){
+    var file=e.target.files&&e.target.files[0];if(!file)return;
+    if(file.size>2*1024*1024){alert('Image must be under 2 MB.');return;}
+    var reader=new FileReader();
+    reader.onload=function(ev){setImage(ev.target.result);};
+    reader.readAsDataURL(file);
+  }
+  function handleSave(){
+    onSave({color:color,image:image,emoji:emoji});
+  }
+  // Preview: image takes priority, then emoji, then initials on colour bg
+  var previewContent=null;
+  if(image){previewContent=<img src={image} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>;}
+  else if(emoji){previewContent=<span style={{fontSize:34}}>{emoji}</span>;}
+  else{previewContent=<span style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600,color:'#fff'}}>{initials(strand.name)}</span>;}
+  var sectionLbl={fontSize:11,fontWeight:600,color:'var(--accent)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10,display:'block'};
+  return(
+<div className="modal-overlay">
+  <div className="modal-backdrop" onClick={onClose}/>
+  <div className="modal-box" style={{width:400}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+      <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>Edit appearance</div>
+      <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
+    </div>
+    <div style={{display:'flex',justifyContent:'center',marginBottom:24}}>
+      <div style={{width:80,height:80,borderRadius:'50%',background:color,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,boxShadow:'0 4px 16px rgba(0,0,0,.4)'}}>
+        {previewContent}
+      </div>
+    </div>
+    <div style={{marginBottom:20}}>
+      <span style={sectionLbl}>Colour</span>
+      <div style={{fontSize:12,color:'var(--mid)',marginBottom:10}}>Background colour — used when no photo is set, and for strand tags.</div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+        {PRESET_COLORS.map(function(c){return(
+<div key={c} onClick={function(){setColor(c);}} style={{width:32,height:32,borderRadius:'50%',background:c,cursor:'pointer',transition:'transform .15s',transform:color===c?'scale(1.15)':'scale(1)',boxShadow:color===c?'0 0 0 3px var(--bg1),0 0 0 5px '+c:'none'}}/>
+        );})}
+      </div>
+    </div>
+    <div style={{marginBottom:20,paddingTop:16,borderTop:'1px solid var(--border)'}}>
+      <span style={sectionLbl}>Icon or Emoji</span>
+      <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
+        {QUICK_EMOJIS.map(function(em){return(
+<span key={em} onClick={function(){setEmoji(em===emoji?null:em);}} style={{width:36,height:36,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,cursor:'pointer',background:emoji===em?'var(--bg4)':'var(--bg2)',border:emoji===em?'1px solid var(--indigo)':'1px solid var(--border)',transition:'all .15s'}}>{em}</span>
+        );})}
+      </div>
+      <input placeholder="Or type any emoji..." style={{fontSize:18}} value={emoji||''} onChange={function(e){setEmoji(e.target.value||null);}}/>
+      {emoji&&<button className="btn-icon" style={{marginTop:6}} onClick={function(){setEmoji(null);}}><span className="mi" style={{fontSize:14}}>close</span> Clear emoji</button>}
+    </div>
+    <div style={{paddingTop:16,borderTop:'1px solid var(--border)'}}>
+      <span style={sectionLbl}>Photo</span>
+      <div style={{fontSize:12,color:'var(--mid)',marginBottom:10}}>Overrides colour and emoji when set.</div>
+      {image&&<div style={{marginBottom:10,borderRadius:8,overflow:'hidden',height:100,background:'var(--bg2)'}}><img src={image} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/></div>}
+      <label style={{cursor:'pointer',display:'block'}}>
+        <span className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}}><span className="mi" style={{fontSize:18}}>upload</span>{image?'Change photo':'Upload photo'}</span>
+        <input type="file" accept="image/*" style={{display:'none'}} onChange={handleFile}/>
+      </label>
+      {image&&<button className="btn btn-danger btn-sm" style={{marginTop:8,width:'100%',justifyContent:'center'}} onClick={function(){setImage(null);}}>Remove photo</button>}
+      <div style={{fontSize:11,color:'var(--mid)',marginTop:6}}>Max 2 MB. JPG, PNG, GIF, WebP.</div>
+    </div>
+    <div style={{display:'flex',gap:8,marginTop:20}}>
+      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onClose}>Cancel</button>
+      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={handleSave}>Save</button>
+    </div>
+  </div>
+</div>
+  );
+}
+
+// ── StrandsPage ──
+function StrandsPage({app,allProjects}){
+  var pid=app.projId;
+  var projStrands=app.allStrands[pid]||{};
+  var projTemplates=app.allTemplates[pid]||[];
+  var collNames=Object.keys(projStrands);if(collNames.length===0)collNames=['Characters'];
+  var sac=useState(collNames[0]);var activeColl=sac[0];var setActiveColl=sac[1];
+  var sasi=useState(null);var activeStrandId=sasi[0];var setActiveStrandId=sasi[1];
+  var ssc=useState('');var search=ssc[0];var setSearch=ssc[1];
+  var snc=useState(false);var newColl=snc[0];var setNewColl=snc[1];
+  var sncn=useState('');var newCollName=sncn[0];var setNewCollName=sncn[1];
+  var scs=useState(false);var showCollSettings=scs[0];var setShowCollSettings=scs[1];
+  var isMobile=useIsMobile();
+  var smdo=useState(false);var mobileDetailOpen=smdo[0];var setMobileDetailOpen=smdo[1];
+  var savt=useState(false);var showAvatarEdit=savt[0];var setShowAvatarEdit=savt[1];
+  var collStrands=projStrands[activeColl]||[];
+  var filtered=search?collStrands.filter(function(s){return s.name&&s.name.toLowerCase().includes(search.toLowerCase());}):collStrands;
+  var activeStrand=activeStrandId?filtered.find(function(s){return s.id===activeStrandId;})||null:filtered.length>0?filtered[0]:null;
+  function getTpl(coll){return projTemplates.find(function(t){return t.name===coll;})||null;}
+  var activeTpl=getTpl(activeColl);
+  var fields=activeTpl?activeTpl.fields:defaultFields(activeColl);
+  function updateStrand(sid,changes){app.updateStrand(pid,activeColl,sid,changes);}
+  function updateField(sid,fieldId,val){if(!activeStrand)return;var nf=Object.assign({},activeStrand.fields||{});nf[fieldId]=val;updateStrand(sid,{fields:nf});}
+  function addStrand(){var tpl=getTpl(activeColl);var ns={id:genId(),templateId:tpl?tpl.id:'',collectionName:activeColl,name:'New '+activeColl.replace(/s$/,''),color:PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};app.addStrand(pid,activeColl,ns);setActiveStrandId(ns.id);if(isMobile)setMobileDetailOpen(true);}
+  function addCollection(){var name=newCollName.trim();if(!name)return;var nt={id:genId(),projectId:pid,name:name,fields:defaultFields(name),sharedWith:[]};app.addTemplate(pid,nt);app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});setActiveColl(name);setNewColl(false);setNewCollName('');}
+  function handleImageUpload(e,sid){var file=e.target.files&&e.target.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(ev){updateStrand(sid,{image:ev.target.result});};reader.readAsDataURL(file);}
+  function getDraftAppearances(sid){return(app.allDrafts[pid]||[]).filter(function(d){return(d.strandTags||[]).includes(sid);});}
+  function renderFieldInput(f,sid,val){
+    if(f.type==='long_text')return <textarea key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} rows={3} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
+    if(f.type==='boolean')return(
+<div style={{display:'flex',gap:14}}>
+  {['Yes','No'].map(function(opt){return(
+<label key={opt} style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',fontSize:14}}>
+  <input type="radio" name={sid+'-'+f.id} value={opt} defaultChecked={val===opt} onChange={function(){updateField(sid,f.id,opt);}} style={{width:'auto'}}/>{opt}
+</label>
+  );})}
+</div>
+    );
+    if(f.type==='select')return(<select key={sid+'-'+f.id} defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}><option value="">Select...</option>{(f.options||[]).map(function(o){return <option key={o} value={o}>{o}</option>;})}</select>);
+    return <input key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} type={f.type==='number'?'number':'text'} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
+  }
+  // Collection settings editing
+  var sef=useState(null);var editingFields=sef[0];var setEditingFields=sef[1];
+  var snfn=useState('');var newFieldName=snfn[0];var setNewFieldName=snfn[1];
+  var snft=useState('short_text');var newFieldType=snft[0];var setNewFieldType=snft[1];
+  var ssw=useState([]);var sharedWith=ssw[0];var setSharedWith=ssw[1];
+  function openCollSettings(){setEditingFields(activeTpl?[...activeTpl.fields]:[]);setSharedWith(activeTpl?activeTpl.sharedWith||[]:[]);setShowCollSettings(true);}
+  var sdc=useState(false);var deleteCollConfirm=sdc[0];var setDeleteCollConfirm=sdc[1];
+  function deleteCollection(){
+    if(!activeTpl)return;
+    // Remove template and strands for this collection
+    app.updateTemplate(pid,activeTpl.id,{deleted:true});
+    app.setAllStrands(function(prev){var next=Object.assign({},prev);var ps=Object.assign({},next[pid]||{});delete ps[activeColl];next[pid]=ps;saveDB('woven:strands:'+pid,ps);return next;});
+    var remaining=collNames.filter(function(c){return c!==activeColl;});
+    if(remaining.length>0)setActiveColl(remaining[0]);
+    setShowCollSettings(false);setDeleteCollConfirm(false);
+  }
+  function saveCollSettings(){if(!activeTpl)return;app.updateTemplate(pid,activeTpl.id,{fields:editingFields,sharedWith:sharedWith});setShowCollSettings(false);}
+  function addFieldToSettings(){if(!newFieldName.trim()||!editingFields)return;setEditingFields(editingFields.concat([{id:genId(),label:newFieldName.trim(),type:newFieldType}]));setNewFieldName('');}
+  var otherProjects=allProjects.filter(function(p){return p.id!==pid;});
+  var detailContent=showCollSettings&&editingFields?(
+<div style={{padding:24}}>
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>{activeColl} — Fields</div>
+    <div style={{display:'flex',gap:8}}>
+      <button className="btn btn-danger btn-sm" onClick={function(){setDeleteCollConfirm(true);}}><span className="mi" style={{fontSize:14}}>delete</span>Delete</button>
+      <button className="btn btn-ghost btn-sm" onClick={function(){setShowCollSettings(false);}}>Cancel</button>
+      <button className="btn btn-primary btn-sm" onClick={saveCollSettings}>Save</button>
+    </div>
+  </div>
+  {deleteCollConfirm&&(
+<div className="modal-overlay">
+  <div className="modal-backdrop" onClick={function(){setDeleteCollConfirm(false);}}/>
+  <div className="modal-box" style={{maxWidth:400}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,marginBottom:12}}>Delete "{activeColl}"?</div>
+    <div style={{fontSize:14,color:'var(--body-text)',lineHeight:1.6,marginBottom:8}}>This will permanently delete the collection and all <strong>{(app.allStrands[pid]&&app.allStrands[pid][activeColl]?app.allStrands[pid][activeColl].length:0)}</strong> strands inside it.</div>
+    <div style={{fontSize:13,color:'var(--mid)',marginBottom:20}}>This cannot be undone.</div>
+    <div style={{display:'flex',gap:8}}>
+      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={function(){setDeleteCollConfirm(false);}}>Cancel</button>
+      <button className="btn btn-danger" style={{flex:1,justifyContent:'center'}} onClick={deleteCollection}><span className="mi" style={{fontSize:16}}>delete</span>Delete collection</button>
+    </div>
+  </div>
+</div>
+  )}
+  {editingFields.map(function(f,i){return(
+<div key={f.id} className="field-edit-row">
+  <input defaultValue={f.label} style={{flex:1}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});setEditingFields(nf);}}/>
+  <select value={f.type} style={{width:110}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value});setEditingFields(nf);}}>
+    {FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}
+  </select>
+  <button className="btn-icon" onClick={function(){setEditingFields(editingFields.filter(function(_,j){return j!==i;}));}}><span className="mi" style={{fontSize:18}}>delete</span></button>
+</div>
+  );})}
+  <div style={{display:'flex',gap:8,marginTop:12,marginBottom:24}}>
+    <input value={newFieldName} onChange={function(e){setNewFieldName(e.target.value);}} placeholder="New field name" onKeyDown={function(e){if(e.key==='Enter')addFieldToSettings();}} style={{flex:1}}/>
+    <select value={newFieldType} onChange={function(e){setNewFieldType(e.target.value);}} style={{width:110}}>{FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}</select>
+    <button className="btn btn-ghost btn-sm" onClick={addFieldToSettings}>Add</button>
+  </div>
+  <div style={{paddingTop:16,borderTop:'1px solid var(--border)'}}>
+    <span className="sect-lbl">Share across projects</span>
+    {otherProjects.length===0
+      ?<div style={{fontSize:13,color:'var(--placeholder)'}}>No other projects to share with.</div>
+      :<div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>        {otherProjects.map(function(p){var checked=sharedWith.includes(p.id);return(
+<label key={p.id} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,color:'var(--text)'}}>
+  <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(checked?'var(--indigo)':'var(--border)'),background:checked?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}} onClick={function(){setSharedWith(checked?sharedWith.filter(function(id){return id!==p.id;}):sharedWith.concat([p.id]));}}>
+    {checked&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
+  </span>
+  {p.title}
+</label>
+        );})}
+      </div>
+    }
+  </div>
+</div>
+  ):activeStrand?(
+<div style={{padding:24,backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.12) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
+  <div className="strand-detail-hdr">
+    <div className="strand-av-wrap" style={{background:activeStrand.color}} onClick={function(){setShowAvatarEdit(true);}}>
+      <div className="strand-av-overlay"><span className="mi" style={{fontSize:18,color:'#fff'}}>edit</span></div>
+      {activeStrand.image
+        ?<img src={activeStrand.image} alt={activeStrand.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+        :activeStrand.emoji
+          ?<span style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>{activeStrand.emoji}</span>
+          :<span style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,fontWeight:600,color:'#fff',fontFamily:'var(--serif)'}}>{initials(activeStrand.name)}</span>
+      }
+    </div>
+    <div style={{flex:1}}>
+      <input key={activeStrand.id+'-n'} className="strand-name-inp" defaultValue={activeStrand.name} placeholder="Name" onBlur={function(e){updateStrand(activeStrand.id,{name:e.target.value});}}/>
+    </div>
+  </div>
+  {showAvatarEdit&&<AvatarEditModal strand={activeStrand} onClose={function(){setShowAvatarEdit(false);}} onSave={function(updates){updateStrand(activeStrand.id,updates);setShowAvatarEdit(false);}}/>}
+  {fields.map(function(f){var val=activeStrand.fields&&activeStrand.fields[f.id]?activeStrand.fields[f.id]:'';return(
+<div key={f.id} className="strand-field-row">
+  <span className="edrawer-lbl">{f.label}</span>
+  {renderFieldInput(f,activeStrand.id,val)}
+</div>
+  );})}
+  <div className="appears-section">
+    <span className="edrawer-lbl">Appears In</span>
+    <div className="appears-chips">
+      {getDraftAppearances(activeStrand.id).map(function(d){return <span key={d.id} className="appears-chip" onClick={function(){app.openDraft(d.id);}}>{d.title||'Untitled'}</span>;})}
+      {getDraftAppearances(activeStrand.id).length===0&&<span style={{fontSize:13,color:'var(--mid)'}}>Not tagged in any drafts yet.</span>}
+    </div>
+  </div>
+</div>
+  ):(
+<div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flex:1,gap:12,color:'var(--mid)',textAlign:'center',padding:32}}>
+  <span className="mi" style={{fontSize:40,color:'var(--border)'}}>person_outline</span>
+  <div style={{fontFamily:'var(--serif)',fontSize:20}}>{activeColl}</div>
+  <button className="btn btn-primary" onClick={addStrand}>+ Add {activeColl.replace(/s$/,'')}</button>
+</div>
+  );
+  return(
+<div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+  <div className="strands-subnav">
+    {collNames.map(function(coll){return(
+<div key={coll} className={'strands-tab'+(activeColl===coll?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}}>
+  {coll}
+</div>
+    );})}
+    {newColl?(
+<div style={{display:'flex',alignItems:'center',gap:4}}>
+  <input autoFocus value={newCollName} onChange={function(e){setNewCollName(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')addCollection();if(e.key==='Escape'){setNewColl(false);setNewCollName('');}}} placeholder="Name" style={{width:100,height:30,fontSize:13}}/>
+  <button style={{fontSize:13,color:'var(--teal)'}} onClick={addCollection}>ok</button>
+</div>
+    ):(
+<div style={{display:'flex',alignItems:'center',gap:4,marginLeft:'auto'}}>
+  <button className="btn-icon" onClick={openCollSettings} title="Collection settings"><span className="mi" style={{fontSize:18}}>settings</span></button>
+  <button className="btn btn-ghost btn-sm" onClick={function(){setNewColl(true);}}>+ Add collection</button>
+</div>
+    )}
+  </div>
+  <div className="strands-layout">
+    <div className="strands-left">
+      <div className="strands-list">
+        <div style={{marginBottom:8}}><input placeholder={'Search '+activeColl+'...'} value={search} onChange={function(e){setSearch(e.target.value);}}/></div>
+        
+        {filtered.map(function(st){var isAct=activeStrand&&st.id===activeStrand.id;return(
+<div key={st.id} className={'strand-item'+(isAct?' active':'')} onClick={function(){setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}>
+  <div className="strand-av" style={{background:st.color,position:'relative'}}>
+    {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:14}}>{st.emoji}</span>:<span>{initials(st.name)}</span>}
+  </div>
+  <span style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>{st.name||'Unnamed'}</span>
+</div>
+        );})}
+        <div className="strands-add-btn" onClick={addStrand}><span className="mi" style={{fontSize:18}}>add</span><span>Add to {activeColl}</span></div>
+      </div>
+    </div>
+    {!isMobile&&<div style={{flex:1,overflowY:'auto'}}>{detailContent}</div>}
+    {isMobile&&mobileDetailOpen&&(
+<div style={{position:'fixed',inset:0,zIndex:50,background:'var(--bg1)',overflow:'auto'}}>
+  <div style={{display:'flex',alignItems:'center',gap:8,padding:'14px 16px',borderBottom:'1px solid var(--border)'}}>
+    <button className="btn-icon" onClick={function(){setMobileDetailOpen(false);}}><span className="mi">arrow_back</span></button>
+    <span style={{fontFamily:'var(--serif)',fontSize:17,fontWeight:600}}>{activeColl}</span>
+  </div>
+  {detailContent}
+</div>
+    )}
+  </div>
+</div>
+  );
+}
+
+
+// ── ArchiveDrawer ──
+function ArchiveDrawer({app,open,onClose}){
+  var sSelected=useState({});var selected=sSelected[0];var setSelected=sSelected[1];
+  // Collect all archived drafts across all projects
+  var archivedDrafts=[];
+  Object.keys(app.allDrafts).forEach(function(pid){
+    (app.allDrafts[pid]||[]).forEach(function(d){
+      if(d.archived){
+        var proj=app.projects.find(function(p){return p.id===pid;})||null;
+        archivedDrafts.push(Object.assign({},d,{projectTitle:proj?proj.title:'Unknown project',pid:pid}));
+      }
+    });
+  });
+  var archivedProjects=app.projects.filter(function(p){return p.archived;});
+  function toggleDraft(id){setSelected(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;});}
+  function restoreSelected(){
+    Object.keys(selected).forEach(function(did){
+      if(!selected[did]) return;
+      var d=archivedDrafts.find(function(x){return x.id===did;});
+      if(!d) return;
+      app.updateDraft(d.pid,did,{archived:false,status:'loose_thread',order:null,parentId:null});
+    });
+    setSelected({});
+  }
+  var selectedCount=Object.values(selected).filter(Boolean).length;
+  return(
+<Panel open={open} onClose={onClose} title="Your Archive"
+  footer={selectedCount>0?(
+<div style={{display:'flex',gap:8,width:'100%',alignItems:'center'}}>
+  <span style={{fontSize:12,color:'var(--mid)',flex:1}}>{selectedCount} selected</span>
+  <button className="btn btn-primary" style={{justifyContent:'center'}} onClick={restoreSelected}>
+    <span className="mi" style={{fontSize:16}}>unarchive</span>Restore as Loose Thread
+  </button>
+</div>
+  ):null}>
+  {archivedDrafts.length===0&&archivedProjects.length===0&&(
+<div style={{textAlign:'center',padding:'40px 20px',color:'var(--placeholder)'}}>
+  <span className="mi" style={{fontSize:48,display:'block',marginBottom:12}}>inventory_2</span>
+  <div style={{fontFamily:'var(--serif)',fontSize:18,marginBottom:6}}>Your archive is empty</div>
+  <div style={{fontSize:13}}>Archived drafts and projects will appear here.</div>
+</div>
+  )}
+  {archivedDrafts.length>0&&(
+<div style={{marginBottom:20}}>
+  <span className="sect-lbl">Archived Drafts</span>
+  {archivedDrafts.map(function(d){var isSelected=!!selected[d.id];return(
+<div key={d.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderBottom:'1px solid var(--border)',cursor:'pointer'}} onClick={function(){toggleDraft(d.id);}}>
+  <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(isSelected?'var(--indigo)':'var(--border)'),background:isSelected?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:2,transition:'all .15s'}}>
+    {isSelected&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
+  </span>
+  <div style={{flex:1,minWidth:0}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)',marginBottom:2}}>{d.title||'Untitled'}</div>
+    <div style={{fontSize:11,color:'var(--indigo)',marginBottom:3}}>{d.projectTitle}</div>
+    {d.synopsis&&<div style={{fontSize:12,color:'var(--mid)',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.synopsis}</div>}
+  </div>
+</div>
+  );})}
+</div>
+  )}
+  {archivedProjects.length>0&&(
+<div>
+  <span className="sect-lbl">Archived Projects</span>
+  {archivedProjects.map(function(p){return(
+<div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+  <div style={{flex:1}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)',marginBottom:2}}>{p.title||'Untitled'}</div>
+    {p.synopsis&&<div style={{fontSize:12,color:'var(--mid)'}}>{p.synopsis}</div>}
+  </div>
+  <button className="btn btn-ghost btn-sm" onClick={function(){app.unarchiveProject(p.id);}}>
+    <span className="mi" style={{fontSize:14}}>unarchive</span>Restore
+  </button>
+</div>
+  );})}
+</div>
+  )}
+</Panel>
+  );
+}
+
+// ── Wizard ──
+function ProjectWizard({app,onClose}){
+  var ss=useState(0);var step=ss[0];var setStep=ss[1];
+  var spt=useState(null);var projType=spt[0];var setProjType=spt[1];
+  var st=useState('');var title=st[0];var setTitle=st[1];
+  var ssyn=useState('');var synopsis=ssyn[0];var setSynopsis=ssyn[1];
+  var ssc=useState([]);var selectedColls=ssc[0];var setSelectedColls=ssc[1];
+  var titleRef=useRef(null);
+  useEffect(function(){if(step===1&&titleRef.current)titleRef.current.focus();},[step]);
+  var allColls=['Characters','Locations','Lore & World','Sources','Interviews','Subjects','Scenes','Plot Threads','Topics','Audience Notes','Reports'];
+  function selectType(t){setProjType(t);setSelectedColls(t.colls);setStep(1);}
+  function toggleColl(c){setSelectedColls(function(sc){return sc.includes(c)?sc.filter(function(x){return x!==c;}):sc.concat([c]);});}
+  function create(){if(!title.trim())return;var pid=genId();var now=new Date().toISOString();var proj={id:pid,title:title.trim(),type:projType?projType.label:'Other',synopsis:synopsis.trim(),lastEdited:now,createdAt:now,draftFieldDefs:[]};var tpls=selectedColls.map(function(c){return{id:genId(),projectId:pid,name:c,fields:defaultFields(c),sharedWith:[]};});var strandsObj={};selectedColls.forEach(function(c){strandsObj[c]=[];});app.createProject(proj,{templates:tpls,strandsObj:strandsObj});onClose();app.loadProjectData(pid);app.setProjId(pid);app.setView('cards');}
+  return(
+<div className="modal-overlay">
+  <div className="modal-backdrop" onClick={onClose}/>
+  <div className="modal-box">
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+      <div style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600}}>{step===0?'What are you writing?':step===1?'Name your project':'Your collections'}</div>
+      <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
+    </div>
+    <div style={{minHeight:220}}>
+      {step===0&&(
+<div className="wizard-type-grid">
+  {PROJ_TYPES.map(function(t){return(
+<div key={t.id} className={'wizard-type-card'+(projType&&projType.id===t.id?' sel':'')} onClick={function(){selectType(t);}}>
+  <div style={{marginBottom:8}}><span className="mi" style={{fontSize:26,color:'var(--indigoL)'}}>{t.icon}</span></div>
+  <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:3}}>{t.label}</div>
+  <div style={{fontSize:12,color:'var(--mid)'}}>{t.desc}</div>
+</div>
+  );})}
+</div>
+      )}
+      {step===1&&(
+<div>
+  <input ref={titleRef} style={{fontSize:18,padding:'12px 14px',background:'var(--bg2)',border:'2px solid var(--border)',borderRadius:10,width:'100%',marginBottom:14,color:'var(--text)',fontFamily:'var(--serif)',fontWeight:600}} value={title} onChange={function(e){setTitle(e.target.value);}} placeholder="Working title..." onKeyDown={function(e){if(e.key==='Enter'&&title.trim())setStep(2);}}/>
+  <textarea style={{fontSize:14,padding:'10px 14px',background:'var(--bg2)',border:'2px solid var(--border)',borderRadius:10,width:'100%',color:'var(--text)',marginBottom:14}} value={synopsis} onChange={function(e){setSynopsis(e.target.value);}} placeholder="What is this about? (optional)" rows={3}/>
+  <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
+    <button className="btn btn-ghost" onClick={function(){setStep(0);}}>Back</button>
+    <button className="btn btn-primary" onClick={function(){setStep(2);}} disabled={!title.trim()}>Next</button>
+  </div>
+</div>
+      )}
+      {step===2&&(
+<div>
+  <div style={{fontSize:14,color:'var(--mid)',marginBottom:14}}>Select collections to include. You can add more later.</div>
+  <div className="wizard-coll-tags" style={{marginBottom:20}}>{allColls.map(function(c){return <span key={c} className={'wizard-coll-tag'+(selectedColls.includes(c)?' sel':'')} onClick={function(){toggleColl(c);}}>{c}</span>;})}</div>
+  <div style={{display:'flex',justifyContent:'space-between'}}>
+    <button className="btn btn-ghost" onClick={function(){setStep(1);}}>Back</button>
+    <button className="btn btn-primary" onClick={create} disabled={!title.trim()}>Create Project</button>
+  </div>
+</div>
+      )}
+    </div>
+    <div className="wizard-dots">{[0,1,2].map(function(i){return <div key={i} className={'wizard-dot'+(step===i?' active':'')}/>;})}</div>
+  </div>
+</div>
+  );
+}
+
+// ── Profile Panel ──
+function ProfilePanel({app,focusField,open,onClose}){
+  var profile=app.profile||{};
+  var sf=useState(profile.firstName||'');var firstName=sf[0];var setFirstName=sf[1];
+  var sl=useState(profile.lastName||'');var lastName=sl[0];var setLastName=sl[1];
+  var se=useState(profile.email||'');var email=se[0];var setEmail=se[1];
+  var sg=useState(app.goal||500);var goalVal=sg[0];var setGoalVal=sg[1];
+  var goalRef=useRef(null);
+  useEffect(function(){if(open&&focusField==='goal'&&goalRef.current){setTimeout(function(){goalRef.current&&goalRef.current.focus();},200);};}, [open,focusField]);
+  var sem=useState(profile.editorMode||'rt');var editorMode=sem[0];var setEditorMode=sem[1];
+  var srm=useState(profile.reminderEnabled||false);var reminderEnabled=srm[0];var setReminderEnabled=srm[1];
+  var srt=useState(profile.reminderTime||'9:00 PM');var reminderTime=srt[0];var setReminderTime=srt[1];
+  var reminderRef=useRef(null);
+  useEffect(function(){if(open&&focusField==='reminder'&&reminderRef.current){setTimeout(function(){reminderRef.current&&reminderRef.current.scrollIntoView({behavior:'smooth'});},200);};},[open,focusField]);
+  function save(){app.setProfile({firstName:firstName,lastName:lastName,email:email,plan:profile.plan||'Free',editorMode:editorMode,reminderEnabled:reminderEnabled,reminderTime:reminderTime});app.setGoal(goalVal);onClose();}
+  return(
+<Panel open={open} onClose={onClose} title="Your Profile"
+  footer={<div style={{display:'flex',gap:8,width:'100%'}}><button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onClose}>Cancel</button><button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={save}>Save</button></div>}>
+  <div style={{marginBottom:16}}><span className="sect-lbl">First name</span><input value={firstName} onChange={function(e){setFirstName(e.target.value);}} placeholder="First name"/></div>
+  <div style={{marginBottom:16}}><span className="sect-lbl">Last name</span><input value={lastName} onChange={function(e){setLastName(e.target.value);}} placeholder="Last name"/></div>
+  <div style={{marginBottom:16}}><span className="sect-lbl">Email</span><input value={email} onChange={function(e){setEmail(e.target.value);}} placeholder="your@email.com" type="email"/></div>
+  <div style={{marginBottom:16}}>
+    <span className="sect-lbl">Daily writing goal</span>
+    <input ref={goalRef} value={goalVal} onChange={function(e){var v=parseInt(e.target.value,10);if(!isNaN(v)&&v>0)setGoalVal(v);}} type="number" min="1"/>
+    <div style={{fontSize:12,color:'var(--mid)',marginTop:4}}>Words per day</div>
+  </div>
+  <div style={{marginBottom:16}}>
+    <span className="sect-lbl">Editor mode</span>
+    <div style={{display:'flex',gap:8,marginTop:6}}>
+      {[['rt','Rich Text'],['md','Markdown']].map(function(pair){return(
+<button key={pair[0]} className={'btn '+(editorMode===pair[0]?'btn-primary':'btn-ghost')} style={{flex:1,justifyContent:'center'}} onClick={function(){setEditorMode(pair[0]);}}>
+  {pair[1]}
+</button>
+      );})}
+    </div>
+    <div style={{fontSize:12,color:'var(--mid)',marginTop:6}}>Applies to all drafts.</div>
+  </div>
+  <div ref={reminderRef} style={{marginBottom:16}}>
+    <span className="sect-lbl">Writing reminders</span>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+      <span style={{fontSize:14,color:'var(--text)'}}>Email me if no words written</span>
+      <span style={{width:36,height:20,borderRadius:10,background:reminderEnabled?'var(--indigo)':'var(--bg3)',cursor:'pointer',position:'relative',transition:'all .2s',flexShrink:0,display:'inline-block'}} onClick={function(){setReminderEnabled(!reminderEnabled);}}>
+        <span style={{position:'absolute',top:2,left:reminderEnabled?18:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
+      </span>
+    </div>
+    {reminderEnabled&&(
+<div style={{marginTop:8}}>
+  <span className="sect-lbl">Remind me at</span>
+  <div style={{display:'flex',flexWrap:'wrap',gap:6,maxHeight:130,overflowY:'auto',padding:'2px 0'}}>
+    {['6:00 AM','7:00 AM','8:00 AM','9:00 AM','10:00 AM','11:00 AM','12:00 PM','1:00 PM','2:00 PM','3:00 PM','4:00 PM','5:00 PM','6:00 PM','7:00 PM','8:00 PM','9:00 PM','10:00 PM'].map(function(t){var isActive=reminderTime===t;return(
+<button key={t} className={'btn btn-sm '+(isActive?'btn-primary':'btn-ghost')} style={{minWidth:80}} onClick={function(){setReminderTime(t);}}>{t}</button>
+    );})}
+  </div>
+</div>
+    )}
+  </div>
+  <div>
+    <span className="sect-lbl">Plan</span>
+    <div style={{fontSize:14,color:'var(--text)',padding:'4px 0'}}>{profile.plan||'Free'}</div>
+    <a href="#" style={{fontSize:13,color:'var(--indigo)'}} onClick={function(e){e.preventDefault();}}>Manage plan →</a>
+  </div>
+</Panel>
+  );
+}
+
+
+// ── AuthScreen ──
+function AuthScreen({onAuth}){
+  var se=useState('');var email=se[0];var setEmail=se[1];
+  var sp=useState('');var password=sp[0];var setPassword=sp[1];
+  var sl=useState(false);var loading=sl[0];var setLoading=sl[1];
+  var sm=useState('');var msg=sm[0];var setMsg=sm[1];
+  var smode=useState('signin');var mode=smode[0];var setMode=smode[1];
+  async function handleSubmit(){
+    if(!email.trim()||!password.trim()){setMsg('Please enter email and password.');return;}
+    setLoading(true);setMsg('');
+    var res;
+    if(mode==='signup'){
+      res=await supabase.auth.signUp({email:email.trim(),password:password});
+      if(!res.error)setMsg('Account created! Check your email to confirm, then sign in.');
+    } else {
+      res=await supabase.auth.signInWithPassword({email:email.trim(),password:password});
+      if(!res.error&&res.data.user)onAuth(res.data.user);
+    }
+    if(res.error)setMsg(res.error.message);
+    setLoading(false);
+  }
+  return(
+<div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--bg0)',fontFamily:'var(--ui)',backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
+  <div style={{background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'40px',width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(42,31,16,.12)'}}>
+    <div style={{textAlign:'center',marginBottom:28}}>
+      <div style={{fontFamily:'var(--serif)',fontSize:32,fontWeight:600,color:'var(--indigo)',marginBottom:4}}>Woven</div>
+      <div style={{fontSize:14,color:'var(--mid)'}}>Writing isn't linear. Your tool shouldn't be either.</div>
+    </div>
+    <div style={{marginBottom:14}}>
+      <span className="sect-lbl">Email</span>
+      <input type="email" value={email} onChange={function(e){setEmail(e.target.value);}} placeholder="your@email.com" onKeyDown={function(e){if(e.key==='Enter')handleSubmit();}}/>
+    </div>
+    <div style={{marginBottom:20}}>
+      <span className="sect-lbl">Password</span>
+      <input type="password" value={password} onChange={function(e){setPassword(e.target.value);}} placeholder="••••••••" onKeyDown={function(e){if(e.key==='Enter')handleSubmit();}}/>
+    </div>
+    {msg&&<div style={{fontSize:13,color:msg.includes('created')?'var(--teal)':'var(--danger)',marginBottom:14,padding:'8px 12px',background:'var(--bg2)',borderRadius:'var(--r)'}}>{msg}</div>}
+    <button className="btn btn-primary" style={{width:'100%',justifyContent:'center',marginBottom:12}} onClick={handleSubmit} disabled={loading}>
+      {loading?'Please wait...':(mode==='signup'?'Create account':'Sign in')}
+    </button>
+    <div style={{textAlign:'center',fontSize:13,color:'var(--mid)'}}>
+      {mode==='signin'
+        ?<span>No account? <span style={{color:'var(--indigo)',cursor:'pointer'}} onClick={function(){setMode('signup');setMsg('');}}>Sign up</span></span>
+        :<span>Have an account? <span style={{color:'var(--indigo)',cursor:'pointer'}} onClick={function(){setMode('signin');setMsg('');}}>Sign in</span></span>
+      }
+    </div>
+  </div>
+</div>
+  );
+}
+
+// ── App Root ──
+function App(){
+  var sau=useState(null);var currentUser=sau[0];var setCurrentUser=sau[1];
+  var sal=useState(true);var authLoading=sal[0];var setAuthLoading=sal[1];
+  var sv=useState('dashboard');var view=sv[0];var setView=sv[1];
+  var spi=useState(null);var projId=spi[0];var setProjId=spi[1];
+  var sdi=useState(null);var draftId=sdi[0];var setDraftId=sdi[1];
+  var spr=useState([]);var projects=spr[0];var setProjects=spr[1];
+  var sg=useState(500);var goal=sg[0];var setGoalState=sg[1];
+  var ss=useState([]);var sessions=ss[0];var setSessions=ss[1];
+  var spf=useState({firstName:'',lastName:'',email:'',plan:'Free'});var profile=spf[0];var setProfileState=spf[1];
+  var sad=useState({});var allDrafts=sad[0];var setAllDrafts=sad[1];
+  var sas=useState({});var allStrands=sas[0];var setAllStrands=sas[1];
+  var sat=useState({});var allTemplates=sat[0];var setAllTemplates=sat[1];
+  var ssp=useState(false);var showProfile=ssp[0];var setShowProfile=ssp[1];
+  var sglt=useState({});var globalLT=sglt[0];var setGlobalLT=sglt[1];
+  var spf2=useState(null);var profileFocus=spf2[0];var setProfileFocus=spf2[1];
+  var snp=useState(false);var showNewProject=snp[0];var setShowNewProject=snp[1];
+
+  function loadProjectDataById(pid){
+    loadLS('woven:drafts:'+pid,[]).then(function(d){setAllDrafts(function(p){var n=Object.assign({},p);n[pid]=d;return n;});});
+    loadLS('woven:strands:'+pid,{}).then(function(st){setAllStrands(function(p){var n=Object.assign({},p);n[pid]=st;return n;});});
+    loadLS('woven:templates:'+pid,[]).then(function(tm){setAllTemplates(function(p){var n=Object.assign({},p);n[pid]=tm;return n;});});
+  }
+  useEffect(function(){
+    // Check existing auth session
+    supabase.auth.getSession().then(function(r){
+      if(r.data.session&&r.data.session.user){
+        window.__wovenUserId=r.data.session.user.id;
+        setCurrentUser(r.data.session.user);
+        loadAllData();
+      } else {
+        setAuthLoading(false);
+      }
+    });
+    // Listen for auth changes
+    var sub=supabase.auth.onAuthStateChange(function(event,session){
+      if(event==='SIGNED_IN'&&session&&session.user){
+        window.__wovenUserId=session.user.id;
+        setCurrentUser(session.user);
+        loadAllData();
+      } else if(event==='SIGNED_OUT'){
+        window.__wovenUserId=null;
+        setCurrentUser(null);
+        setProjects([]);setAllDrafts({});setAllStrands({});setAllTemplates({});
+        setSessions([]);setGlobalLT({});setGoalState(500);
+        setProfileState({firstName:'',lastName:'',email:'',plan:'Free'});
+        setAuthLoading(false);
+      }
+    });
+    return function(){sub.data.subscription.unsubscribe();};
+  },[]);
+
+  function loadAllData(){
+    // Reset React state first so previous user's data never shows
+    setProjects([]);setAllDrafts({});setAllStrands({});setAllTemplates({});
+    setSessions([]);setGlobalLT({});setGoalState(500);
+    setProfileState({firstName:'',lastName:'',email:'',plan:'Free'});
+    loadDB('woven:global_lt',{}).then(function(g){setGlobalLT(g||{});});
+    loadDB('woven:goal',500).then(function(g){setGoalState(g);});
+    loadDB('woven:sessions',[]).then(function(s){setSessions(s);});
+    loadDB('woven:profile',{firstName:'',lastName:'',email:'',plan:'Free'}).then(function(p){
+      if(!p.email&&window.__wovenUserId){
+        supabase.auth.getUser().then(function(r){
+          if(r.data&&r.data.user&&r.data.user.email){
+            var updated=Object.assign({},p,{email:r.data.user.email});
+            setProfileState(updated);saveDB('woven:profile',updated);
+          } else { setProfileState(p); }
+        });
+      } else { setProfileState(p); }
+    });
+    loadDB('woven:projects',null).then(function(saved){
+      if(!saved||saved.length===0){
+        setProjects([]);
+      } else {
+        setProjects(saved);saved.forEach(function(p){loadProjectDataById(p.id);});
+      }
+      setAuthLoading(false);
+    });
+  }
+
+  function updateDraft(pid,did,changes){setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).map(function(d){return d.id!==did?d:Object.assign({},d,changes);});next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});}
+  function addDraft(pid,nd){setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).concat([nd]);next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});}
+  function reorderDraft(pid,fromId,toOrder){
+    setAllDrafts(function(prev){
+      var next=Object.assign({},prev);var ds=(next[pid]||[]).slice();
+      var seq=ds.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
+      var fi=seq.findIndex(function(d){return d.id===fromId;});
+      var ti=seq.findIndex(function(d){return (d.order||0)===toOrder;});
+      if(fi<0||ti<0||fi===ti)return prev;
+      var item=seq.splice(fi,1)[0];seq.splice(ti,0,item);
+      seq.forEach(function(d,i){var di=ds.findIndex(function(x){return x.id===d.id;});if(di>=0)ds[di]=Object.assign({},ds[di],{order:i+1});});
+      next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;
+    });
+  }
+  function nestDraft(pid,childId,parentId){
+    setAllDrafts(function(prev){
+      var next=Object.assign({},prev);
+      var ds=(next[pid]||[]).map(function(d){if(d.id!==childId)return d;return Object.assign({},d,{parentId:parentId,order:Date.now()});});
+      next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;
+    });
+  }
+  function updateStrand(pid,coll,sid,changes){setAllStrands(function(prev){var next=Object.assign({},prev);var ps=Object.assign({},next[pid]||{});ps[coll]=(ps[coll]||[]).map(function(s){return s.id!==sid?s:Object.assign({},s,changes);});next[pid]=ps;saveDB('woven:strands:'+pid,ps);return next;});}
+  function addStrand(pid,coll,ns){setAllStrands(function(prev){var next=Object.assign({},prev);var ps=Object.assign({},next[pid]||{});ps[coll]=(ps[coll]||[]).concat([ns]);next[pid]=ps;saveDB('woven:strands:'+pid,ps);return next;});}
+  function addTemplate(pid,tpl){setAllTemplates(function(prev){var next=Object.assign({},prev);next[pid]=(next[pid]||[]).concat([tpl]);saveDB('woven:templates:'+pid,next[pid]);return next;});}
+  function updateTemplate(pid,tid,changes){setAllTemplates(function(prev){var next=Object.assign({},prev);next[pid]=(next[pid]||[]).map(function(t){return t.id!==tid?t:Object.assign({},t,changes);});saveDB('woven:templates:'+pid,next[pid]);return next;});}
+  function updateProjectTitle(pid,newTitle){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{title:newTitle});});saveDB('woven:projects',next);return next;});}
+  function updateProjectSynopsis(pid,syn){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{synopsis:syn});});saveDB('woven:projects',next);return next;});}
+  function updateProjectImage(pid,img){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{image:img});});saveDB('woven:projects',next);return next;});}
+  function updateProjectType(pid,type){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{type:type});});saveDB('woven:projects',next);return next;});}
+  function archiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:true});});saveDB('woven:projects',next);return next;});}
+  function unarchiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:false});});saveDB('woven:projects',next);return next;});}
+  function addDraftFieldDef(pid,fieldDef){
+    setProjects(function(prev){var next=prev.map(function(p){if(p.id!==pid)return p;var defs=(p.draftFieldDefs||[]).concat([fieldDef]);return Object.assign({},p,{draftFieldDefs:defs});});saveDB('woven:projects',next);return next;});
+    // Add empty value to all existing drafts
+    setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).map(function(d){var cf=Object.assign({},d.customFields||{});cf[fieldDef.id]='';return Object.assign({},d,{customFields:cf});});next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});
+  }
+  function createProject(proj,seed){
+    var pid=proj.id;
+    setProjects(function(prev){var next=prev.concat([proj]);saveDB('woven:projects',next);return next;});
+    setAllDrafts(function(prev){var n=Object.assign({},prev);n[pid]=[];saveDB('woven:drafts:'+pid,[]);return n;});
+    setAllStrands(function(prev){var n=Object.assign({},prev);n[pid]=seed.strandsObj;saveDB('woven:strands:'+pid,seed.strandsObj);return n;});
+    setAllTemplates(function(prev){var n=Object.assign({},prev);n[pid]=seed.templates;saveDB('woven:templates:'+pid,seed.templates);return n;});
+  }
+  function setGoal(v){setGoalState(v);saveDB('woven:goal',v);}
+  function updateGlobalLT(id,changes){setGlobalLT(function(prev){var next=Object.assign({},prev);next[id]=Object.assign({},next[id]||{},changes);saveDB('woven:global_lt',next);return next;});}
+  function setProfile(p){setProfileState(p);saveDB('woven:profile',p);}
+  function recordSession(pid,wordsAdded){var t=todayStr();setSessions(function(prev){var next=prev.slice();var idx=next.findIndex(function(s){return s.date===t&&s.projId===pid;});if(idx>=0){next[idx]=Object.assign({},next[idx],{words:(next[idx].words||0)+wordsAdded});}else{next.push({id:genId(),date:t,projId:pid,words:wordsAdded});}saveDB('woven:sessions',next);return next;});}
+  function goBack(){setView('dashboard');setProjId(null);setDraftId(null);}
+  function openDraft(did){setDraftId(did);setView('editor');}
+  function openProfile(field){setProfileFocus(field);setShowProfile(true);}
+
+  var currentProject=projects.find(function(p){return p.id===projId;})||null;
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser};
+
+  function signOut(){supabase.auth.signOut().then(function(){window.__wovenUserId=null;setCurrentUser(null);setView('dashboard');setProjects([]);setAllDrafts({});});}
+
+  if(authLoading)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg0)',fontFamily:'var(--serif)',fontSize:24,color:'var(--mid)'}}>Loading...</div>);
+  if(!currentUser)return(<div><GlobalStyles/><AuthScreen onAuth={function(user){window.__wovenUserId=user.id;setCurrentUser(user);loadAllData();}}/></div>);
+
+  var inner=null;
+  if(view==='dashboard'){inner=<Dashboard app={app} onOpenProfile={openProfile} onNewProject={function(){setShowNewProject(true);}}/>;
+  }else if(view==='editor'){inner=<EditorView app={app}/>;
+  }else{
+    var vc=null;
+    if(view==='canvas')vc=<div className="coming-soon"><span className="mi" style={{fontSize:56,color:'var(--placeholder)'}}>hub</span><div style={{fontFamily:'var(--serif)',fontSize:24,color:'var(--mid)'}}>Canvas</div><div style={{fontSize:14,color:'var(--border)',maxWidth:280,textAlign:'center',lineHeight:1.6}}>The visual mapping board is coming soon.</div></div>;
+    if(view==='cards')vc=<CardsView app={app}/>;
+    if(view==='table')vc=<TableView app={app}/>;
+    if(view==='strands')vc=<StrandsPage app={app} allProjects={projects}/>;
+    inner=<div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}><ProjectNav app={app} onOpenProfile={openProfile}/>{vc}</div>;
+  }
+  return(
+<div className="woven-root">
+  <GlobalStyles/>
+  {inner}
+  <ProfilePanel app={app} focusField={profileFocus} open={showProfile} onClose={function(){setShowProfile(false);}}/>
+  {showNewProject&&<ProjectWizard app={app} onClose={function(){setShowNewProject(false);}}/>}
+</div>
+  );
+}
+
+export default App;
+
+  
