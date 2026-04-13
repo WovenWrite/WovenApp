@@ -242,7 +242,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .card-title-f{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--text);width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;}
 .card-title-f:focus{background:var(--bg2);outline:1px solid var(--indigo);}
 .card-title-f::placeholder{color:var(--placeholder);}
-.card-syn-f{font-size:12px;color:var(--mid);flex:1;resize:none;overflow:hidden;width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;font-family:var(--ui);line-height:1.4;}
+.card-syn-f{font-size:12px;color:var(--mid);flex:1;resize:none;overflow-y:auto;width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;font-family:var(--ui);line-height:1.4;}
 .card-syn-f:focus{background:var(--bg2);outline:1px solid var(--indigo);}
 .card-syn-f::placeholder{color:var(--placeholder);}
 .strand-chips{display:flex;flex-wrap:wrap;gap:3px;}
@@ -1077,18 +1077,13 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
   <div className="card-body">
     <input className="card-title-f" defaultValue={draft.title} placeholder="Untitled draft" onBlur={function(e){update({title:e.target.value});}}/>
     <textarea className="card-syn-f" defaultValue={draft.synopsis} placeholder="Add a synopsis..." rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
-    {chips.length>0&&(
-<div className="strand-chips">
-  {chips.map(function(st){var bg=st.color+'26';return <span key={st.id} className="chip" style={{background:bg,color:st.color,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid'}}>{st.name}</span>;})}
-  {tagged.length>2&&(
-<OverflowTooltip label={'+'+(tagged.length-2)} names={tagged.slice(2).map(function(s){return s.name;})}/>
-  )}
-</div>
-    )}
+
   </div>
-  <div className="card-footer">
+  <div className="card-footer" style={{flexWrap:'wrap',gap:4}}>
     <StatusDot status={draft.status} onChange={onStatusChange}/>
-    <span className="card-wc" style={{marginLeft:6}}>{draft.wordCount>0?draft.wordCount+' w':'Empty'}</span>
+    {chips.length>0&&chips.map(function(st){var bg=st.color+'26';return <span key={st.id} className="chip" style={{background:bg,color:st.color,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid',fontSize:11}}>{st.name}</span>;})}
+    {tagged.length>2&&<OverflowTooltip label={'+'+(tagged.length-2)} names={tagged.slice(2).map(function(s){return s.name;})}/>}
+    <span className="card-wc" style={{marginLeft:'auto'}}>{draft.wordCount>0?draft.wordCount+' w':'Empty'}</span>
     <button className="card-open" onClick={function(){app.openDraft(draft.id);}}>Draft</button>
   </div>
 </div>
@@ -1186,7 +1181,7 @@ function CardsView({app}){
   var seqDrafts=allDrafts.filter(function(d){return !d.archived&&d.status!=='loose_thread'&&!d.parentId;});
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
-  function addDraft(){app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqDrafts.length+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
+  function addDraft(){var nid=genId();app.addDraft(app.projId,{id:nid,projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqDrafts.length+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});app.openDraft(nid);}
   function moveUp(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<=0)return;app.reorderDraft(app.projId,did,sorted[idx-1].order||0);}
   function moveDown(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<0||idx>=sorted.length-1)return;app.reorderDraft(app.projId,did,sorted[idx+1].order||0);}
   var displayed=applyFS(tree,filter,sort);
@@ -1196,9 +1191,10 @@ function CardsView({app}){
   <div className="view-area dot-grid">
     {tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div className="cards-grid">
-  {displayed.map(function(parent,i){
+  {displayed.map(function(parent){
     var childCount=parent.children?parent.children.length:0;
-    return <DraftCard key={parent.id} draft={parent} label={''+(i+1)} childCount={childCount} app={app} onMoveUp={moveUp} onMoveDown={moveDown}/>;
+    var seqIdx=seqDrafts.findIndex(function(d){return d.id===parent.id;});
+    return <DraftCard key={parent.id} draft={parent} label={''+(seqIdx+1)} childCount={childCount} app={app} onMoveUp={moveUp} onMoveDown={moveDown}/>;
   })}
   <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:8,display:'flex',flexDirection:'column',boxShadow:'none'}} onClick={addDraft}>
     <span className="mi" style={{fontSize:28,color:'var(--placeholder)'}}>add_circle_outline</span>
@@ -1342,7 +1338,7 @@ function TableView({app}){
   return(
 <div className="view-layout">
   <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
-  <div className="table-wrap" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto'}}>
+  <div className="table-wrap dot-grid" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto'}}>
     {tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>
   <table className="wt">
@@ -1367,8 +1363,10 @@ function TableView({app}){
       {displayed.map(function(parent,i){
         var isExpanded=parent.nestExpanded!==false;
         var hasChildren=parent.children&&parent.children.length>0;
-        var rows=[renderRow(parent,''+(i+1),false,i,null,hasChildren,isExpanded)];
-        if(hasChildren&&isExpanded){parent.children.forEach(function(child,ci){rows.push(renderRow(child,(i+1)+'.'+(ci+1),true,i,ci,false,false));});}
+        var origIdx=tree.findIndex(function(d){return d.id===parent.id;});
+        var lbl=''+(origIdx+1);
+        var rows=[renderRow(parent,lbl,false,i,null,hasChildren,isExpanded)];
+        if(hasChildren&&isExpanded){parent.children.forEach(function(child,ci){rows.push(renderRow(child,lbl+'.'+(ci+1),true,i,ci,false,false));});}
         return rows;
       })}
     </tbody>
@@ -1392,6 +1390,24 @@ function TableView({app}){
 </div>
   )}
   <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}}/>
+</div>
+  );
+}
+
+
+// ── AddFieldInline ──
+function AddFieldInline({onAdd}){
+  var ss=useState(false);var show=ss[0];var setShow=ss[1];
+  var sv=useState('');var val=sv[0];var setVal=sv[1];
+  if(!show)return(
+<button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={function(){setShow(true);}}>
+  <span className="mi" style={{fontSize:14}}>add</span> Add field
+</button>
+  );
+  return(
+<div style={{display:'flex',gap:6,marginTop:4}}>
+  <input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} placeholder="Field name" style={{flex:1,fontSize:13}} onKeyDown={function(e){if(e.key==='Enter'&&val.trim()){onAdd(val);setVal('');setShow(false);}if(e.key==='Escape'){setShow(false);setVal('');}}}/>
+  <button className="btn btn-primary btn-sm" onClick={function(){if(val.trim()){onAdd(val);setVal('');setShow(false);}}}>Add</button>
 </div>
   );
 }
@@ -1510,9 +1526,7 @@ function PropertiesDrawer({draft,app,onClose,onOpenStrandDetail}){
   );})}
   <div className="edrawer-section">
     <span className="edrawer-lbl" style={{marginBottom:8}}>Custom draft fields</span>
-    <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={function(){var name=prompt('Field name:');if(name&&name.trim()){app.addDraftFieldDef(app.projId,{id:genId(),label:name.trim(),type:'short_text'});}}}>
-      <span className="mi" style={{fontSize:14}}>add</span> Add field
-    </button>
+    <AddFieldInline onAdd={function(name){app.addDraftFieldDef(app.projId,{id:genId(),label:name.trim(),type:'short_text'});}}/>
   </div>
 </div>
   )}
@@ -1537,7 +1551,7 @@ function StrandDetailDrawer({strandId,app,onClose}){
   <div className="edrawer-hdr">
     <div style={{display:'flex',alignItems:'center',gap:8}}>
       <div style={{width:24,height:24,borderRadius:'50%',background:strand.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600,color:'#fff',flexShrink:0}}>{initials(strand.name)}</div>
-      <span className="edrawer-title">{strand.name}</span>
+      <input style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,background:'transparent',border:'none',flex:1,padding:0,outline:'none',color:'var(--text)'}} defaultValue={strand.name} placeholder="Strand name" onBlur={function(e){if(e.target.value.trim())app.updateStrand(pid,collName,selectedStrandId,{name:e.target.value.trim()});}} onFocus={function(e){e.target.style.borderBottom='1px solid var(--indigo)';}} onBlurCapture={function(e){e.target.style.borderBottom='none';}}/>
     </div>
     <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
   </div>
@@ -1795,9 +1809,9 @@ function EditorView({app}){
 <textarea className="editor-md" defaultValue={stripHtml(draft.body||'')} onChange={handleMDChange} placeholder="Write in Markdown..."/>
       )}
     </div>
-    {showProps&&<PropertiesDrawer draft={draft} app={app} onClose={function(){setShowProps(false);}} onOpenStrandDetail={function(sid){setStrandDetailId(sid);}}/>}
+    {showProps&&!strandDetailId&&<PropertiesDrawer draft={draft} app={app} onClose={function(){setShowProps(false);}} onOpenStrandDetail={function(sid){setStrandDetailId(sid);}}/>}
     {strandDetailId&&<StrandDetailDrawer strandId={strandDetailId} app={app} onClose={function(){setStrandDetailId(null);}}/>}
-    {showStrands&&<EditorStrandsPanel draft={draft} app={app} onClose={function(){setShowStrands(false);}} onOpenStrand={function(sid){setStrandDetailId(sid);}}/>}
+    {showStrands&&!strandDetailId&&<EditorStrandsPanel draft={draft} app={app} onClose={function(){setShowStrands(false);}} onOpenStrand={function(sid){setStrandDetailId(sid);}}/>}
   </div>
   <div className="editor-bottombar">
     <span>{wc} words</span>
@@ -1845,7 +1859,7 @@ function EditorView({app}){
 
 
 // ── AvatarEditModal ──
-var QUICK_EMOJIS=['⚔️','🗡️','🏰','🌲','🔥','💀','👑','🗺️','📜','🌙','⭐','🧙','🐉','🏺','🔮','💎','🌊','🦅','🐺','🌹','🕯️','⚡','🌑','🛡️','🗝️','🎭','📖','🩸','🌿','❄️'];
+var QUICK_EMOJIS=['👩','👨','🧑','👧','👦','🧓','👴','👵','🧙','🧚','🧛','🧜','🧝','🦸','🦹','🧟','👮','🕵️','💂','🧑‍⚕️','🧑‍🎓','🧑‍🏫','🧑‍🌾','🧑‍🍳','🧑‍🔧','🧑‍🎨','🧑‍✈️','🧑‍🚀','🤴','👸','🐉','🐺','🦅','⚔️','🗡️','🏰','🌲','🔥','💀','👑','🗺️','📜','🌙','⭐','🔮','💎','🌊','🌹','🕯️','⚡','🛡️','🗝️','🎭','📖','🌿','❄️'];
 
 function AvatarEditModal({strand,onSave,onClose}){
   var sc=useState(strand.color||PRESET_COLORS[0]);var color=sc[0];var setColor=sc[1];
@@ -1858,9 +1872,8 @@ function AvatarEditModal({strand,onSave,onClose}){
     reader.onload=function(ev){setImage(ev.target.result);};
     reader.readAsDataURL(file);
   }
-  function handleSave(){
-    onSave({color:color,image:image,emoji:emoji});
-  }
+  function handleSave(){onSave({color:color,image:image,emoji:emoji});}
+  function autoSaveAvatar(overrides){onSave(Object.assign({color:color,image:image,emoji:emoji},overrides));}
   // Preview: image takes priority, then emoji, then initials on colour bg
   var previewContent=null;
   if(image){previewContent=<img src={image} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>;}
@@ -1885,7 +1898,7 @@ function AvatarEditModal({strand,onSave,onClose}){
       <div style={{fontSize:12,color:'var(--mid)',marginBottom:10}}>Background colour — used when no photo is set, and for strand tags.</div>
       <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
         {PRESET_COLORS.map(function(c){return(
-<div key={c} onClick={function(){setColor(c);}} style={{width:32,height:32,borderRadius:'50%',background:c,cursor:'pointer',transition:'transform .15s',transform:color===c?'scale(1.15)':'scale(1)',boxShadow:color===c?'0 0 0 3px var(--bg1),0 0 0 5px '+c:'none'}}/>
+<div key={c} onClick={function(){setColor(c);autoSaveAvatar({color:c});}} style={{width:32,height:32,borderRadius:'50%',background:c,cursor:'pointer',transition:'transform .15s',transform:color===c?'scale(1.15)':'scale(1)',boxShadow:color===c?'0 0 0 3px var(--bg1),0 0 0 5px '+c:'none'}}/>
         );})}
       </div>
     </div>
@@ -1910,9 +1923,8 @@ function AvatarEditModal({strand,onSave,onClose}){
       {image&&<button className="btn btn-danger btn-sm" style={{marginTop:8,width:'100%',justifyContent:'center'}} onClick={function(){setImage(null);}}>Remove photo</button>}
       <div style={{fontSize:11,color:'var(--mid)',marginTop:6}}>Max 2 MB. JPG, PNG, GIF, WebP.</div>
     </div>
-    <div style={{display:'flex',gap:8,marginTop:20}}>
-      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onClose}>Cancel</button>
-      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={handleSave}>Save</button>
+    <div style={{marginTop:20}}>
+      <button className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}} onClick={onClose}>Done</button>
     </div>
   </div>
 </div>
@@ -1942,7 +1954,7 @@ function StrandsPage({app,allProjects}){
   var fields=activeTpl?activeTpl.fields:defaultFields(activeColl);
   function updateStrand(sid,changes){app.updateStrand(pid,activeColl,sid,changes);}
   function updateField(sid,fieldId,val){if(!activeStrand)return;var nf=Object.assign({},activeStrand.fields||{});nf[fieldId]=val;updateStrand(sid,{fields:nf});}
-  function addStrand(){var tpl=getTpl(activeColl);var ns={id:genId(),templateId:tpl?tpl.id:'',collectionName:activeColl,name:'New '+activeColl.replace(/s$/,''),color:PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};app.addStrand(pid,activeColl,ns);setActiveStrandId(ns.id);if(isMobile)setMobileDetailOpen(true);}
+  function addStrand(){var tpl=getTpl(activeColl);var existing=(app.allStrands[pid]&&app.allStrands[pid][activeColl])||[];var base='New '+activeColl.replace(/s$/,'');var num=existing.filter(function(s){return s.name&&s.name.startsWith(base);}).length+1;var ns={id:genId(),templateId:tpl?tpl.id:'',collectionName:activeColl,name:base+' '+num,color:({"Characters":"#c45e28","Locations":"#2f9966","Plot Threads":"#2f76e0","Sources":"#ce2fe0","Interviews":"#e02f79","Subjects":"#e8a030","Scenes":"#64e02f","Topics":"#2fe07f","Lore & World":"#e8a030","Reports":"#b83220","Audience Notes":"#f0c050"}[activeColl])||PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};app.addStrand(pid,activeColl,ns);setActiveStrandId(ns.id);if(isMobile)setMobileDetailOpen(true);}
   function addCollection(){var name=newCollName.trim();if(!name)return;var nt={id:genId(),projectId:pid,name:name,fields:defaultFields(name),sharedWith:[]};app.addTemplate(pid,nt);app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});setActiveColl(name);setNewColl(false);setNewCollName('');}
   function handleImageUpload(e,sid){var file=e.target.files&&e.target.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(ev){updateStrand(sid,{image:ev.target.result});};reader.readAsDataURL(file);}
   function getDraftAppearances(sid){return(app.allDrafts[pid]||[]).filter(function(d){return(d.strandTags||[]).includes(sid);});}
@@ -2075,7 +2087,7 @@ function StrandsPage({app,allProjects}){
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
   <div className="strands-subnav">
     {collNames.map(function(coll){return(
-<div key={coll} className={'strands-tab'+(activeColl===coll?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}}>
+<div key={coll} className={'strands-tab'+(activeColl===coll?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){var nn=window.prompt('Rename collection:',coll);if(nn&&nn.trim()&&nn.trim()!==coll){var nc=nn.trim();app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[nc]=ps[coll]||[];delete ps[coll];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});if(activeColl===coll)setActiveColl(nc);}}}>
   {coll}
 </div>
     );})}
@@ -2276,23 +2288,28 @@ function ProfilePanel({app,focusField,open,onClose}){
   var srt=useState(profile.reminderTime||'9:00 PM');var reminderTime=srt[0];var setReminderTime=srt[1];
   var reminderRef=useRef(null);
   useEffect(function(){if(open&&focusField==='reminder'&&reminderRef.current){setTimeout(function(){reminderRef.current&&reminderRef.current.scrollIntoView({behavior:'smooth'});},200);};},[open,focusField]);
-  function save(){app.setProfile({firstName:firstName,lastName:lastName,email:email,plan:profile.plan||'Free',editorMode:editorMode,reminderEnabled:reminderEnabled,reminderTime:reminderTime});app.setGoal(goalVal);onClose();}
+  function autoSave(overrides){
+    var updated=Object.assign({firstName:firstName,lastName:lastName,email:email,plan:profile.plan||'Free',editorMode:editorMode,reminderEnabled:reminderEnabled,reminderTime:reminderTime},overrides);
+    app.setProfile(updated);
+  }
   return(
 <Panel open={open} onClose={onClose} title="Your Profile"
-  footer={<div style={{display:'flex',gap:8,width:'100%'}}><button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onClose}>Cancel</button><button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={save}>Save</button></div>}>
-  <div style={{marginBottom:16}}><span className="sect-lbl">First name</span><input value={firstName} onChange={function(e){setFirstName(e.target.value);}} placeholder="First name"/></div>
-  <div style={{marginBottom:16}}><span className="sect-lbl">Last name</span><input value={lastName} onChange={function(e){setLastName(e.target.value);}} placeholder="Last name"/></div>
-  <div style={{marginBottom:16}}><span className="sect-lbl">Email</span><input value={email} onChange={function(e){setEmail(e.target.value);}} placeholder="your@email.com" type="email"/></div>
+  footer={<button className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}} onClick={function(){app.signOut();}}>
+    <span className="mi" style={{fontSize:18}}>logout</span>Sign out
+  </button>}>
+  <div style={{marginBottom:16}}><span className="sect-lbl">First name</span><input value={firstName} onChange={function(e){setFirstName(e.target.value);}} onBlur={function(e){autoSave({firstName:e.target.value});}} placeholder="First name"/></div>
+  <div style={{marginBottom:16}}><span className="sect-lbl">Last name</span><input value={lastName} onChange={function(e){setLastName(e.target.value);}} onBlur={function(e){autoSave({lastName:e.target.value});}} placeholder="Last name"/></div>
+  <div style={{marginBottom:16}}><span className="sect-lbl">Email</span><input value={email} onChange={function(e){setEmail(e.target.value);}} onBlur={function(e){autoSave({email:e.target.value});}} placeholder="your@email.com" type="email"/></div>
   <div style={{marginBottom:16}}>
     <span className="sect-lbl">Daily writing goal</span>
-    <input ref={goalRef} value={goalVal} onChange={function(e){var v=parseInt(e.target.value,10);if(!isNaN(v)&&v>0)setGoalVal(v);}} type="number" min="1"/>
+    <input ref={goalRef} value={goalVal} onChange={function(e){var v=parseInt(e.target.value,10);if(!isNaN(v)&&v>0)setGoalVal(v);}} onBlur={function(e){var v=parseInt(e.target.value,10);if(!isNaN(v)&&v>0)app.setGoal(v);}} type="number" min="1"/>
     <div style={{fontSize:12,color:'var(--mid)',marginTop:4}}>Words per day</div>
   </div>
   <div style={{marginBottom:16}}>
     <span className="sect-lbl">Editor mode</span>
     <div style={{display:'flex',gap:8,marginTop:6}}>
       {[['rt','Rich Text'],['md','Markdown']].map(function(pair){return(
-<button key={pair[0]} className={'btn '+(editorMode===pair[0]?'btn-primary':'btn-ghost')} style={{flex:1,justifyContent:'center'}} onClick={function(){setEditorMode(pair[0]);}}>
+<button key={pair[0]} className={'btn '+(editorMode===pair[0]?'btn-primary':'btn-ghost')} style={{flex:1,justifyContent:'center'}} onClick={function(){setEditorMode(pair[0]);autoSave({editorMode:pair[0]});}}>
   {pair[1]}
 </button>
       );})}
@@ -2302,8 +2319,8 @@ function ProfilePanel({app,focusField,open,onClose}){
   <div ref={reminderRef} style={{marginBottom:16}}>
     <span className="sect-lbl">Writing reminders</span>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-      <span style={{fontSize:14,color:'var(--text)'}}>Email me if no words written</span>
-      <span style={{width:36,height:20,borderRadius:10,background:reminderEnabled?'var(--indigo)':'var(--bg3)',cursor:'pointer',position:'relative',transition:'all .2s',flexShrink:0,display:'inline-block'}} onClick={function(){setReminderEnabled(!reminderEnabled);}}>
+      <span style={{fontSize:14,color:'var(--text)'}}>Send me a quick nudge if I haven't written yet!</span>
+      <span style={{width:36,height:20,borderRadius:10,background:reminderEnabled?'var(--indigo)':'var(--bg3)',cursor:'pointer',position:'relative',transition:'all .2s',flexShrink:0,display:'inline-block'}} onClick={function(){var nv=!reminderEnabled;setReminderEnabled(nv);autoSave({reminderEnabled:nv});}}>
         <span style={{position:'absolute',top:2,left:reminderEnabled?18:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
       </span>
     </div>
@@ -2312,16 +2329,23 @@ function ProfilePanel({app,focusField,open,onClose}){
   <span className="sect-lbl">Remind me at</span>
   <div style={{display:'flex',flexWrap:'wrap',gap:6,maxHeight:130,overflowY:'auto',padding:'2px 0'}}>
     {['6:00 AM','7:00 AM','8:00 AM','9:00 AM','10:00 AM','11:00 AM','12:00 PM','1:00 PM','2:00 PM','3:00 PM','4:00 PM','5:00 PM','6:00 PM','7:00 PM','8:00 PM','9:00 PM','10:00 PM'].map(function(t){var isActive=reminderTime===t;return(
-<button key={t} className={'btn btn-sm '+(isActive?'btn-primary':'btn-ghost')} style={{minWidth:80}} onClick={function(){setReminderTime(t);}}>{t}</button>
+<button key={t} className={'btn btn-sm '+(isActive?'btn-primary':'btn-ghost')} style={{minWidth:80}} onClick={function(){setReminderTime(t);autoSave({reminderTime:t});}}>{t}</button>
     );})}
   </div>
 </div>
     )}
   </div>
-  <div>
+  <div style={{opacity:.5,pointerEvents:'none',userSelect:'none',marginTop:8,paddingTop:16,borderTop:'1px solid var(--border)'}}>
     <span className="sect-lbl">Plan</span>
-    <div style={{fontSize:14,color:'var(--text)',padding:'4px 0'}}>{profile.plan||'Free'}</div>
-    <a href="#" style={{fontSize:13,color:'var(--indigo)'}} onClick={function(e){e.preventDefault();}}>Manage plan →</a>
+    <div style={{display:'flex',gap:8,marginTop:6}}>
+      {[['Basic','Free'],['Artisan','Pro'],['Guild','Team']].map(function(p){var isActive=p[0]==='Basic';return(
+<div key={p[0]} style={{flex:1,border:'1px solid var(--border)',borderRadius:'var(--r)',padding:'10px',textAlign:'center',background:isActive?'var(--bg2)':'transparent'}}>
+  <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>{p[0]}</div>
+  <div style={{fontSize:11,color:'var(--mid)'}}>{p[1]}</div>
+</div>
+      );})}
+    </div>
+    <div style={{fontSize:12,color:'var(--mid)',marginTop:8,textAlign:'center'}}>Paid plans coming soon</div>
   </div>
 </Panel>
   );
@@ -2332,6 +2356,7 @@ function ProfilePanel({app,focusField,open,onClose}){
 function AuthScreen({onAuth}){
   var se=useState('');var email=se[0];var setEmail=se[1];
   var sp=useState('');var password=sp[0];var setPassword=sp[1];
+  var sfn=useState('');var firstName=sfn[0];var setFirstName=sfn[1];
   var sl=useState(false);var loading=sl[0];var setLoading=sl[1];
   var sm=useState('');var msg=sm[0];var setMsg=sm[1];
   var smode=useState('signin');var mode=smode[0];var setMode=smode[1];
@@ -2340,7 +2365,7 @@ function AuthScreen({onAuth}){
     setLoading(true);setMsg('');
     var res;
     if(mode==='signup'){
-      res=await supabase.auth.signUp({email:email.trim(),password:password});
+      res=await supabase.auth.signUp({email:email.trim(),password:password,options:{data:{first_name:firstName.trim()}}});
       if(!res.error)setMsg('Account created! Check your email to confirm, then sign in.');
     } else {
       res=await supabase.auth.signInWithPassword({email:email.trim(),password:password});
@@ -2349,22 +2374,49 @@ function AuthScreen({onAuth}){
     if(res.error)setMsg(res.error.message);
     setLoading(false);
   }
+  var ssv=useState(false);var showPw=ssv[0];var setShowPw=ssv[1];
+  async function handleReset(){
+    if(!email.trim()){setMsg('Enter your email above first.');return;}
+    setLoading(true);
+    var res=await supabase.auth.resetPasswordForEmail(email.trim());
+    setMsg(res.error?res.error.message:'Password reset email sent!');
+    setLoading(false);
+  }
   return(
-<div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--bg0)',fontFamily:'var(--ui)',backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
-  <div style={{background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'40px',width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(42,31,16,.12)'}}>
+<div style={{position:'relative',display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--bg0)',fontFamily:'var(--ui)',overflow:'hidden'}}>
+  {/* Amber radial blurs */}
+  <div style={{position:'absolute',top:0,left:0,width:500,height:500,background:'radial-gradient(ellipse at top left, rgba(196,94,40,0.18) 0%, rgba(196,94,40,0) 70%)',pointerEvents:'none',filter:'blur(2px)'}}/>
+  <div style={{position:'absolute',bottom:0,right:0,width:500,height:500,background:'radial-gradient(ellipse at bottom right, rgba(232,160,48,0.15) 0%, rgba(232,160,48,0) 70%)',pointerEvents:'none',filter:'blur(2px)'}}/>
+  <div style={{position:'relative',zIndex:1,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'40px',width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(42,31,16,.12)'}}>
     <div style={{textAlign:'center',marginBottom:28}}>
       <div style={{fontFamily:'var(--serif)',fontSize:32,fontWeight:600,color:'var(--indigo)',marginBottom:4}}>Woven</div>
-      <div style={{fontSize:14,color:'var(--mid)'}}>Writing isn't linear. Your tool shouldn't be either.</div>
+      <div style={{fontSize:14,color:'var(--mid)'}}>Where thinking & writing happen together.</div>
     </div>
+    {mode==='signup'&&(
+<div style={{marginBottom:14}}>
+  <span className="sect-lbl">First name</span>
+  <input value={firstName} onChange={function(e){setFirstName(e.target.value);}} placeholder="What should we call you?" onKeyDown={function(e){if(e.key==='Enter')handleSubmit();}}/>
+</div>
+    )}
     <div style={{marginBottom:14}}>
       <span className="sect-lbl">Email</span>
       <input type="email" value={email} onChange={function(e){setEmail(e.target.value);}} placeholder="your@email.com" onKeyDown={function(e){if(e.key==='Enter')handleSubmit();}}/>
     </div>
-    <div style={{marginBottom:20}}>
+    <div style={{marginBottom:8}}>
       <span className="sect-lbl">Password</span>
-      <input type="password" value={password} onChange={function(e){setPassword(e.target.value);}} placeholder="••••••••" onKeyDown={function(e){if(e.key==='Enter')handleSubmit();}}/>
+      <div style={{position:'relative'}}>
+        <input type={showPw?'text':'password'} value={password} onChange={function(e){setPassword(e.target.value);}} placeholder="••••••••" onKeyDown={function(e){if(e.key==='Enter')handleSubmit();}} style={{paddingRight:40}}/>
+        <button style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--mid)',padding:0}} onClick={function(){setShowPw(!showPw);}}>
+          <span className="mi" style={{fontSize:18}}>{showPw?'visibility_off':'visibility'}</span>
+        </button>
+      </div>
     </div>
-    {msg&&<div style={{fontSize:13,color:msg.includes('created')?'var(--teal)':'var(--danger)',marginBottom:14,padding:'8px 12px',background:'var(--bg2)',borderRadius:'var(--r)'}}>{msg}</div>}
+    {mode==='signin'&&(
+<div style={{textAlign:'right',marginBottom:16}}>
+  <span style={{fontSize:12,color:'var(--indigo)',cursor:'pointer'}} onClick={handleReset}>Forgot password?</span>
+</div>
+    )}
+    {msg&&<div style={{fontSize:13,color:msg.includes('sent')||msg.includes('created')?'var(--teal)':'var(--danger)',marginBottom:14,padding:'8px 12px',background:'var(--bg2)',borderRadius:'var(--r)'}}>{msg}</div>}
     <button className="btn btn-primary" style={{width:'100%',justifyContent:'center',marginBottom:12}} onClick={handleSubmit} disabled={loading}>
       {loading?'Please wait...':(mode==='signup'?'Create account':'Sign in')}
     </button>
@@ -2524,7 +2576,7 @@ function App(){
   }else if(view==='editor'){inner=<EditorView app={app}/>;
   }else{
     var vc=null;
-    if(view==='canvas')vc=<div className="coming-soon"><span className="mi" style={{fontSize:56,color:'var(--placeholder)'}}>hub</span><div style={{fontFamily:'var(--serif)',fontSize:24,color:'var(--mid)'}}>Canvas</div><div style={{fontSize:14,color:'var(--border)',maxWidth:280,textAlign:'center',lineHeight:1.6}}>The visual mapping board is coming soon.</div></div>;
+    if(view==='canvas')vc=<div className="coming-soon dot-grid" style={{flex:1}}><span className="mi" style={{fontSize:56,color:'var(--placeholder)'}}>hub</span><div style={{fontFamily:'var(--serif)',fontSize:24,color:'var(--mid)'}}>Canvas</div><div style={{fontSize:14,color:'var(--border)',maxWidth:280,textAlign:'center',lineHeight:1.6}}>The visual mapping board is coming soon.</div></div>;
     if(view==='cards')vc=<CardsView app={app}/>;
     if(view==='table')vc=<TableView app={app}/>;
     if(view==='strands')vc=<StrandsPage app={app} allProjects={projects}/>;
@@ -2541,5 +2593,3 @@ function App(){
 }
 
 export default App;
-
-  
