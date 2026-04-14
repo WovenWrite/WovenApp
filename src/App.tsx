@@ -57,7 +57,7 @@ function loadDB(key,def){
 function genId(){return '_'+Math.random().toString(36).slice(2)+Date.now().toString(36);}
 function countWords(t){if(!t)return 0;var s=t.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();return s?s.split(' ').filter(function(w){return w.length>0;}).length:0;}
 function stripHtml(html){return html?html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim():'';}
-function todayStr(){return new Date().toISOString().slice(0,10);}
+function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function dayLbl(offset){var days=['Su','Mo','Tu','We','Th','Fr','Sa'];var d=new Date();d.setDate(d.getDate()-offset);return days[d.getDay()];}
 function initials(name){
   if(!name||!name.trim())return '?';
@@ -610,7 +610,10 @@ function StatsSection({app,onOpenProfile,greeting}){
     <div className="stat-card">
       <div className="stat-card-hdr">
         <span className="stat-card-title">Words Today</span>
-        <button className="btn-icon" style={{padding:2}} onClick={function(){onOpenProfile('goal');}}><span className="mi" style={{fontSize:18}}>settings</span></button>
+        <div style={{display:'flex',gap:4}}>
+          {todayWords>0&&<button className="btn-icon" style={{padding:2}} title="Reset today's count" onClick={function(){if(window.confirm('Reset today\'s word count to 0?'))app.clearTodaySession();}}><span className="mi" style={{fontSize:16}}>refresh</span></button>}
+          <button className="btn-icon" style={{padding:2}} onClick={function(){onOpenProfile('goal');}}><span className="mi" style={{fontSize:18}}>settings</span></button>
+        </div>
       </div>
       <div className="stat-num">{todayWords}</div>
       <div className="progress-bar-bg"><div className="progress-bar-fill" style={{width:Math.min(100,pct)+'%'}}/></div>
@@ -1876,7 +1879,23 @@ function EditorView({app}){
     setStrandDetailId(ns.id);
     setShowProps(false);
   }
-  if(!draft)return <div style={{display:'flex',flexDirection:'column',flex:1,alignItems:'center',justifyContent:'center'}}><div style={{color:'var(--mid)'}}>Draft not found.</div><button className="btn btn-ghost" style={{marginTop:12}} onClick={function(){app.setView('cards');}}>Go back</button></div>;
+  if(!draft){
+    if(app.dataLoading){
+      return(
+<div style={{display:'flex',flexDirection:'column',flex:1,alignItems:'center',justifyContent:'center',gap:12}}>
+  <div style={{width:40,height:40,borderRadius:'50%',border:'3px solid var(--border)',borderTopColor:'var(--indigo)',animation:'spin 0.8s linear infinite'}}/>
+  <div style={{color:'var(--mid)',fontSize:14}}>Loading your draft...</div>
+  <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
+</div>
+      );
+    }
+    return(
+<div style={{display:'flex',flexDirection:'column',flex:1,alignItems:'center',justifyContent:'center'}}>
+  <div style={{color:'var(--mid)',marginBottom:12}}>This draft could not be loaded.</div>
+  <button className="btn btn-ghost" onClick={function(){app.loadProjectData(app.projId);app.setView('cards');}}>Back to sequence</button>
+</div>
+    );
+  }
   var bodyFontSize=Math.round(19*zoom/100);
   // Both props and strands can be open simultaneously on wide screens
   return(
@@ -2554,6 +2573,7 @@ function AuthScreen({onAuth}){
 function App(){
   var sau=useState(null);var currentUser=sau[0];var setCurrentUser=sau[1];
   var sal=useState(true);var authLoading=sal[0];var setAuthLoading=sal[1];
+  var sdl=useState(false);var dataLoading=sdl[0];var setDataLoading=sdl[1];
   var sv=useState('dashboard');var view=sv[0];var setView=sv[1];
   var spi=useState(null);var projId=spi[0];var setProjId=spi[1];
   var sdi=useState(null);var draftId=sdi[0];var setDraftId=sdi[1];
@@ -2570,9 +2590,18 @@ function App(){
   var snp=useState(false);var showNewProject=snp[0];var setShowNewProject=snp[1];
 
   function loadProjectDataById(pid){
-    loadDB('woven:drafts:'+pid,[]).then(function(d){setAllDrafts(function(p){var n=Object.assign({},p);n[pid]=Array.isArray(d)?d:[];return n;});});
-    loadDB('woven:strands:'+pid,{}).then(function(st){setAllStrands(function(p){var n=Object.assign({},p);n[pid]=st&&typeof st==='object'?st:{};return n;});});
-    loadDB('woven:templates:'+pid,[]).then(function(tm){setAllTemplates(function(p){var n=Object.assign({},p);n[pid]=Array.isArray(tm)?tm:[];return n;});});
+    setDataLoading(true);
+    Promise.all([
+      loadDB('woven:drafts:'+pid,[]),
+      loadDB('woven:strands:'+pid,{}),
+      loadDB('woven:templates:'+pid,[])
+    ]).then(function(results){
+      var d=results[0];var st=results[1];var tm=results[2];
+      setAllDrafts(function(p){var n=Object.assign({},p);n[pid]=Array.isArray(d)?d:[];return n;});
+      setAllStrands(function(p){var n=Object.assign({},p);n[pid]=st&&typeof st==='object'?st:{};return n;});
+      setAllTemplates(function(p){var n=Object.assign({},p);n[pid]=Array.isArray(tm)?tm:[];return n;});
+      setDataLoading(false);
+    });
   }
   useEffect(function(){
     // Check existing auth session
@@ -2604,6 +2633,7 @@ function App(){
   },[]);
 
   function loadAllData(){
+    setDataLoading(true);
     // Reset React state first so previous user's data never shows
     setProjects([]);setAllDrafts({});setAllStrands({});setAllTemplates({});
     setSessions([]);setGlobalLT({});setGoalState(500);
@@ -2624,10 +2654,25 @@ function App(){
     loadDB('woven:projects',null).then(function(saved){
       if(!saved||saved.length===0){
         setProjects([]);
+        setAuthLoading(false);setDataLoading(false);
       } else {
-        setProjects(saved);saved.forEach(function(p){loadProjectDataById(p.id);});
+        setProjects(saved);
+        // Restore last view state if user was in editor
+        var lastState=null;try{var ls=localStorage.getItem('woven:lastState');if(ls)lastState=JSON.parse(ls);}catch(e){}
+        if(lastState&&lastState.projId&&lastState.draftId){
+          setProjId(lastState.projId);
+          setDraftId(lastState.draftId);
+          setView('editor');
+          loadProjectDataById(lastState.projId);
+        } else if(lastState&&lastState.projId){
+          setProjId(lastState.projId);
+          setView(lastState.view||'cards');
+          loadProjectDataById(lastState.projId);
+        } else {
+          saved.forEach(function(p){loadProjectDataById(p.id);});
+        }
+        setAuthLoading(false);setDataLoading(false);
       }
-      setAuthLoading(false);
     });
   }
 
@@ -2677,6 +2722,13 @@ function App(){
   function setGoal(v){setGoalState(v);saveDB('woven:goal',v);}
   function updateGlobalLT(id,changes){setGlobalLT(function(prev){var next=Object.assign({},prev);next[id]=Object.assign({},next[id]||{},changes);saveDB('woven:global_lt',next);return next;});}
   function setProfile(p){setProfileState(p);saveDB('woven:profile',p);}
+  function clearTodaySession(){
+    var t=todayStr();
+    setSessions(function(prev){
+      var next=prev.filter(function(s){return s.date!==t;});
+      saveDB('woven:sessions',next);return next;
+    });
+  }
   function recordSession(pid,wordsAdded){
     var t=todayStr();
     // Cap: only keep last 90 days, max 500 words added per call (sanity check)
@@ -2699,12 +2751,18 @@ function App(){
       return next;
     });
   }
-  function goBack(){setView('dashboard');setProjId(null);setDraftId(null);}
-  function openDraft(did){setDraftId(did);setView('editor');}
+  function goBack(){
+    setView('dashboard');setProjId(null);setDraftId(null);
+    try{localStorage.removeItem('woven:lastState');}catch(e){}
+  }
+  function openDraft(did){
+    setDraftId(did);setView('editor');
+    try{localStorage.setItem('woven:lastState',JSON.stringify({projId:projId,draftId:did,view:'editor'}));}catch(e){}
+  }
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession};
 
   function signOut(){supabase.auth.signOut().then(function(){window.__wovenUserId=null;setCurrentUser(null);setView('dashboard');setProjects([]);setAllDrafts({});});}
 
