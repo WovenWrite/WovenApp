@@ -261,7 +261,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .card-hdr{height:44px;background:linear-gradient(135deg,var(--bg2),var(--bg3));display:flex;align-items:center;justify-content:space-between;padding:0 10px;flex-shrink:0;}
 .card-seq{font-family:var(--scribble);font-size:15px;font-weight:600;color:var(--mid);}
 .card-body{flex:1;padding:8px 10px;overflow:hidden;display:flex;flex-direction:column;gap:4px;}
-.card-title-f{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--text);width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;}
+.card-title-f{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--text);width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;min-height:40px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
 .card-title-f:focus{background:var(--bg2);outline:1px solid var(--indigo);}
 .card-title-f::placeholder{color:var(--placeholder);}
 .card-syn-f{font-size:12px;color:var(--mid);flex:1;resize:none;overflow-y:auto;width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;font-family:var(--ui);line-height:1.4;}
@@ -318,7 +318,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .editor-body:empty:before{content:attr(data-placeholder);color:var(--placeholder);pointer-events:none;}
 .editor-body h1{font-family:var(--serif);font-size:30px;font-weight:600;margin-bottom:14px;color:var(--text);}
 .editor-body h2{font-family:var(--serif);font-size:23px;font-weight:600;margin-bottom:10px;color:var(--text);}
-.editor-body p{margin-bottom:14px;}
+.editor-body p{margin-bottom:16px;margin-top:0;}.editor-body p+p{margin-top:0;}.editor-body h1+p,.editor-body h2+p{margin-top:8px;}
 .editor-body ul{margin:0 0 14px 24px;list-style-type:disc;}.editor-body ol{margin:0 0 14px 24px;list-style-type:decimal;}.editor-body li{display:list-item;}
 .editor-body hr{border:none;border-top:1px solid var(--border);margin:24px 0;}
 .editor-body mark{border-radius:3px;padding:0 3px;background:rgba(240,192,80,.4);}
@@ -962,10 +962,15 @@ function doExport(format,drafts,project){
   // Sort drafts by order to guarantee correct sequence
   var sorted=drafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
   if(format==='PDF'){
-    if(!window.jspdf){console.warn('jsPDF not loaded yet');return false;}
-    var doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+    var jspdfLib=window.jspdf||window.jsPDF;
+    if(!jspdfLib){
+      // Try alternate global
+      if(window.jspdf&&window.jspdf.jsPDF)jspdfLib=window.jspdf;
+      else{alert('PDF export is still loading. Please try again in a moment.');return false;}
+    }
+    var JsPDF=jspdfLib.jsPDF||jspdfLib;
+    var doc=new JsPDF({unit:'mm',format:'a4'});
     var margin=25;var pageW=210-margin*2;var y=margin;var lineH=7;
-    // Title page
     doc.setFontSize(26);doc.setFont('times','bold');
     doc.text(title,105,90,{align:'center'});
     doc.setFontSize(12);doc.setFont('times','normal');
@@ -988,34 +993,33 @@ function doExport(format,drafts,project){
     doc.save(title.replace(/\s+/g,'_')+'.pdf');
     return true;
   } else {
-    // Word doc
-    var byline=project&&project.author?project.author:'';
-    var html='<!DOCTYPE html><html><head><meta charset="utf-8"><style>';
-    html+='body{font-family:Times,"Times New Roman",serif;font-size:12pt;line-height:1.8;max-width:800px;margin:60px auto;color:#1a1a1a;}';
-    html+='.title-page{text-align:left;margin-bottom:60pt;padding-bottom:40pt;border-bottom:1px solid #ccc;}';
-    html+='.written-with{font-size:10pt;color:#888;margin-bottom:16pt;letter-spacing:.05em;}';
-    html+='.project-eyebrow{font-size:9pt;font-weight:bold;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8pt;}';
-    html+='.ms-title{font-size:28pt;font-weight:bold;margin-bottom:10pt;}';
-    html+='h1{font-size:18pt;font-weight:bold;page-break-before:always;margin-bottom:14pt;margin-top:0;}';
-    html+='h1.first{page-break-before:avoid;}';
-    html+='p{margin-bottom:10pt;text-indent:0;}';
+    // Word doc - use proper HTML that Word can parse
+    var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">';
+    html+='<head><meta charset="utf-8"><style>';
+    html+='body{font-family:Times New Roman,Times,serif;font-size:12pt;line-height:1.8;margin:1in;}';
+    html+='h1{font-size:16pt;font-weight:bold;page-break-before:always;margin-top:0;margin-bottom:12pt;}';
+    html+='h1.first-draft{page-break-before:avoid;}';
+    html+='p{margin-bottom:8pt;margin-top:0;}';
+    html+='.title-page{text-align:center;margin-bottom:0;}';
+    html+='.book-title{font-size:28pt;font-weight:bold;margin-top:2in;margin-bottom:12pt;}';
     html+='</style></head><body>';
     html+='<div class="title-page">';
-    html+='<div class="project-eyebrow">'+title+'</div>';
-    html+='<div class="ms-title">'+title+'</div>';
-    if(byline)html+='<p style="font-size:14pt;color:#555;">By '+byline+'</p>';
+    html+='<p class="book-title">'+title+'</p>';
+    html+='<p style="font-size:16pt;color:#555;">Written in Woven</p>';
     html+='</div>';
     var isFirst=true;
     sorted.forEach(function(draft){
-      html+='<h1 class="'+(isFirst?'first':'')+'>'+(draft.title||'Untitled')+'</h1>';
-      html+=(draft.body||'<p></p>');
+      // Strip only mark tags but keep paragraph structure
+      var body=(draft.body||'<p></p>').replace(/<mark[^>]*>/gi,'').replace(/<\/mark>/gi,'');
+      html+='<h1 class="'+(isFirst?'first-draft':'')+'>'+(draft.title||'Untitled')+'</h1>';
+      html+=body;
       isFirst=false;
     });
     html+='</body></html>';
     var blob=new Blob([html],{type:'application/msword'});
     var url=URL.createObjectURL(blob);
     var a=document.createElement('a');a.href=url;a.download=title.replace(/\s+/g,'_')+'.doc';a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(function(){URL.revokeObjectURL(url);},1000);
     return true;
   }
 }
@@ -1043,14 +1047,14 @@ function SharedDraftView({shareId}){
 <div style={{minHeight:'100vh',background:'var(--bg0)',display:'flex',flexDirection:'column',overflowY:'auto'}}>
   <div style={{flex:1,maxWidth:680,margin:'0 auto',width:'100%',padding:'48px 24px 80px'}}>
     {/* Header */}
-    <div style={{marginBottom:32}}>
-      <div style={{fontSize:12,color:'var(--mid)',marginBottom:8,fontFamily:'var(--ui)'}}>
-        Written & Shared with{' '}
-        <a href="https://www.wovenwrite.com" target="_blank" rel="noopener noreferrer" style={{color:'var(--indigo)',textDecoration:'underline',fontWeight:500}}>Woven</a>
+    <div style={{marginBottom:40}}>
+      <div style={{fontSize:10,fontWeight:700,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.12em',fontFamily:'var(--ui)',marginBottom:16}}>
+        WRITTEN & SHARED WITH{' '}
+        <a href="https://www.wovenwrite.com" target="_blank" rel="noopener noreferrer" style={{color:'var(--indigo)',textDecoration:'underline',fontWeight:700}}>WOVEN</a>
       </div>
-      {projectName&&<div style={{fontSize:11,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.1em',fontFamily:'var(--ui)',marginBottom:10}}>{projectName}</div>}
-      <h1 style={{fontFamily:'var(--serif)',fontSize:36,fontWeight:600,color:'var(--text)',lineHeight:1.25,marginBottom:10}}>{data.title||'Untitled'}</h1>
-      <div style={{fontFamily:'var(--serif)',fontSize:17,color:'var(--mid)',fontStyle:'italic',marginBottom:16}}>By {byline}</div>
+      {projectName&&<div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.1em',fontFamily:'var(--ui)',marginBottom:16}}>{projectName}</div>}
+      <h1 style={{fontFamily:'var(--serif)',fontSize:42,fontWeight:600,color:'var(--text)',lineHeight:1.2,marginBottom:12,marginTop:8}}>{data.title||'Untitled'}</h1>
+      <h3 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:400,color:'var(--indigo)',fontStyle:'italic',marginBottom:24}}>By {byline}</h3>
       <div style={{height:1,background:'var(--border)',width:'100%'}}/>
     </div>
     {/* Body */}
@@ -1072,8 +1076,8 @@ function BindPanel({app,open,onClose}){
   var si=useState(false);var inclNested=si[0];var setInclNested=si[1];
   var sex=useState({});var excluded=sex[0];var setExcluded=sex[1];
   var sel=useState(false);var exporting=sel[0];var setExporting=sel[1];
-  var parents=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
-  var allSeq=inclNested?(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread';}).sort(function(a,b){return (a.order||0)-(b.order||0);}):(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
+  var parents=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
+  var allSeq=inclNested?(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);}):(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
   var filtered=allSeq.filter(function(d){return !excluded[d.id];});
   var totalWords=filtered.reduce(function(s,d){return s+(d.wordCount||0);},0);
   function toggleExclude(id){setExcluded(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;});}
@@ -1239,25 +1243,47 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
     {draft.synopsis?(
 <textarea className="card-syn-f" defaultValue={draft.synopsis} rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
     ):(
-<div style={{position:'relative',flex:1,overflow:'hidden'}}>
-  <div style={{fontSize:12,color:'var(--placeholder)',lineHeight:1.4,padding:'2px 4px',overflow:'hidden',display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical'}}>
-    {draft.body?stripHtml(draft.body).slice(0,120):''}
-  </div>
-  <textarea className="card-syn-f" defaultValue="" placeholder="Add a synopsis..." rows={3} style={{position:'absolute',inset:0,opacity:0,cursor:'pointer'}} onFocus={function(e){e.target.style.opacity='1';e.target.previousSibling.style.display='none';}} onBlur={function(e){update({synopsis:e.target.value});if(!e.target.value){e.target.style.opacity='0';if(e.target.previousSibling)e.target.previousSibling.style.display='';}}}/>
-</div>
+<SynopsisPreview draft={draft} onUpdate={update}/>
     )}
 
   </div>
   <div className="card-footer" style={{flexWrap:'wrap',gap:4}}>
     <StatusDot status={draft.status} onChange={onStatusChange}/>
+    <span className="card-wc" style={{marginLeft:4}}>{(draft.wordCount||0)+'w'}</span>
     {chips.length>0&&chips.map(function(st){var bg=st.color+'26';return <span key={st.id} className="chip" style={{background:bg,color:st.color,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid',fontSize:11}}>{st.name}</span>;})}
     {tagged.length>2&&<OverflowTooltip label={'+'+(tagged.length-2)} names={tagged.slice(2).map(function(s){return s.name;})}/>}
-    <span className="card-wc" style={{marginLeft:'auto'}}>{draft.wordCount>0?draft.wordCount+' w':'Empty'}</span>
-    <button className="card-open" onClick={function(){app.openDraft(draft.id);}}>Draft</button>
+    <button className="card-open" style={{marginLeft:'auto'}} onClick={function(){app.openDraft(draft.id);}}>Draft</button>
   </div>
 </div>
   );
   return(<div>{cardEl}{archiveConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[app.projId]||[]} onConfirm={doArchive} onCancel={function(){setArchiveConfirm(false);}}/>}</div>);
+}
+
+
+// ── SynopsisPreview ──
+function SynopsisPreview({draft,onUpdate}){
+  var sh=useState(false);var hovered=sh[0];var setHovered=sh[1];
+  var se=useState(false);var editing=se[0];var setEditing=se[1];
+  var bodyPreview=draft.body?stripHtml(draft.body).slice(0,120):'';
+  var isEmpty=!bodyPreview;
+  if(editing){return(
+<textarea autoFocus className="card-syn-f" defaultValue="" placeholder="Add a synopsis..." rows={3} style={{flex:1}} onBlur={function(e){if(e.target.value.trim())onUpdate({synopsis:e.target.value});setEditing(false);}} onKeyDown={function(e){if(e.key==='Escape')setEditing(false);}}/>
+  );}
+  return(
+<div style={{position:'relative',flex:1,overflow:'hidden',cursor:'pointer',borderRadius:4}} onMouseEnter={function(){setHovered(true);}} onMouseLeave={function(){setHovered(false);}} onClick={function(){setEditing(true);}}>
+  {isEmpty?(
+<div style={{fontSize:12,color:'var(--placeholder)',lineHeight:1.4,padding:'2px 4px',fontStyle:'italic'}}>Add a synopsis...</div>
+  ):(
+<div style={{fontSize:12,color:'var(--placeholder)',lineHeight:1.4,padding:'2px 4px',fontStyle:'italic',overflow:'hidden',display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical'}}>{bodyPreview}{bodyPreview.length>=120?'…':''}</div>
+  )}
+  {hovered&&(
+<div style={{position:'absolute',inset:0,background:'rgba(245,237,224,0.92)',display:'flex',alignItems:'center',justifyContent:'center',gap:5,borderRadius:4,border:'1px dashed var(--border)'}}>
+  <span className="mi" style={{fontSize:14,color:'var(--indigo)'}}>edit</span>
+  <span style={{fontSize:11,color:'var(--indigo)',fontWeight:600}}>Add synopsis</span>
+</div>
+  )}
+</div>
+  );
 }
 
 // ── LooseThreadsSection ──
@@ -1855,6 +1881,108 @@ function EditorStrandsPanel({draft,app,onClose,onOpenStrand}){
   );
 }
 
+
+// ── ShareExportDropdown ──
+function ShareExportDropdown({pos,draft,app,editorRef,flushSave,onClose}){
+  var stab=useState('share');var tab=stab[0];var setTab=stab[1];
+  var ssl=useState(null);var shareLink=ssl[0];var setShareLink=ssl[1];
+  var sen=useState(true);var shareEnabled=sen[0];var setShareEnabled=sen[1];
+  var scp=useState(false);var copied=scp[0];var setCopied=scp[1];
+  var sld=useState(false);var loading=sld[0];var setLoading=sld[1];
+  var sexp=useState(false);var exporting=sexp[0];var setExporting=sexp[1];
+  var ref=useRef(null);
+  useEffect(function(){
+    function onDown(e){if(ref.current&&!ref.current.contains(e.target))onClose();}
+    document.addEventListener('mousedown',onDown);
+    return function(){document.removeEventListener('mousedown',onDown);};
+  },[]);
+  async function generateLink(){
+    if(loading)return;
+    setLoading(true);
+    flushSave&&flushSave();
+    var sid=genId();
+    var profile=app.profile||{};
+    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
+    var projName=(app.currentProject&&app.currentProject.title)||'';
+    var body=editorRef.current?editorRef.current.innerHTML:(draft.body||'');
+    var res=await supabase.from('shared_drafts').insert({id:sid,title:draft.title||'Untitled',body:body,project_name:projName,author_name:authorName});
+    if(res.error){setLoading(false);return;}
+    var link=window.location.origin+window.location.pathname+'?share='+sid;
+    setShareLink(link);setLoading(false);
+  }
+  function copyLink(){
+    if(!shareLink||!shareEnabled)return;
+    navigator.clipboard&&navigator.clipboard.writeText(shareLink);
+    setCopied(true);setTimeout(function(){setCopied(false);},2500);
+  }
+  function handleExport(fmt){
+    if(exporting)return;
+    flushSave&&flushSave();
+    setExporting(true);
+    setTimeout(function(){
+      doExport(fmt,[draft],app.currentProject);
+      setExporting(false);
+    },80);
+  }
+  return(
+<div ref={ref} style={{position:'fixed',top:pos.top,left:pos.left,zIndex:500,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--rl)',boxShadow:'0 8px 28px rgba(42,31,16,.18)',width:280}}>
+  {/* Tabs */}
+  <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
+    {['share','export'].map(function(t){return(
+<button key={t} onClick={function(){setTab(t);}} style={{flex:1,padding:'10px',fontSize:13,fontWeight:tab===t?600:400,color:tab===t?'var(--indigo)':'var(--mid)',borderBottom:tab===t?'2px solid var(--indigo)':'2px solid transparent',background:'none',border:'none',borderBottom:tab===t?'2px solid var(--indigo)':'2px solid transparent',cursor:'pointer',fontFamily:'var(--ui)',textTransform:'capitalize'}}>
+  {t==='share'?'Share Link':'Export'}
+</button>
+    );})}
+  </div>
+  <div style={{padding:'14px'}}>
+    {tab==='share'&&(
+<div>
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+    <span style={{fontSize:13,color:'var(--text)',fontWeight:500}}>Read-only link</span>
+    <span style={{width:36,height:20,borderRadius:10,background:shareEnabled?'var(--indigo)':'var(--bg3)',cursor:'pointer',position:'relative',transition:'all .2s',flexShrink:0,display:'inline-block'}} onClick={function(){setShareEnabled(!shareEnabled);}}>
+      <span style={{position:'absolute',top:2,left:shareEnabled?18:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
+    </span>
+  </div>
+  {!shareLink&&(
+<button className="btn btn-ghost" style={{width:'100%',justifyContent:'center',opacity:shareEnabled?1:.4,pointerEvents:shareEnabled?'auto':'none'}} onClick={generateLink} disabled={loading}>
+  {loading?<span style={{display:'flex',alignItems:'center',gap:6}}><span style={{width:12,height:12,borderRadius:'50%',border:'2px solid var(--border)',borderTopColor:'var(--indigo)',animation:'spin .7s linear infinite',display:'inline-block'}}/> Generating...</span>:<span style={{display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:16}}>link</span>Generate link</span>}
+</button>
+  )}
+  {shareLink&&(
+<div>
+  <div style={{background:'var(--bg2)',borderRadius:'var(--r)',padding:'8px 10px',fontSize:11,color:shareEnabled?'var(--mid)':'var(--placeholder)',wordBreak:'break-all',marginBottom:8,opacity:shareEnabled?1:.5,fontFamily:'var(--mono)'}}>{shareLink}</div>
+  <button className={'btn btn-primary'} style={{width:'100%',justifyContent:'center',opacity:shareEnabled?1:.4,pointerEvents:shareEnabled?'auto':'none'}} onClick={copyLink}>
+    {copied?<span style={{display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:16}}>check_circle</span>Copied!</span>:<span style={{display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:16}}>content_copy</span>Copy link</span>}
+  </button>
+</div>
+  )}
+  <div style={{fontSize:11,color:'var(--placeholder)',marginTop:10}}>Anyone with the link can read this draft. No account needed.</div>
+</div>
+    )}
+    {tab==='export'&&(
+<div style={{display:'flex',flexDirection:'column',gap:8}}>
+  <button className="btn btn-ghost" style={{justifyContent:'flex-start',gap:10}} onClick={function(){handleExport('PDF');}} disabled={exporting}>
+    <span className="mi" style={{fontSize:20,color:'var(--mid)'}}>picture_as_pdf</span>
+    <div style={{textAlign:'left'}}>
+      <div style={{fontSize:13,fontWeight:500,color:'var(--text)'}}>PDF</div>
+      <div style={{fontSize:11,color:'var(--mid)'}}>Best for sharing & printing</div>
+    </div>
+  </button>
+  <button className="btn btn-ghost" style={{justifyContent:'flex-start',gap:10}} onClick={function(){handleExport('Word (.docx)');}} disabled={exporting}>
+    <span className="mi" style={{fontSize:20,color:'var(--mid)'}}>description</span>
+    <div style={{textAlign:'left'}}>
+      <div style={{fontSize:13,fontWeight:500,color:'var(--text)'}}>Word Document</div>
+      <div style={{fontSize:11,color:'var(--mid)'}}>Edit in Word or Google Docs</div>
+    </div>
+  </button>
+  {exporting&&<div style={{fontSize:12,color:'var(--mid)',textAlign:'center',padding:'4px 0'}}>Preparing download...</div>}
+</div>
+    )}
+  </div>
+</div>
+  );
+}
+
 function EditorView({app}){
   var pid=app.projId;var did=app.draftId;
   var draft=(app.allDrafts[pid]||[]).find(function(d){return d.id===did;})||null;
@@ -1869,7 +1997,23 @@ function EditorView({app}){
   var editorRef=useRef(null);var saveTimer=useRef(null);var lastDraftId=useRef(null);var sessionStartWc=useRef(0);
   var isMobile=useIsMobile();
   useEffect(function(){if(!draft)return;if(lastDraftId.current===draft.id)return;lastDraftId.current=draft.id;sessionStartWc.current=draft.wordCount||0;setWc(draft.wordCount||0);if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';},[did]);
-  useEffect(function(){if(!draft)return;if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';},[mode,did]);
+  // Only reset editor when mode changes (not on re-renders)
+  var lastMode=useRef(mode);
+  useEffect(function(){
+    if(!draft)return;
+    if(lastMode.current===mode)return;
+    lastMode.current=mode;
+    if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';
+  },[mode]);
+  function flushSave(){
+    if(!editorRef.current)return;
+    if(saveTimer.current)clearTimeout(saveTimer.current);
+    var html=editorRef.current.innerHTML;
+    var newWc=countWords(editorRef.current.innerText||'');
+    app.updateDraft(pid,did,{body:html,wordCount:newWc,updatedAt:new Date().toISOString()});
+    var added=Math.max(0,newWc-sessionStartWc.current);
+    if(added>0&&added<500){app.recordSession(pid,added);sessionStartWc.current=newWc;}
+  }
   function scheduleSave(html,newWc){if(saveTimer.current)clearTimeout(saveTimer.current);saveTimer.current=setTimeout(function(){app.updateDraft(pid,did,{body:html,wordCount:newWc,updatedAt:new Date().toISOString()});var added=Math.max(0,newWc-sessionStartWc.current);if(added>0&&added<500){app.recordSession(pid,added);sessionStartWc.current=newWc;}},600);}
   function handleRTInput(){if(!editorRef.current)return;var text=editorRef.current.innerText||editorRef.current.textContent||'';var newWc=countWords(text);setWc(newWc);scheduleSave(editorRef.current.innerHTML,newWc);}
   function handlePaste(e){
@@ -1918,8 +2062,7 @@ function EditorView({app}){
   var sshare=useState(false);var shareOpen=sshare[0];var setShareOpen=sshare[1];
   var ssc=useState(null);var shareCopied=ssc[0];var setShareCopied=ssc[1];
   var ssharePos=useState({top:0,left:0});var sharePos=ssharePos[0];var setSharePos=ssharePos[1];
-  var sExport=useState(false);var exportOpen=sExport[0];var setExportOpen=sExport[1];
-  var sExFormat=useState('PDF');var exFormat=sExFormat[0];var setExFormat=sExFormat[1];
+
   var shareRef=useRef(null);
   useEffect(function(){if(!shareOpen)return;function onDown(e){if(shareRef.current&&!shareRef.current.contains(e.target))setShareOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[shareOpen]);
   function handleSelectionChange(){var sel=window.getSelection();if(!sel||sel.isCollapsed||!sel.rangeCount||!editorRef.current){setFloatToolbar(null);return;}try{var range=sel.getRangeAt(0);if(!editorRef.current.contains(range.commonAncestorContainer)){setFloatToolbar(null);return;}var rect=range.getBoundingClientRect();setFloatToolbar({top:rect.top-46,left:Math.max(4,rect.left+rect.width/2-100)});setShowStrandDrop(false);}catch(e){setFloatToolbar(null);}}
@@ -1972,32 +2115,18 @@ function EditorView({app}){
     <button className="btn btn-ghost btn-sm" style={showProps?{borderColor:'var(--indigo)',color:'var(--indigo)'}:{}} onClick={function(){setShowProps(!showProps);setStrandDetailId(null);}}>Properties</button>
     <button className="btn btn-ghost btn-sm" style={showStrands?{borderColor:'var(--indigo)',color:'var(--indigo)'}:{}} onClick={function(){setShowStrands(!showStrands);setStrandDetailId(null);}}>Strands</button>
     <div ref={shareRef} style={{position:'relative'}}>
-      <button className="btn btn-ghost btn-sm" onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setSharePos({top:r.bottom+4,left:r.right-180});setShareOpen(!shareOpen);}}>
+      <button className="btn btn-ghost btn-sm" onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setSharePos({top:r.bottom+4,left:r.right-280});setShareOpen(!shareOpen);}}>
         Share<span className="mi" style={{fontSize:14,marginLeft:2}}>arrow_drop_down</span>
       </button>
       {shareOpen&&(
-<div style={{position:'fixed',top:sharePos.top,left:sharePos.left,zIndex:400,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:'var(--r)',boxShadow:'0 8px 24px rgba(0,0,0,.5)',minWidth:180}}>
-  <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer',fontSize:13,color:shareCopied==='error'?'var(--danger)':shareCopied==='copied'?'var(--teal)':'inherit'}} onClick={async function(){
-    var sid=genId();
-    var profile=app.profile||{};
-    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
-    var projName=(app.currentProject&&app.currentProject.title)||'';
-    var editorContent=editorRef.current?editorRef.current.innerHTML:(draft.body||'');
-    var res=await supabase.from('shared_drafts').insert({id:sid,title:draft.title||'Untitled',body:editorContent,project_name:projName,author_name:authorName});
-    if(res.error){setShareCopied('error');setTimeout(function(){setShareCopied(null);},3000);return;}
-    var base=window.location.origin+window.location.pathname;
-    var link=base+'?share='+sid;
-    if(navigator.clipboard)await navigator.clipboard.writeText(link);
-    setShareCopied('copied');
-    setTimeout(function(){setShareCopied(null);},3000);
-  }}>
-    <span className="mi" style={{fontSize:18}}>{shareCopied==='copied'?'check_circle':shareCopied==='error'?'error':'link'}</span>
-    {shareCopied==='copied'?'Link copied!':shareCopied==='error'?'Could not create link':'Copy read-only link'}
-  </div>
-  <div style={{borderTop:'1px solid var(--border)',display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer',fontSize:13}} onClick={function(){setShareOpen(false);setExportOpen(true);}}>
-    <span className="mi" style={{fontSize:18}}>download</span>Export this draft
-  </div>
-</div>
+<ShareExportDropdown
+  pos={sharePos}
+  draft={draft}
+  app={app}
+  editorRef={editorRef}
+  flushSave={flushSave}
+  onClose={function(){setShareOpen(false);}}
+/>
       )}
     </div>
     </div>
@@ -2040,22 +2169,7 @@ function EditorView({app}){
   </div>
 </div>
   )}
-  {exportOpen&&(
-<Panel open={exportOpen} onClose={function(){setExportOpen(false);}} title="Export Draft"
-  footer={<button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={function(){doExport(exFormat,[draft],app.currentProject);setExportOpen(false);}}>Export as {exFormat}</button>}>
-  <div style={{marginBottom:16}}>
-    <span className="sect-lbl">Format</span>
-    <div style={{display:'flex',gap:8,marginTop:4}}>
-      {['PDF','Word (.docx)'].map(function(f){return(
-<button key={f} className={'btn '+(exFormat===f?'btn-primary':'btn-ghost')} style={{flex:1,justifyContent:'center'}} onClick={function(){setExFormat(f);}}>
-  <span className="mi" style={{fontSize:16}}>{f==='PDF'?'picture_as_pdf':'description'}</span>{f}
-</button>
-      );})}
-    </div>
-  </div>
-  <div style={{fontSize:13,color:'var(--mid)'}}>Exports this draft only: <strong style={{color:'var(--text)'}}>{draft.title||'Untitled'}</strong> ({wc} words)</div>
-</Panel>
-  )}
+
 </div>
   );
 }
@@ -2713,9 +2827,11 @@ function App(){
     // Listen for auth changes
     var sub=supabase.auth.onAuthStateChange(function(event,session){
       if(event==='SIGNED_IN'&&session&&session.user){
+        // Only reload all data if this is a genuine new sign-in, not a token refresh
+        var wasAlreadyLoggedIn=!!window.__wovenUserId;
         window.__wovenUserId=session.user.id;
         setCurrentUser(session.user);
-        loadAllData();
+        if(!wasAlreadyLoggedIn)loadAllData();
       } else if(event==='SIGNED_OUT'){
         window.__wovenUserId=null;
         setCurrentUser(null);
@@ -2853,7 +2969,8 @@ function App(){
   }
   function openDraft(did){
     setDraftId(did);setView('editor');
-    try{localStorage.setItem('woven:lastState',JSON.stringify({projId:projId,draftId:did,view:'editor'}));}catch(e){}
+    // Save cards view as restore point (not editor) to avoid empty draft on tab restore
+    try{localStorage.setItem('woven:lastState',JSON.stringify({projId:projId,draftId:null,view:'cards'}));}catch(e){}
   }
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
