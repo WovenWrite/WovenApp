@@ -257,11 +257,14 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .draft-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s,box-shadow .15s;height:196px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
 .draft-card:hover{box-shadow:0 4px 12px rgba(42,31,16,.08);}
 .draft-card.drag-over{border-color:var(--indigo);background:rgba(196,94,40,.03);}
+.draft-card.drop-before{border-left:3px solid var(--indigo);background:transparent;}
+.draft-card.drop-after{border-right:3px solid var(--indigo);background:transparent;}
+.draft-card.nest-target{border-color:var(--teal);border-style:dashed;background:rgba(47,153,102,.04);}
 .draft-card.nest-target{border-color:var(--teal);border-style:dashed;}
 .card-hdr{height:44px;background:linear-gradient(135deg,var(--bg2),var(--bg3));display:flex;align-items:center;justify-content:space-between;padding:0 10px;flex-shrink:0;}
 .card-seq{font-family:var(--scribble);font-size:15px;font-weight:600;color:var(--mid);}
 .card-body{flex:1;padding:8px 10px;overflow:hidden;display:flex;flex-direction:column;gap:4px;}
-.card-title-f{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--text);width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;min-height:40px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.card-title-f{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--text);width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;resize:none;overflow:hidden;line-height:1.35;min-height:38px;max-height:52px;display:block;}
 .card-title-f:focus{background:var(--bg2);outline:1px solid var(--indigo);}
 .card-title-f::placeholder{color:var(--placeholder);}
 .card-syn-f{font-size:12px;color:var(--mid);flex:1;resize:none;overflow-y:auto;width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;font-family:var(--ui);line-height:1.4;}
@@ -313,7 +316,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .editor-title-inp::placeholder{color:var(--placeholder);}
 .editor-main{display:flex;flex:1;overflow:hidden;}
 .editor-center{flex:1;overflow-y:auto;display:flex;flex-direction:column;position:relative;}
-.editor-body{flex:1;padding:48px 64px;font-family:var(--serif);line-height:1.9;color:var(--body-text);min-height:300px;font-size:19px;}
+.editor-body{flex:1;padding:48px 64px;font-family:var(--serif);line-height:1.9;color:var(--body-text);min-height:300px;font-size:19px;max-width:900px;margin:0 auto;width:100%;box-sizing:border-box;}
 .editor-body:focus{outline:none;}
 .editor-body:empty:before{content:attr(data-placeholder);color:var(--placeholder);pointer-events:none;}
 .editor-body h1{font-family:var(--serif);font-size:30px;font-weight:600;margin-bottom:14px;color:var(--text);}
@@ -323,7 +326,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .editor-body hr{border:none;border-top:1px solid var(--border);margin:24px 0;}
 .editor-body mark{border-radius:3px;padding:0 3px;background:rgba(240,192,80,.4);}
 .editor-body a{color:var(--indigo);text-decoration:underline;}
-.editor-md{flex:1;padding:48px 64px;font-family:var(--mono);font-size:14px;line-height:1.7;color:var(--body-text);background:var(--bg0);border:none;resize:none;min-height:300px;width:100%;}
+.editor-md{flex:1;padding:48px 64px;font-family:var(--mono);font-size:14px;line-height:1.7;color:var(--body-text);background:var(--bg0);border:none;resize:none;min-height:300px;width:100%;max-width:900px;margin:0 auto;}
 .editor-md:focus{outline:none;}
 .editor-md::placeholder{color:var(--placeholder);}
 .editor-bottombar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:var(--bg1);border-top:1px solid var(--border);flex-shrink:0;font-size:12px;color:var(--mid);}
@@ -957,8 +960,11 @@ function stripHtmlForExport(html){
   return html.replace(/<h1[^>]*>(.*?)<\/h1>/gi,'\n\n$1\n').replace(/<h2[^>]*>(.*?)<\/h2>/gi,'\n\n$1\n').replace(/<br\s*\/?>/gi,'\n').replace(/<p[^>]*>(.*?)<\/p>/gi,'$1\n').replace(/<li[^>]*>(.*?)<\/li>/gi,'• $1\n').replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ').trim();
 }
 
-function doExport(format,drafts,project){
-  var title=(project&&project.title)||'Manuscript';
+function doExport(format,drafts,project,isSingleDraft){
+  // For single draft export use draft title; for bind use project title
+  var isSingle=isSingleDraft||(drafts&&drafts.length===1);
+  var projectTitle=(project&&project.title)||'Manuscript';
+  var title=isSingle&&drafts&&drafts[0]?(drafts[0].title||'Untitled'):projectTitle;
   // Sort drafts by order to guarantee correct sequence
   var sorted=drafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
   if(format==='PDF'){
@@ -971,10 +977,20 @@ function doExport(format,drafts,project){
     var JsPDF=jspdfLib.jsPDF||jspdfLib;
     var doc=new JsPDF({unit:'mm',format:'a4'});
     var margin=25;var pageW=210-margin*2;var y=margin;var lineH=7;
-    doc.setFontSize(26);doc.setFont('times','bold');
-    doc.text(title,105,90,{align:'center'});
-    doc.setFontSize(12);doc.setFont('times','normal');
-    doc.text('Written in Woven',105,105,{align:'center'});
+    // Title page
+    if(isSingle&&sorted.length===1){
+      var sd=sorted[0];
+      doc.setFontSize(11);doc.setFont('times','normal');
+      doc.text((projectTitle).toUpperCase(),105,70,{align:'center'});
+      doc.setFontSize(26);doc.setFont('times','bold');
+      doc.text(sd.title||'Untitled',105,90,{align:'center'});
+      doc.setFontSize(14);doc.setFont('times','italic');
+    } else {
+      doc.setFontSize(26);doc.setFont('times','bold');
+      doc.text(title,105,90,{align:'center'});
+      doc.setFontSize(12);doc.setFont('times','normal');
+      doc.text('Written in Woven',105,105,{align:'center'});
+    }
     sorted.forEach(function(draft){
       doc.addPage();y=margin;
       doc.setFontSize(18);doc.setFont('times','bold');
@@ -1004,13 +1020,20 @@ function doExport(format,drafts,project){
     html+='.book-title{font-size:28pt;font-weight:bold;margin-top:2in;margin-bottom:12pt;}';
     html+='</style></head><body>';
     html+='<div class="title-page">';
-    html+='<p class="book-title">'+title+'</p>';
-    html+='<p style="font-size:16pt;color:#555;">Written in Woven</p>';
+    if(isSingle&&sorted.length===1){
+      var sd=sorted[0];
+      html+='<p style="font-size:9pt;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-bottom:20pt;">'+projectTitle+'</p>';
+      html+='<p class="book-title">'+(sd.title||'Untitled')+'</p>';
+    } else {
+      html+='<p class="book-title">'+title+'</p>';
+    }
     html+='</div>';
     var isFirst=true;
     sorted.forEach(function(draft){
-      // Strip only mark tags but keep paragraph structure
-      var body=(draft.body||'<p></p>').replace(/<mark[^>]*>/gi,'').replace(/<\/mark>/gi,'');
+      // Preserve rich text, just clean up mark tags and inline styles that Word can't handle
+      var body=(draft.body||'<p></p>')
+        .replace(/<mark[^>]*>/gi,'<span style="background:#fff3cd;">')
+        .replace(/<\/mark>/gi,'</span>');
       html+='<h1 class="'+(isFirst?'first-draft':'')+'>'+(draft.title||'Untitled')+'</h1>';
       html+=body;
       isFirst=false;
@@ -1043,14 +1066,19 @@ function SharedDraftView({shareId}){
   var projectName=data.project_name||'';
   var authorName=data.author_name||'';
   var byline=authorName||'Your friendly neighbourhood novelist';
+  useEffect(function(){
+    if(data&&data.title)document.title=data.title+' — Woven';
+    return function(){document.title='Woven';};
+  },[data]);
   return(
 <div style={{minHeight:'100vh',background:'var(--bg0)',display:'flex',flexDirection:'column',overflowY:'auto'}}>
+  <style>{'::selection{background:rgba(240,192,80,0.4);color:inherit;}'}</style>
   <div style={{flex:1,maxWidth:680,margin:'0 auto',width:'100%',padding:'48px 24px 80px'}}>
     {/* Header */}
     <div style={{marginBottom:40}}>
-      <div style={{fontSize:10,fontWeight:700,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.12em',fontFamily:'var(--ui)',marginBottom:16}}>
+      <div style={{fontSize:11,fontWeight:800,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.15em',fontFamily:'var(--ui)',marginBottom:28,textAlign:'center'}}>
         WRITTEN & SHARED WITH{' '}
-        <a href="https://www.wovenwrite.com" target="_blank" rel="noopener noreferrer" style={{color:'var(--indigo)',textDecoration:'underline',fontWeight:700}}>WOVEN</a>
+        <a href="https://www.wovenwrite.com" target="_blank" rel="noopener noreferrer" style={{color:'var(--indigo)',textDecoration:'underline',fontWeight:800}}>WOVEN</a>
       </div>
       {projectName&&<div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.1em',fontFamily:'var(--ui)',marginBottom:16}}>{projectName}</div>}
       <h1 style={{fontFamily:'var(--serif)',fontSize:42,fontWeight:600,color:'var(--text)',lineHeight:1.2,marginBottom:12,marginTop:8}}>{data.title||'Untitled'}</h1>
@@ -1186,7 +1214,7 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
   function handleDragOver(e){
     e.preventDefault();setOver(true);
     if(!nestTimer.current){
-      nestTimer.current=setTimeout(function(){setNestTarget(true);},700);
+      nestTimer.current=setTimeout(function(){setNestTarget(true);},2000);
     }
   }
   function handleDragLeave(){
@@ -1239,7 +1267,7 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
     ):<span style={{color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:16}}>drag_indicator</span></span>}
   </div>
   <div className="card-body">
-    <input className="card-title-f" defaultValue={draft.title} placeholder="Untitled draft" onBlur={function(e){update({title:e.target.value});}}/>
+    <textarea className="card-title-f" defaultValue={draft.title} placeholder="Untitled draft" rows={2} onBlur={function(e){update({title:e.target.value});}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}}/>
     {draft.synopsis?(
 <textarea className="card-syn-f" defaultValue={draft.synopsis} rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
     ):(
@@ -1920,7 +1948,7 @@ function ShareExportDropdown({pos,draft,app,editorRef,flushSave,onClose}){
     flushSave&&flushSave();
     setExporting(true);
     setTimeout(function(){
-      doExport(fmt,[draft],app.currentProject);
+      doExport(fmt,[draft],app.currentProject,true);
       setExporting(false);
     },80);
   }
@@ -1929,7 +1957,7 @@ function ShareExportDropdown({pos,draft,app,editorRef,flushSave,onClose}){
   {/* Tabs */}
   <div style={{display:'flex',borderBottom:'1px solid var(--border)'}}>
     {['share','export'].map(function(t){return(
-<button key={t} onClick={function(){setTab(t);}} style={{flex:1,padding:'10px',fontSize:13,fontWeight:tab===t?600:400,color:tab===t?'var(--indigo)':'var(--mid)',borderBottom:tab===t?'2px solid var(--indigo)':'2px solid transparent',background:'none',border:'none',borderBottom:tab===t?'2px solid var(--indigo)':'2px solid transparent',cursor:'pointer',fontFamily:'var(--ui)',textTransform:'capitalize'}}>
+<button key={t} onClick={function(){setTab(t);}} style={{flex:1,padding:'14px 10px',fontSize:14,fontWeight:tab===t?600:500,color:tab===t?'var(--indigo)':'var(--mid)',borderBottom:tab===t?'2px solid var(--indigo)':'2px solid transparent',background:'none',border:'none',borderBottom:tab===t?'2px solid var(--indigo)':'2px solid transparent',cursor:'pointer',fontFamily:'var(--ui)',textTransform:'capitalize',letterSpacing:'.01em'}}>
   {t==='share'?'Share Link':'Export'}
 </button>
     );})}
