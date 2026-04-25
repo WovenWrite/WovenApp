@@ -254,7 +254,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .view-layout{display:flex;flex-direction:column;flex:1;overflow:hidden;position:relative;}
 .view-area{flex:1;overflow-y:auto;padding:16px 16px 80px;}
 .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
-.draft-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s,box-shadow .15s;height:196px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
+.draft-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s,box-shadow .15s;height:226px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
 .draft-card:hover{box-shadow:0 4px 12px rgba(42,31,16,.08);}
 .draft-card.drag-over{border-color:var(--indigo);background:rgba(196,94,40,.03);}
 .draft-card.drop-before{border-left:3px solid var(--indigo);background:transparent;}
@@ -302,7 +302,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .tbl-inp:focus{background:var(--bg1);border-radius:3px;padding:2px 5px;outline:1px solid var(--indigo);}
 .tbl-inp::placeholder{color:var(--placeholder);}
 .tbl-inp.syn{color:var(--mid);font-size:12px;}
-.bind-draft-list{border:1px solid var(--border);border-radius:var(--r);overflow-y:auto;max-height:240px;background:var(--bg0);}
+.bind-draft-list{border:1px solid var(--border);border-radius:var(--r);overflow-y:auto;max-height:360px;background:var(--bg0);}
 .bind-draft-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--bg2);font-size:13px;}
 .bind-draft-row:last-child{border-bottom:none;}
 .editor-layout{display:flex;flex-direction:column;flex:1;overflow:hidden;}
@@ -602,7 +602,8 @@ function StatsSection({app,onOpenProfile,greeting}){
   for(var i=6;i>=0;i--){var dd=new Date();dd.setDate(dd.getDate()-i);var ds=dd.toISOString().slice(0,10);var dw=sessions.filter(function(s){return s.date===ds;}).reduce(function(sum,s){return sum+(s.words||0);},0);weekData.push({date:ds,words:dw,isToday:i===0,label:dayLbl(i)});}
   var maxW=weekData.reduce(function(m,d){return Math.max(m,d.words);},1);
   var streak=0;var sd=new Date();
-  for(var j=0;j<60;j++){var sds=sd.toISOString().slice(0,10);if(sessions.filter(function(s){return s.date===sds;}).length>0){streak++;sd.setDate(sd.getDate()-1);}else if(j===0){sd.setDate(sd.getDate()-1);}else break;}
+  function localDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  for(var j=0;j<60;j++){var sds=localDateStr(sd);if(sessions.filter(function(s){return s.date===sds;}).length>0){streak++;sd.setDate(sd.getDate()-1);}else if(j===0){sd.setDate(sd.getDate()-1);}else break;}
   var weekStart=new Date();weekStart.setDate(weekStart.getDate()-6);weekStart.setHours(0,0,0,0);
   var ltCount=0;Object.keys(app.allDrafts).forEach(function(pid){(app.allDrafts[pid]||[]).forEach(function(d){
     if(d.status==='loose_thread'&&!d.archived){
@@ -717,6 +718,7 @@ function GlobalLooseThreads({app}){
   // Global LTs are stored in app.globalLT (keyed by id), not tied to any project
   var allLT=Object.values(app.globalLT||{}).filter(function(d){return !d.archived;});
   var activeProjects=app.projects.filter(function(p){return !p.archived;});
+  var soi=useState(null);var openLTId=soi[0];var setOpenLTId=soi[1];
   function updateLT(id,changes){app.updateGlobalLT(id,changes);}
   function addLT(){
     var id=genId();
@@ -732,23 +734,65 @@ function GlobalLooseThreads({app}){
 <div style={{marginTop:24}}>
   <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Loose Threads</div>
   <div className="cards-grid">
+    <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:6,display:'flex',flexDirection:'column',boxShadow:'none',height:'auto',minHeight:100}} onClick={addLT}>
+      <span className="mi" style={{fontSize:22,color:'var(--placeholder)'}}>add_circle_outline</span>
+      <span style={{fontSize:12,color:'var(--placeholder)'}}>New loose thread</span>
+    </div>
     {allLT.map(function(d){return(
-<div key={d.id} className="draft-card" style={{height:'auto',minHeight:120}}>
+<div key={d.id} className="draft-card" style={{height:'auto',minHeight:140,cursor:'pointer'}} onClick={function(){setOpenLTId(d.id);}}>
   <div className="card-body" style={{padding:'10px 12px'}}>
-    <input className="card-title-f" defaultValue={d.title} placeholder="Untitled loose thread" onBlur={function(e){updateLT(d.id,{title:e.target.value});}} style={{marginBottom:4}}/>
-    <textarea className="card-syn-f" defaultValue={d.synopsis} placeholder="Add a note..." rows={2} onBlur={function(e){updateLT(d.id,{synopsis:e.target.value});}}/>
+    <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:d.title?'var(--text)':'var(--placeholder)',marginBottom:4,lineHeight:1.3}}>{d.title||'Untitled loose thread'}</div>
+    <div style={{fontSize:12,color:'var(--mid)',lineHeight:1.5,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:4,WebkitBoxOrient:'vertical'}}>{d.synopsis||''}</div>
   </div>
-  <div className="card-footer">
-    <select style={{fontSize:11,flex:1,padding:'3px 6px',background:'var(--bg0)',border:'1px solid var(--border)',borderRadius:'var(--r)',color:'var(--mid)',fontFamily:'var(--ui)'}} defaultValue="" onChange={function(e){if(e.target.value){moveToProject(d.id,e.target.value);}}} title="Add to a project">
-      <option value="">Add to project...</option>
-      {activeProjects.map(function(p){return <option key={p.id} value={p.id}>{p.title}</option>;})}
-    </select>
+  <div className="card-footer" style={{justifyContent:'flex-end'}}>
+    <span style={{fontSize:11,color:'var(--placeholder)'}}>Click to edit</span>
   </div>
 </div>
     );})}
-    <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:8,display:'flex',flexDirection:'column',boxShadow:'none',height:'auto',minHeight:100}} onClick={addLT}>
-      <span className="mi" style={{fontSize:24,color:'var(--placeholder)'}}>add_circle_outline</span>
-      <span style={{fontSize:13,color:'var(--placeholder)'}}>New loose thread</span>
+  </div>
+  {openLTId&&(
+<LTDrawer lt={app.globalLT[openLTId]} activeProjects={activeProjects} onUpdate={function(changes){updateLT(openLTId,changes);}} onMove={function(pid){moveToProject(openLTId,pid);setOpenLTId(null);}} onClose={function(){setOpenLTId(null);}} onDelete={function(){updateLT(openLTId,{archived:true});setOpenLTId(null);}}/>
+  )}
+</div>
+  );
+}
+
+
+// ── LTDrawer ──
+function LTDrawer({lt,activeProjects,onUpdate,onMove,onClose,onDelete}){
+  if(!lt)return null;
+  return(
+<div className="panel-overlay">
+  <div className="panel-backdrop" onClick={onClose}/>
+  <div className="panel-box">
+    <div className="panel-hdr">
+      <span className="panel-title" style={{fontFamily:'var(--serif)'}}>Loose Thread</span>
+      <div style={{display:'flex',gap:4}}>
+        <button className="btn-icon btn-danger" onClick={onDelete} title="Archive this thread"><span className="mi" style={{fontSize:18}}>delete</span></button>
+        <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
+      </div>
+    </div>
+    <div className="panel-body" style={{display:'flex',flexDirection:'column',gap:14}}>
+      <div>
+        <span className="sect-lbl">Title</span>
+        <input key={lt.id+'-t'} defaultValue={lt.title||''} placeholder="Give this thread a name..." onBlur={function(e){onUpdate({title:e.target.value});}}/>
+      </div>
+      <div style={{flex:1,display:'flex',flexDirection:'column'}}>
+        <span className="sect-lbl">Notes</span>
+        <textarea key={lt.id+'-s'} defaultValue={lt.synopsis||''} placeholder="Write freely — capture the idea, explore it, let it breathe..." rows={12} style={{resize:'vertical',flex:1}} onBlur={function(e){onUpdate({synopsis:e.target.value});}}/>
+      </div>
+      {activeProjects.length>0&&(
+<div style={{paddingTop:14,borderTop:'1px solid var(--border)'}}>
+  <span className="sect-lbl">Move to a project</span>
+  <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
+    {activeProjects.map(function(p){return(
+<button key={p.id} className="btn btn-ghost" style={{justifyContent:'flex-start'}} onClick={function(){onMove(p.id);}}>
+  <span className="mi" style={{fontSize:16}}>arrow_forward</span>{p.title}
+</button>
+    );})}
+  </div>
+</div>
+      )}
     </div>
   </div>
 </div>
@@ -1199,8 +1243,12 @@ function BindPanel({app,open,onClose,activeFilter}){
   var si=useState(false);var inclNested=si[0];var setInclNested=si[1];
   var sex=useState({});var excluded=sex[0];var setExcluded=sex[1];
   var sel=useState(false);var exporting=sel[0];var setExporting=sel[1];
-  var ssl=useState(false);var shareLoading=ssl[0];var setShareLoading=ssl[1];
-  var ssc=useState(false);var shareCopied=ssc[0];var setShareCopied=ssc[1];
+  // Share link state — one link per project stored in app state
+  var bindShareKey='woven:bind_share:'+app.projId;
+  var ssl=useState(function(){try{var v=localStorage.getItem(bindShareKey);return v?JSON.parse(v):null;}catch(e){return null;}});
+  var bindShare=ssl[0];var setBindShare=ssl[1];
+  var scp=useState(false);var linkCopied=scp[0];var setLinkCopied=scp[1];
+  var sll=useState(false);var linkLoading=sll[0];var setLinkLoading=sll[1];
   // Get strand info for active filter label
   var projStrands=app.allStrands[app.projId]||{};
   var activeStrand=null;
@@ -1218,43 +1266,75 @@ function BindPanel({app,open,onClose,activeFilter}){
   var totalWords=filtered.reduce(function(s,d){return s+(d.wordCount||0);},0);
   function toggleExclude(id){setExcluded(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;});}
   function handleExport(){
+    if(format==='link'){handlePublishLink();return;}
     setExporting(true);
     var profile=app.profile||{};
     var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
     setTimeout(function(){
       doExport(format,filtered,app.currentProject,false,authorName);
       setExporting(false);
-      onClose();
     },100);
+  }
+  async function handlePublishLink(){
+    if(filtered.length===0)return;
+    setLinkLoading(true);
+    var profile=app.profile||{};
+    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
+    var projName=(app.currentProject&&app.currentProject.title)||'';
+    var combinedBody=filtered.map(function(d){
+      return '<h2 style="margin-top:32px;margin-bottom:8px;font-family:serif;">'+(d.title||'Untitled')+'</h2>'+(d.body||'');
+    }).join('');
+    var linkTitle=activeStrand?activeStrand.name+' — '+projName:projName;
+    // Delete old link if exists
+    if(bindShare&&bindShare.id){
+      await supabase.from('shared_drafts').delete().eq('id',bindShare.id);
+    }
+    var sid=genId();
+    var res=await supabase.from('shared_drafts').insert({id:sid,title:linkTitle,body:combinedBody,project_name:projName,author_name:authorName});
+    if(res.error){setLinkLoading(false);return;}
+    var link=window.location.origin+window.location.pathname+'?share='+sid;
+    var shareData={id:sid,link:link,enabled:true,created:new Date().toISOString()};
+    setBindShare(shareData);
+    try{localStorage.setItem(bindShareKey,JSON.stringify(shareData));}catch(e){}
+    setLinkLoading(false);
+  }
+  async function handleUnpublishLink(){
+    if(!bindShare)return;
+    await supabase.from('shared_drafts').delete().eq('id',bindShare.id);
+    setBindShare(null);
+    try{localStorage.removeItem(bindShareKey);}catch(e){}
+  }
+  function copyLink(){
+    if(!bindShare||!bindShare.link)return;
+    navigator.clipboard&&navigator.clipboard.writeText(bindShare.link);
+    setLinkCopied(true);setTimeout(function(){setLinkCopied(false);},2500);
   }
   return(
 <Panel open={open} onClose={onClose} title="Bind your drafts"
-  footer={<div style={{display:'flex',flexDirection:'column',gap:8,width:'100%'}}>
-    <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={handleExport} disabled={exporting||filtered.length===0}>
-      {exporting?<span style={{display:'flex',alignItems:'center',gap:8}}><span style={{width:14,height:14,borderRadius:'50%',border:'2px solid rgba(255,255,255,.3)',borderTopColor:'#fff',animation:'spin .7s linear infinite',display:'inline-block'}}/> Preparing...</span>:'Export'}
-    </button>
-    <button className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}} onClick={async function(){
-      if(filtered.length===0)return;
-      setShareLoading(true);
-      var profile=app.profile||{};
-      var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
-      var projName=(app.currentProject&&app.currentProject.title)||'';
-      var sid=genId();
-      // Concatenate all filtered drafts into one body
-      var combinedBody=filtered.map(function(d){
-        return '<h2 style="margin-top:32px;margin-bottom:8px;font-family:serif;">'+(d.title||'Untitled')+'</h2>'+(d.body||'');
-      }).join('');
-      var res=await supabase.from('shared_drafts').insert({id:sid,title:projName||(activeStrand?activeStrand.name+' — '+projName:projName),body:combinedBody,project_name:projName,author_name:authorName});
-      if(res.error){setShareLoading(false);return;}
-      var link=window.location.origin+window.location.pathname+'?share='+sid;
-      navigator.clipboard&&navigator.clipboard.writeText(link);
-      setShareCopied(true);setShareLoading(false);
-      setTimeout(function(){setShareCopied(false);},3000);
-    }} disabled={shareLoading||filtered.length===0}>
-      {shareLoading?'Generating...'
-        :shareCopied?<span style={{display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:16}}>check_circle</span>Link copied!</span>
-        :<span style={{display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:16}}>link</span>Copy read-only link</span>
-      }
+  footer={<div style={{display:'flex',flexDirection:'column',gap:0,width:'100%'}}>
+    {/* Share link UI */}
+    {bindShare&&(
+<div style={{marginBottom:10,padding:10,background:'var(--bg2)',borderRadius:'var(--r)',border:'1px solid var(--border)'}}>
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+    <span style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.06em'}}>Read-only link</span>
+    <button style={{fontSize:11,color:'var(--danger)',background:'none',border:'none',cursor:'pointer',padding:0}} onClick={handleUnpublishLink}>Unpublish</button>
+  </div>
+  <div style={{fontSize:11,color:'var(--mid)',wordBreak:'break-all',marginBottom:6,fontFamily:'var(--mono)',lineHeight:1.4}}>{bindShare.link}</div>
+  <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={copyLink}>
+    {linkCopied?<><span className="mi" style={{fontSize:14}}>check_circle</span>Copied!</>:<><span className="mi" style={{fontSize:14}}>content_copy</span>Copy link</>}
+  </button>
+</div>
+    )}
+    {/* Format dropdown */}
+    <div style={{marginBottom:8}}>
+      <select style={{width:'100%',padding:'9px 12px',fontSize:13,color:'var(--text)',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--r)'}} value={format} onChange={function(e){setFormat(e.target.value);}}>
+        <option value="PDF">PDF — best for sharing & printing</option>
+        <option value="Word (.docx)">Word Document — edit in Word or Google Docs</option>
+        <option value="link">Read-only link — share in browser</option>
+      </select>
+    </div>
+    <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={handleExport} disabled={exporting||linkLoading||filtered.length===0}>
+      {(exporting||linkLoading)?<span style={{display:'flex',alignItems:'center',gap:8}}><span style={{width:14,height:14,borderRadius:'50%',border:'2px solid rgba(255,255,255,.3)',borderTopColor:'#fff',animation:'spin .7s linear infinite',display:'inline-block'}}/>{format==='link'?'Publishing...':'Preparing...'}</span>:format==='link'?'Publish link':'Export'}
     </button>
   </div>}>
   {activeStrand&&(
@@ -1302,16 +1382,7 @@ function BindPanel({app,open,onClose,activeFilter}){
     </span>
     <span style={{fontSize:13,color:'var(--text)'}}>Include nested drafts</span>
   </div>
-  <div>
-    <span className="sect-lbl">Format</span>
-    <div style={{display:'flex',gap:8,marginTop:4}}>
-      {['PDF','Word (.docx)'].map(function(f){return(
-<button key={f} className={'btn '+(format===f?'btn-primary':'btn-ghost')} style={{flex:1,justifyContent:'center'}} onClick={function(){setFormat(f);}}>
-  <span className="mi" style={{fontSize:16}}>{f==='PDF'?'picture_as_pdf':'description'}</span>{f}
-</button>
-      );})}
-    </div>
-  </div>
+
 </Panel>
   );
 }
@@ -1412,19 +1483,25 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
     ):<span style={{color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:16}}>drag_indicator</span></span>}
   </div>
   <div className="card-body">
-    <textarea className="card-title-f" defaultValue={draft.title} placeholder="Untitled draft" rows={1} ref={function(el){if(el){el.style.height='auto';el.style.height=el.scrollHeight+'px';}}} onInput={function(e){e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px';}} onBlur={function(e){update({title:e.target.value});}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}}/>
+    <div style={{position:'relative'}} className="has-tooltip">
+      <textarea className="card-title-f" defaultValue={draft.title} placeholder="Untitled draft" rows={1} ref={function(el){if(el){el.style.height='auto';el.style.height=el.scrollHeight+'px';}}} onInput={function(e){e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px';}} onBlur={function(e){update({title:e.target.value});}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}}/>
+      {(draft.title&&draft.title.length>30)&&<span className="tooltip-text" style={{bottom:'auto',top:'calc(100% + 4px)',transform:'translateX(0)',left:0,maxWidth:200}}>{draft.title}</span>}
+    </div>
     {draft.synopsis?(
 <textarea className="card-syn-f" defaultValue={draft.synopsis} rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
     ):(
 <SynopsisPreview draft={draft} onUpdate={update}/>
     )}
-
+    {tagged.length>0&&(
+<div className="strand-chips" style={{marginTop:2,flexWrap:'nowrap',overflow:'hidden'}}>
+  {tagged.slice(0,2).map(function(st){var bg=st.color+'26';return <span key={st.id} className="chip" style={{background:bg,color:st.color,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid',fontSize:10,padding:'2px 6px',flexShrink:0}}>{st.name}</span>;})}
+  {tagged.length>2&&<OverflowTooltip label={'+'+(tagged.length-2)} names={tagged.slice(2).map(function(s){return s.name;})}/>}
+</div>
+    )}
   </div>
   <div className="card-footer" style={{flexWrap:'wrap',gap:4}}>
     <StatusDot status={draft.status} onChange={onStatusChange}/>
     <span className="card-wc" style={{marginLeft:4}}>{(draft.wordCount||0)+'w'}</span>
-    {chips.length>0&&chips.map(function(st){var bg=st.color+'26';return <span key={st.id} className="chip" style={{background:bg,color:st.color,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid',fontSize:11}}>{st.name}</span>;})}
-    {tagged.length>2&&<OverflowTooltip label={'+'+(tagged.length-2)} names={tagged.slice(2).map(function(s){return s.name;})}/>}
     <button className="card-open" style={{marginLeft:'auto'}} onClick={function(){app.openDraft(draft.id);}}>Draft</button>
   </div>
 </div>
@@ -1692,7 +1769,10 @@ function TableView({app}){
   onDragOver={function(e){e.preventDefault();setDragOver(draft.id);}}
   onDragLeave={function(){setDragOver(null);}}
   onDrop={function(e){e.preventDefault();setDragOver(null);var fromId=e.dataTransfer.getData('draftId');if(fromId&&fromId!==draft.id){var fromDraft=(app.allDrafts[app.projId]||[]).find(function(d){return d.id===fromId;});if(fromDraft&&fromDraft.status==='loose_thread'){app.updateDraft(app.projId,fromId,{status:'first_draft',order:draft.order||0,parentId:null});}else{app.reorderDraft(app.projId,fromId,draft.order||0);}}}}>
-  <td><span draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}} style={{cursor:'grab',color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:18}}>drag_indicator</span></span></td>
+  <td><div style={{display:'flex',alignItems:'center',gap:2}}>
+    <span draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}} style={{cursor:'grab',color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:18}}>drag_indicator</span></span>
+    {isNested&&<button className="btn-icon" style={{padding:2}} title="Unnest draft" onClick={function(){app.updateDraft(app.projId,draft.id,{parentId:null,order:Date.now()});}}><span className="mi" style={{fontSize:14,color:'var(--mid)'}}>vertical_align_top</span></button>}
+  </div></td>
   <td style={{color:'var(--mid)',fontSize:11,whiteSpace:'nowrap',paddingLeft:isNested?28:12}}>
     <div style={{display:'flex',alignItems:'center',gap:2}}>
       {hasChildren&&<span className="mi" style={{fontSize:16,cursor:'pointer',color:'var(--mid)',flexShrink:0,lineHeight:1}} onClick={function(){app.updateDraft(app.projId,draft.id,{nestExpanded:!isExpanded});}}>{isExpanded?'expand_less':'expand_more'}</span>}
@@ -3154,8 +3234,7 @@ function App(){
   }
   function recordSession(pid,wordsAdded){
     var t=todayStr();
-    // Cap: only keep last 90 days, max 500 words added per call (sanity check)
-    if(wordsAdded>500)return;
+    if(!wordsAdded||wordsAdded<=0||wordsAdded>500)return;
     setSessions(function(prev){
       var next=prev.slice();
       var idx=next.findIndex(function(s){return s.date===t&&s.projId===pid;});
