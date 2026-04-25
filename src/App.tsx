@@ -440,7 +440,12 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
   .dash-greeting-desktop{display:none;}
   .dash-greeting-mobile{display:block;margin-bottom:12px;}
 }
-.dash-greeting-mobile{display:none;}`;
+.dash-greeting-mobile{display:none;}
+.auth-card{border-radius:var(--rl);}
+@media(max-width:600px){
+  .auth-wrapper{align-items:flex-start;}
+  .auth-card{border-radius:0;border-left:none;border-right:none;border-top:none;box-shadow:none!important;max-width:100%!important;min-height:100vh;padding:32px 24px;}
+}`;
 function GlobalStyles(){return <style dangerouslySetInnerHTML={{__html:CSS}}/>;}
 
 // ── ArchiveConfirmModal ──
@@ -1052,13 +1057,22 @@ function SharedDraftView({shareId}){
   var sd=useState(null);var data=sd[0];var setData=sd[1];
   var se=useState(true);var loading=se[0];var setLoading=se[1];
   var sErr=useState('');var err=sErr[0];var setErr=sErr[1];
-  useEffect(function(){
-    if(!shareId)return;
-    supabase.from('shared_drafts').select('*').eq('id',shareId).maybeSingle().then(function(r){
+  function fetchShare(){
+    var client=getSupabase();
+    if(!client){
+      // CDN not ready yet — retry after a short delay
+      setTimeout(fetchShare,300);
+      return;
+    }
+    client.from('shared_drafts').select('*').eq('id',shareId).maybeSingle().then(function(r){
       if(r.data)setData(r.data);
       else setErr('This link has expired or cannot be found.');
       setLoading(false);
     });
+  }
+  useEffect(function(){
+    if(!shareId)return;
+    fetchShare();
   },[shareId]);
   if(loading)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'var(--serif)',fontSize:20,color:'var(--mid)'}}>Loading...</div>);
   if(err)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'var(--serif)',fontSize:20,color:'var(--mid)'}}>{err}</div>);
@@ -2702,7 +2716,7 @@ function ProfilePanel({app,focusField,open,onClose}){
 function WovenLogo({size,color,dark}){
   var textColor=color||(dark?'var(--text)':'var(--indigo)');var h=size||28;var symH=Math.round(h*0.75);
   return(
-<div style={{display:'inline-flex',alignItems:'center',gap:7,userSelect:'none'}}>
+<div style={{display:'inline-flex',alignItems:'center',gap:7,userSelect:'none',verticalAlign:'middle'}}>
   <svg width={symH} height={symH} viewBox="0 0 848.94 831.84" xmlns="http://www.w3.org/2000/svg" fill="var(--indigo)">
     <path d="M564.96,702.91c-53.18,9.44-103.06-5.16-143.76-39.96-38.56,34.9-87.88,49.1-141.72,40.7-4.12-18.08-4.13-45.56-1.92-61.83,2.5-18.43,107.47,6.04,107.44-63.63l-.06-125.7-44.3-1.48c-4.57-.15-8.32-3.69-8.72-8.25-1.68-18.87-1.68-35.22,0-54.09.4-4.55,4.15-8.1,8.72-8.25l44.3-1.48.05-125.71c.03-70.41-105.11-46.18-107.21-62.43-2.48-19.16-1.99-41.94.63-62.5,51.86-8.94,102.06,5.29,142.53,40.15,39.2-35.16,90.01-49.89,142.97-39.93,2.41,19.58,2.82,44.43.84,61.59-2.15,18.69-107.68-9.17-107.62,66.26l.09,122.21,44.46,1.87c4.58.19,8.3,3.78,8.65,8.36,1.37,18.04,1.42,33.28.5,53.08-.22,4.66-3.95,8.4-8.62,8.62l-44.91,2.15-.07,125.52c-.04,72.83,108.96,43.13,108.62,65.59l-.9,59.16Z"/>
     <rect y="382.8" width="313.51" height="67.4" rx="11.53" ry="11.53"/>
@@ -2756,17 +2770,17 @@ function AuthScreen({onAuth}){
     setLoading(false);
   }
   return(
-<div style={{position:'relative',display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--bg0)',fontFamily:'var(--ui)',overflow:'hidden'}}>
+<div className="auth-wrapper" style={{position:'relative',display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--bg0)',fontFamily:'var(--ui)',overflow:'hidden'}}>
   {/* Grain overlay */}
   <div className="auth-grain"/>
   {/* Amber radial blurs - top left */}
   <div style={{position:'absolute',top:'-10%',left:'-10%',width:'70vw',height:'70vh',background:'radial-gradient(ellipse, rgba(196,94,40,0.35) 0%, rgba(196,94,40,0.15) 35%, transparent 65%)',pointerEvents:'none',filter:'blur(60px)',zIndex:0}}/>
   {/* Amber radial blurs - bottom right */}
   <div style={{position:'absolute',bottom:'-10%',right:'-10%',width:'70vw',height:'70vh',background:'radial-gradient(ellipse, rgba(240,192,80,0.30) 0%, rgba(232,160,48,0.12) 35%, transparent 65%)',pointerEvents:'none',filter:'blur(60px)',zIndex:0}}/>
-  <div style={{position:'relative',zIndex:1,background:'rgba(245,237,224,0.92)',backdropFilter:'blur(12px)',border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'40px',width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(42,31,16,.15)'}}>
+  <div className="auth-card" style={{position:'relative',zIndex:1,background:'rgba(245,237,224,0.92)',backdropFilter:'blur(12px)',border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'40px',width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(42,31,16,.15)'}}>
     <div style={{textAlign:'center',marginBottom:28}}>
-      <div style={{marginBottom:8,display:'flex',justifyContent:'center'}}><WovenLogo size={36} dark={true}/></div>
-      <div style={{fontSize:14,color:'var(--mid)'}}>Where thinking & writing happen together.</div>
+      <div style={{marginBottom:10,display:'flex',justifyContent:'center',alignItems:'center'}}><WovenLogo size={36} dark={true}/></div>
+      <div style={{fontSize:14,color:'var(--body-text)',fontWeight:700,fontStyle:'italic',textAlign:'center'}}>Where thinking & writing happen together.</div>
     </div>
     {mode==='signup'&&(
 <div style={{marginBottom:14}}>
