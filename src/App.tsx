@@ -970,11 +970,15 @@ function cleanBodyForExport(html){
   return html
     .replace(/<mark[^>]*>/gi,'<span style="background:#fff3cd;">')
     .replace(/<\/mark>/gi,'</span>')
-    .replace(/<div([^>]*)>/gi,'<p$1>')
+    .replace(/<div([^>]*)>/gi,'<p>')
     .replace(/<\/div>/gi,'</p>')
-    .replace(/(<[a-z][^>]*?)\s+class="[^"]*"/gi,'$1')
-    .replace(/(<[a-z][^>]*?)\s+style="[^"]*color:[^;"]*;?([^"]*)"?/gi,'$1')
+    .replace(/<span([^>]*)>/gi,'<span>')
+    .replace(/(<(?:p|h[1-6]|li|td|th)[^>]*?)\s+class="[^"]*"/gi,'$1')
+    .replace(/(<(?:p|h[1-6]|li|td|th)[^>]*?)\s+style="[^"]*"/gi,'$1')
+    .replace(/data-[a-z-]+="[^"]*"/gi,'')
     .replace(/<!--[\s\S]*?-->/g,'')
+    .replace(/<p>\s*<\/p>/gi,'<p>&nbsp;</p>')
+    .replace(/&(?!amp;|lt;|gt;|nbsp;|quot;|#[0-9]+;)/g,'&amp;')
     .trim();
 }
 
@@ -1001,38 +1005,20 @@ function doExport(format,drafts,project,isSingleDraft,authorName){
     var doc=new JsPDF({unit:'mm',format:'a4'});
     var margin=25;var pageW=210-margin*2;var y=margin;var lineH=7;
 
-    // ── Cover page ──
-    doc.setFontSize(11);doc.setFont('times','normal');
-    doc.text(projectTitle.toUpperCase(),105,60,{align:'center'});
-    doc.setFontSize(28);doc.setFont('times','bold');
-    var titleLines=doc.splitTextToSize(displayTitle,pageW);
-    doc.text(titleLines,105,85,{align:'center'});
-    var coverY=85+titleLines.length*12;
-    if(author){doc.setFontSize(14);doc.setFont('times','italic');doc.text('By '+author,105,coverY+8,{align:'center'});coverY+=16;}
-    doc.setFontSize(11);doc.setFont('times','normal');
-    doc.text(totalWords.toLocaleString()+' words',105,coverY+8,{align:'center'});
-    doc.text('Written in Woven',105,coverY+18,{align:'center'});
-
-    // ── Index page ──
-    doc.addPage();y=30;
-    doc.setFontSize(16);doc.setFont('times','bold');
-    doc.text('Contents',margin,y);y+=12;
-    doc.setFontSize(12);doc.setFont('times','normal');
-    sorted.forEach(function(draft,i){
-      if(y>270){doc.addPage();y=30;}
-      var num=(i+1)+'.  ';
-      var draftTitle=doc.splitTextToSize(num+(draft.title||'Untitled'),pageW);
-      doc.text(draftTitle,margin,y);y+=draftTitle.length*lineH+2;
-    });
-
-    // ── Draft pages ──
-    sorted.forEach(function(draft){
-      doc.addPage();y=margin;
-      doc.setFontSize(18);doc.setFont('times','bold');
-      var dTitle=doc.splitTextToSize(draft.title||'Untitled',pageW);
-      doc.text(dTitle,margin,y);y+=dTitle.length*9+10;
+    if(isSingle){
+      // ── Single draft: inline header, no cover/index page ──
+      y=margin;
+      doc.setFontSize(10);doc.setFont('times','normal');
+      doc.text(projectTitle.toUpperCase(),margin,y);y+=8;
+      doc.setFontSize(22);doc.setFont('times','bold');
+      var dTitleLines=doc.splitTextToSize(displayTitle,pageW);
+      doc.text(dTitleLines,margin,y);y+=dTitleLines.length*10+4;
+      if(author){doc.setFontSize(13);doc.setFont('times','italic');doc.text('By '+author,margin,y);y+=8;}
+      doc.setFontSize(10);doc.setFont('times','normal');
+      doc.text(totalWords.toLocaleString()+' words  ·  Written in Woven',margin,y);y+=10;
+      doc.setDrawColor(200,200,200);doc.line(margin,y,210-margin,y);y+=10;
       doc.setFontSize(12);doc.setFont('times','normal');
-      var bodyText=stripHtmlForExport(draft.body||'');
+      var bodyText=stripHtmlForExport(sorted[0].body||'');
       if(bodyText){
         var lines=doc.splitTextToSize(bodyText,pageW);
         lines.forEach(function(line){
@@ -1040,7 +1026,46 @@ function doExport(format,drafts,project,isSingleDraft,authorName){
           doc.text(line,margin,y);y+=lineH;
         });
       }
-    });
+    } else {
+      // ── Bind: cover page + index + draft pages ──
+      doc.setFontSize(11);doc.setFont('times','normal');
+      doc.text(projectTitle.toUpperCase(),105,60,{align:'center'});
+      doc.setFontSize(28);doc.setFont('times','bold');
+      var titleLines=doc.splitTextToSize(displayTitle,pageW);
+      doc.text(titleLines,105,85,{align:'center'});
+      var coverY=85+titleLines.length*12;
+      if(author){doc.setFontSize(14);doc.setFont('times','italic');doc.text('By '+author,105,coverY+8,{align:'center'});coverY+=16;}
+      doc.setFontSize(11);doc.setFont('times','normal');
+      doc.text(totalWords.toLocaleString()+' words',105,coverY+8,{align:'center'});
+      doc.text('Written in Woven',105,coverY+18,{align:'center'});
+      // Index
+      doc.addPage();y=30;
+      doc.setFontSize(16);doc.setFont('times','bold');
+      doc.text('Contents',margin,y);y+=12;
+      doc.setFontSize(12);doc.setFont('times','normal');
+      sorted.forEach(function(draft,i){
+        if(y>270){doc.addPage();y=30;}
+        var num=(i+1)+'.  ';
+        var draftTitle=doc.splitTextToSize(num+(draft.title||'Untitled'),pageW);
+        doc.text(draftTitle,margin,y);y+=draftTitle.length*lineH+2;
+      });
+      // Draft pages
+      sorted.forEach(function(draft){
+        doc.addPage();y=margin;
+        doc.setFontSize(18);doc.setFont('times','bold');
+        var dTitle=doc.splitTextToSize(draft.title||'Untitled',pageW);
+        doc.text(dTitle,margin,y);y+=dTitle.length*9+10;
+        doc.setFontSize(12);doc.setFont('times','normal');
+        var bodyText=stripHtmlForExport(draft.body||'');
+        if(bodyText){
+          var lines=doc.splitTextToSize(bodyText,pageW);
+          lines.forEach(function(line){
+            if(y>275){doc.addPage();y=margin;}
+            doc.text(line,margin,y);y+=lineH;
+          });
+        }
+      });
+    }
     doc.save(displayTitle.replace(/\s+/g,'_')+'.pdf');
     return true;
 
@@ -1067,29 +1092,36 @@ function doExport(format,drafts,project,isSingleDraft,authorName){
     var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">';
     html+='<head><meta charset="utf-8"><style>'+css+'</style></head><body>';
 
-    // Cover
-    html+='<div class="cover">';
-    html+='<p class="cover-eyebrow">'+projectTitle+'</p>';
-    html+='<p class="cover-title">'+displayTitle+'</p>';
-    if(author)html+='<p class="cover-byline">By '+author+'</p>';
-    html+='<p class="cover-meta">'+totalWords.toLocaleString()+' words</p>';
-    html+='<p class="cover-meta">Written in Woven</p>';
-    html+='</div>';
-
-    // Index
-    html+='<div class="toc"><h1>Contents</h1>';
-    sorted.forEach(function(draft,i){
-      html+='<p class="toc-item">'+(i+1)+'.&nbsp;&nbsp;&nbsp;'+(draft.title||'Untitled')+'</p>';
-    });
-    html+='</div>';
-
-    // Drafts
-    sorted.forEach(function(draft,i){
-      var body=cleanBodyForExport(draft.body||'');
-      html+='<h2 class="'+(i===0?'first-chapter':'')+'">'+(draft.title||'Untitled')+'</h2>';
-      html+=body;
-    });
-
+    if(isSingle){
+      var sd=sorted[0];
+      var sdBody=cleanBodyForExport(sd.body||'');
+      html+='<p style="font-size:9pt;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6pt;">'+projectTitle+'</p>';
+      html+='<h1 style="font-size:24pt;font-weight:bold;margin-bottom:8pt;margin-top:0;page-break-before:avoid;">'+displayTitle+'</h1>';
+      if(author)html+='<p style="font-size:13pt;font-style:italic;margin-bottom:6pt;">By '+author+'</p>';
+      html+='<p style="font-size:9pt;color:#888;margin-bottom:16pt;border-bottom:1px solid #ccc;padding-bottom:12pt;">'+totalWords.toLocaleString()+' words&nbsp;&nbsp;&middot;&nbsp;&nbsp;Written in Woven</p>';
+      html+=sdBody;
+    } else {
+      // Cover
+      html+='<div class="cover">';
+      html+='<p class="cover-eyebrow">'+projectTitle+'</p>';
+      html+='<p class="cover-title">'+displayTitle+'</p>';
+      if(author)html+='<p class="cover-byline">By '+author+'</p>';
+      html+='<p class="cover-meta">'+totalWords.toLocaleString()+' words</p>';
+      html+='<p class="cover-meta">Written in Woven</p>';
+      html+='</div>';
+      // Index
+      html+='<div class="toc"><h1>Contents</h1>';
+      sorted.forEach(function(draft,i){
+        html+='<p class="toc-item">'+(i+1)+'.&nbsp;&nbsp;&nbsp;'+(draft.title||'Untitled')+'</p>';
+      });
+      html+='</div>';
+      // Drafts
+      sorted.forEach(function(draft,i){
+        var body=cleanBodyForExport(draft.body||'');
+        html+='<h2 class="'+(i===0?'first-chapter':'')+'">'+  (draft.title||'Untitled')+'</h2>';
+        html+=body;
+      });
+    }
     html+='</body></html>';
     var blob=new Blob(['﻿'+html],{type:'application/msword;charset=utf-8'});
     var url=URL.createObjectURL(blob);
@@ -1139,7 +1171,7 @@ function SharedDraftView({shareId}){
   <div style={{flex:1,maxWidth:680,margin:'0 auto',width:'100%',padding:'48px 24px 80px'}}>
     {/* Header */}
     <div style={{marginBottom:40}}>
-      <div style={{fontSize:11,fontWeight:800,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.15em',fontFamily:'var(--ui)',marginBottom:28,textAlign:'center'}}>
+      <div style={{fontSize:11,fontWeight:800,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.15em',fontFamily:'var(--ui)',marginBottom:40,textAlign:'center'}}>
         WRITTEN & SHARED WITH{' '}
         <a href="https://www.wovenwrite.com" target="_blank" rel="noopener noreferrer" style={{color:'var(--indigo)',textDecoration:'underline',fontWeight:800}}>WOVEN</a>
       </div>
@@ -1162,13 +1194,26 @@ function SharedDraftView({shareId}){
 }
 
 // ── BindPanel ──
-function BindPanel({app,open,onClose}){
+function BindPanel({app,open,onClose,activeFilter}){
   var s=useState('PDF');var format=s[0];var setFormat=s[1];
   var si=useState(false);var inclNested=si[0];var setInclNested=si[1];
   var sex=useState({});var excluded=sex[0];var setExcluded=sex[1];
   var sel=useState(false);var exporting=sel[0];var setExporting=sel[1];
-  var parents=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
-  var allSeq=inclNested?(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);}):(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
+  var ssl=useState(false);var shareLoading=ssl[0];var setShareLoading=ssl[1];
+  var ssc=useState(false);var shareCopied=ssc[0];var setShareCopied=ssc[1];
+  // Get strand info for active filter label
+  var projStrands=app.allStrands[app.projId]||{};
+  var activeStrand=null;
+  if(activeFilter){Object.values(projStrands).flat().forEach(function(st){if(st.id===activeFilter)activeStrand=st;});}
+  var allDraftsList=app.allDrafts[app.projId]||[];
+  // Apply strand filter first, then nested/parent filter
+  var strandFiltered=activeFilter
+    ?allDraftsList.filter(function(d){return (d.strandTags||[]).includes(activeFilter);})
+    :allDraftsList;
+  var parents=strandFiltered.filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
+  var allSeq=inclNested
+    ?strandFiltered.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);})
+    :strandFiltered.filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
   var filtered=allSeq.filter(function(d){return !excluded[d.id];});
   var totalWords=filtered.reduce(function(s,d){return s+(d.wordCount||0);},0);
   function toggleExclude(id){setExcluded(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;});}
@@ -1184,9 +1229,42 @@ function BindPanel({app,open,onClose}){
   }
   return(
 <Panel open={open} onClose={onClose} title="Bind your drafts"
-  footer={<button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={handleExport} disabled={exporting||filtered.length===0}>
-    {exporting?<span style={{display:'flex',alignItems:'center',gap:8}}><span style={{width:14,height:14,borderRadius:'50%',border:'2px solid rgba(255,255,255,.3)',borderTopColor:'#fff',animation:'spin .7s linear infinite',display:'inline-block'}}/> Preparing...</span>:'Export'}
-  </button>}>
+  footer={<div style={{display:'flex',flexDirection:'column',gap:8,width:'100%'}}>
+    <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={handleExport} disabled={exporting||filtered.length===0}>
+      {exporting?<span style={{display:'flex',alignItems:'center',gap:8}}><span style={{width:14,height:14,borderRadius:'50%',border:'2px solid rgba(255,255,255,.3)',borderTopColor:'#fff',animation:'spin .7s linear infinite',display:'inline-block'}}/> Preparing...</span>:'Export'}
+    </button>
+    <button className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}} onClick={async function(){
+      if(filtered.length===0)return;
+      setShareLoading(true);
+      var profile=app.profile||{};
+      var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
+      var projName=(app.currentProject&&app.currentProject.title)||'';
+      var sid=genId();
+      // Concatenate all filtered drafts into one body
+      var combinedBody=filtered.map(function(d){
+        return '<h2 style="margin-top:32px;margin-bottom:8px;font-family:serif;">'+(d.title||'Untitled')+'</h2>'+(d.body||'');
+      }).join('
+');
+      var res=await supabase.from('shared_drafts').insert({id:sid,title:projName||(activeStrand?activeStrand.name+' — '+projName:projName),body:combinedBody,project_name:projName,author_name:authorName});
+      if(res.error){setShareLoading(false);return;}
+      var link=window.location.origin+window.location.pathname+'?share='+sid;
+      navigator.clipboard&&navigator.clipboard.writeText(link);
+      setShareCopied(true);setShareLoading(false);
+      setTimeout(function(){setShareCopied(false);},3000);
+    }} disabled={shareLoading||filtered.length===0}>
+      {shareLoading?'Generating...'
+        :shareCopied?<span style={{display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:16}}>check_circle</span>Link copied!</span>
+        :<span style={{display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:16}}>link</span>Copy read-only link</span>
+      }
+    </button>
+  </div>}>
+  {activeStrand&&(
+<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,padding:'8px 12px',background:'var(--bg2)',borderRadius:'var(--r)',border:'1px solid var(--border)'}}>
+  <div style={{width:8,height:8,borderRadius:'50%',background:activeStrand.color,flexShrink:0}}/>
+  <span style={{fontSize:13,color:'var(--text)',flex:1}}>Filtered to <strong>{activeStrand.name}</strong></span>
+  <span style={{fontSize:11,color:'var(--mid)'}}>Arc filter active</span>
+</div>
+  )}
   <div style={{marginBottom:16}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
       <span className="sect-lbl" style={{margin:0}}>Sequence</span>
@@ -1203,11 +1281,14 @@ function BindPanel({app,open,onClose}){
     <div style={{width:9,height:9,borderRadius:'50%',background:info.color,flexShrink:0}}/>
     <span style={{flex:1,textDecoration:excluded[d.id]?'line-through':'none',color:excluded[d.id]?'var(--mid)':'var(--text)'}}>{d.title||'Untitled'}</span>
   </div>
-  {inclNested&&children.map(function(c,ci){var ci2=STATUSES[c.status]||STATUSES.first_draft;return(
-<div key={c.id} className="bind-draft-row" style={{paddingLeft:32,background:'rgba(7,13,26,.2)'}}>
+  {inclNested&&children.filter(function(c){return !c.archived;}).map(function(c,ci){var ci2=STATUSES[c.status]||STATUSES.first_draft;return(
+<div key={c.id} className="bind-draft-row" style={{paddingLeft:24,background:'rgba(42,31,16,.02)',opacity:excluded[c.id]?.45:1,cursor:'pointer'}} onClick={function(){toggleExclude(c.id);}}>
+  <span style={{width:16,height:16,borderRadius:4,border:'1px solid '+(excluded[c.id]?'var(--border)':'var(--indigo)'),background:excluded[c.id]?'transparent':'var(--indigo)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
+    {!excluded[c.id]&&<span className="mi" style={{fontSize:12,color:'#fff'}}>check</span>}
+  </span>
   <span style={{fontSize:11,color:'var(--mid)',width:28}}>{(i+1)+'.'+(ci+1)}</span>
   <div style={{width:9,height:9,borderRadius:'50%',background:ci2.color,flexShrink:0}}/>
-  <span style={{flex:1,fontSize:12,color:'var(--mid)'}}>{c.title||'Untitled'}</span>
+  <span style={{flex:1,fontSize:12,color:excluded[c.id]?'var(--mid)':'var(--body-text)',textDecoration:excluded[c.id]?'line-through':'none'}}>{c.title||'Untitled'}</span>
 </div>
   );})}
 </div>
@@ -1493,7 +1574,7 @@ function CardsView({app}){
     )}
     <LooseThreadsSection threads={ltDrafts} app={app} view="cards"/>
   </div>
-  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}}/>
+  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
 </div>
   );
 }
@@ -1547,7 +1628,7 @@ function TilesView({app}){
 </div>
     )}
   </div>
-  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}}/>
+  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
 </div>
   );
 }
@@ -1678,7 +1759,7 @@ function TableView({app}){
   );})}
 </div>
   )}
-  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}}/>
+  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
 </div>
   );
 }
@@ -1989,6 +2070,7 @@ function ShareExportDropdown({pos,draft,app,editorRef,flushSave,onClose}){
     document.addEventListener('mousedown',onDown);
     return function(){document.removeEventListener('mousedown',onDown);};
   },[]);
+  var sShareId=useState(null);var currentShareId=sShareId[0];var setCurrentShareId=sShareId[1];
   async function generateLink(){
     if(loading)return;
     setLoading(true);
@@ -2001,7 +2083,13 @@ function ShareExportDropdown({pos,draft,app,editorRef,flushSave,onClose}){
     var res=await supabase.from('shared_drafts').insert({id:sid,title:draft.title||'Untitled',body:body,project_name:projName,author_name:authorName});
     if(res.error){setLoading(false);return;}
     var link=window.location.origin+window.location.pathname+'?share='+sid;
-    setShareLink(link);setLoading(false);
+    setShareLink(link);setCurrentShareId(sid);setShareEnabled(true);setLoading(false);
+  }
+  async function disableLink(){
+    if(currentShareId){
+      await supabase.from('shared_drafts').delete().eq('id',currentShareId);
+    }
+    setShareEnabled(false);setShareLink(null);setCurrentShareId(null);setCopied(false);
   }
   function copyLink(){
     if(!shareLink||!shareEnabled)return;
@@ -2034,7 +2122,7 @@ function ShareExportDropdown({pos,draft,app,editorRef,flushSave,onClose}){
 <div>
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
     <span style={{fontSize:13,color:'var(--text)',fontWeight:500}}>Read-only link</span>
-    <span style={{width:36,height:20,borderRadius:10,background:shareEnabled?'var(--indigo)':'var(--bg3)',cursor:'pointer',position:'relative',transition:'all .2s',flexShrink:0,display:'inline-block'}} onClick={function(){setShareEnabled(!shareEnabled);}}>
+    <span style={{width:36,height:20,borderRadius:10,background:shareEnabled?'var(--indigo)':'var(--bg3)',cursor:'pointer',position:'relative',transition:'all .2s',flexShrink:0,display:'inline-block'}} onClick={function(){if(shareEnabled)disableLink();else generateLink();}}>
       <span style={{position:'absolute',top:2,left:shareEnabled?18:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
     </span>
   </div>
@@ -2045,13 +2133,22 @@ function ShareExportDropdown({pos,draft,app,editorRef,flushSave,onClose}){
   )}
   {shareLink&&(
 <div>
-  <div style={{background:'var(--bg2)',borderRadius:'var(--r)',padding:'8px 10px',fontSize:11,color:shareEnabled?'var(--mid)':'var(--placeholder)',wordBreak:'break-all',marginBottom:8,opacity:shareEnabled?1:.5,fontFamily:'var(--mono)'}}>{shareLink}</div>
-  <button className={'btn btn-primary'} style={{width:'100%',justifyContent:'center',opacity:shareEnabled?1:.4,pointerEvents:shareEnabled?'auto':'none'}} onClick={copyLink}>
-    {copied?<span style={{display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:16}}>check_circle</span>Copied!</span>:<span style={{display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:16}}>content_copy</span>Copy link</span>}
-  </button>
+  <div style={{background:'var(--bg2)',borderRadius:'var(--r)',padding:'8px 10px',fontSize:11,color:'var(--mid)',wordBreak:'break-all',marginBottom:8,fontFamily:'var(--mono)'}}>{shareLink}</div>
+  <div style={{display:'flex',gap:6,marginBottom:8}}>
+    <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={copyLink}>
+      {copied?<span style={{display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:16}}>check_circle</span>Copied!</span>:<span style={{display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:16}}>content_copy</span>Copy link</span>}
+    </button>
+    <button className="btn btn-ghost btn-sm" onClick={generateLink} title="Regenerate with latest draft content" disabled={loading}>
+      <span className="mi" style={{fontSize:16}}>refresh</span>
+    </button>
+  </div>
+  <div style={{fontSize:11,color:'var(--mid)',padding:'8px 10px',background:'var(--bg2)',borderRadius:'var(--r)',lineHeight:1.5}}>
+    <span className="mi" style={{fontSize:13,verticalAlign:'middle',marginRight:4}}>info</span>
+    This is a snapshot of your draft. Refresh to share your latest changes.
+  </div>
 </div>
   )}
-  <div style={{fontSize:11,color:'var(--placeholder)',marginTop:10}}>Anyone with the link can read this draft. No account needed.</div>
+  {!shareLink&&<div style={{fontSize:11,color:'var(--placeholder)',marginTop:10}}>Anyone with the link can read this draft. No account needed.</div>}
 </div>
     )}
     {tab==='export'&&(
