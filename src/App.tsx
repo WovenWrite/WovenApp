@@ -264,7 +264,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .card-hdr{height:44px;background:linear-gradient(135deg,var(--bg2),var(--bg3));display:flex;align-items:center;justify-content:space-between;padding:0 10px;flex-shrink:0;}
 .card-seq{font-family:var(--scribble);font-size:15px;font-weight:600;color:var(--mid);}
 .card-body{flex:1;padding:8px 10px;overflow:hidden;display:flex;flex-direction:column;gap:4px;}
-.card-title-f{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--text);width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;resize:none;overflow:hidden;line-height:1.35;min-height:20px;max-height:52px;display:block;}
+.card-title-f{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--text);width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;resize:none;overflow:hidden;line-height:1.35;height:38px;max-height:52px;display:block;white-space:pre-wrap;}
 .card-title-f:focus{background:var(--bg2);outline:1px solid var(--indigo);}
 .card-title-f::placeholder{color:var(--placeholder);}
 .card-syn-f{font-size:12px;color:var(--mid);flex:1;resize:none;overflow-y:auto;width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;font-family:var(--ui);line-height:1.4;}
@@ -298,7 +298,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .wt tr:hover td{background:rgba(196,94,40,.03);}
 .wt tr.drag-over td{background:rgba(196,94,40,.06);}
 .wt tr.nest-row td{background:rgba(42,31,16,.02);}
-.tbl-inp{background:transparent;border:none;padding:0;font-size:13px;color:var(--text);font-family:var(--ui);}
+.tbl-inp{background:transparent;border:none;padding:0;font-size:13px;color:var(--text);font-family:var(--ui);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .tbl-inp:focus{background:var(--bg1);border-radius:3px;padding:2px 5px;outline:1px solid var(--indigo);}
 .tbl-inp::placeholder{color:var(--placeholder);}
 .tbl-inp.syn{color:var(--mid);font-size:12px;}
@@ -716,7 +716,7 @@ function ProjectEditPanel({proj,app,onClose}){
 // ── GlobalLooseThreads ──
 function GlobalLooseThreads({app}){
   // Global LTs are stored in app.globalLT (keyed by id), not tied to any project
-  var allLT=Object.values(app.globalLT||{}).filter(function(d){return !d.archived;});
+  var allLT=Object.values(app.globalLT||{}).filter(function(d){return !d.archived;}).sort(function(a,b){return (b.createdAt||'').localeCompare(a.createdAt||'');});
   var activeProjects=app.projects.filter(function(p){return !p.archived;});
   var soi=useState(null);var openLTId=soi[0];var setOpenLTId=soi[1];
   function updateLT(id,changes){app.updateGlobalLT(id,changes);}
@@ -730,15 +730,23 @@ function GlobalLooseThreads({app}){
     app.addDraft(targetPid,{id:genId(),projectId:targetPid,title:lt.title||'',synopsis:lt.synopsis||'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
     app.updateGlobalLT(ltId,{archived:true});
   }
+  var ssm=useState(false);var showMore=ssm[0];var setShowMore=ssm[1];
+  // Show one row (approx 3-4 cards) collapsed, rest hidden
+  var visibleLT=showMore?allLT:allLT.slice(0,3);
+  function handleAddLT(){
+    var id=genId();
+    app.updateGlobalLT(id,{id:id,title:'',synopsis:'',createdAt:new Date().toISOString(),archived:false});
+    setOpenLTId(id);
+  }
   return(
 <div style={{marginTop:24}}>
   <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Loose Threads</div>
   <div className="cards-grid">
-    <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:6,display:'flex',flexDirection:'column',boxShadow:'none',height:'auto',minHeight:100}} onClick={addLT}>
+    <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:6,display:'flex',flexDirection:'column',boxShadow:'none',height:'auto',minHeight:100}} onClick={handleAddLT}>
       <span className="mi" style={{fontSize:22,color:'var(--placeholder)'}}>add_circle_outline</span>
       <span style={{fontSize:12,color:'var(--placeholder)'}}>New loose thread</span>
     </div>
-    {allLT.map(function(d){return(
+    {visibleLT.map(function(d){return(
 <div key={d.id} className="draft-card" style={{height:'auto',minHeight:140,cursor:'pointer'}} onClick={function(){setOpenLTId(d.id);}}>
   <div className="card-body" style={{padding:'10px 12px'}}>
     <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:d.title?'var(--text)':'var(--placeholder)',marginBottom:4,lineHeight:1.3}}>{d.title||'Untitled loose thread'}</div>
@@ -750,6 +758,13 @@ function GlobalLooseThreads({app}){
 </div>
     );})}
   </div>
+  {allLT.length>3&&(
+<div style={{marginTop:8,textAlign:'center'}}>
+  <button className="btn btn-ghost btn-sm" onClick={function(){setShowMore(!showMore);}}>
+    {showMore?'Show less':'Show '+( allLT.length-3)+' more'}
+  </button>
+</div>
+  )}
   {openLTId&&(
 <LTDrawer lt={app.globalLT[openLTId]} activeProjects={activeProjects} onUpdate={function(changes){updateLT(openLTId,changes);}} onMove={function(pid){moveToProject(openLTId,pid);setOpenLTId(null);}} onClose={function(){setOpenLTId(null);}} onDelete={function(){updateLT(openLTId,{archived:true});setOpenLTId(null);}}/>
   )}
@@ -1483,10 +1498,7 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
     ):<span style={{color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:16}}>drag_indicator</span></span>}
   </div>
   <div className="card-body">
-    <div style={{position:'relative'}} className="has-tooltip">
-      <textarea className="card-title-f" defaultValue={draft.title} placeholder="Untitled draft" rows={1} ref={function(el){if(el){el.style.height='auto';el.style.height=el.scrollHeight+'px';}}} onInput={function(e){e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px';}} onBlur={function(e){update({title:e.target.value});}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}}/>
-      {(draft.title&&draft.title.length>30)&&<span className="tooltip-text" style={{bottom:'auto',top:'calc(100% + 4px)',transform:'translateX(0)',left:0,maxWidth:200}}>{draft.title}</span>}
-    </div>
+    <textarea className="card-title-f" title={draft.title||''} defaultValue={draft.title} placeholder="Untitled draft" rows={2} onBlur={function(e){update({title:e.target.value});}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}}/>
     {draft.synopsis?(
 <textarea className="card-syn-f" defaultValue={draft.synopsis} rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
     ):(
@@ -1539,6 +1551,8 @@ function SynopsisPreview({draft,onUpdate}){
 // ── LooseThreadsSection ──
 function LooseThreadsSection({threads,app,view}){
   var s=useState(true);var open=s[0];var setOpen=s[1];
+  // threads prop already comes in; sort newest first
+  var sortedThreads=threads.slice().sort(function(a,b){return (b.createdAt||'').localeCompare(a.createdAt||'');});
   function addLT(){app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
   var isTile=view==='tiles';var isTable=view==='table';
   return(
@@ -1566,7 +1580,7 @@ function LooseThreadsSection({threads,app,view}){
 <div>
   {isTable?(
 <div>
-  {threads.map(function(d){return(
+  {sortedThreads.map(function(d){return(
 <div key={d.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderBottom:'1px solid var(--bg2)'}}
   draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',d.id);}}>
   <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab'}}>drag_indicator</span>
@@ -1590,15 +1604,14 @@ function LooseThreadsSection({threads,app,view}){
 </div>
   ):(
 <div className="cards-grid">
-  {threads.map(function(d){return <DraftCard key={d.id} draft={d} label="~" app={app}/>;} )}
+  <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:8,display:'flex',flexDirection:'column',boxShadow:'none'}} onClick={addLT}>
+    <span className="mi" style={{fontSize:22,color:'var(--placeholder)'}}>add_circle_outline</span>
+    <span style={{fontSize:12,color:'var(--placeholder)'}}>New loose thread</span>
+  </div>
+  {sortedThreads.map(function(d){return <DraftCard key={d.id} draft={d} label="~" app={app}/>;} )}
 </div>
   )}
-  <div className="cards-grid" style={{marginTop:8}}>
-    <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:8,display:'flex',flexDirection:'column',boxShadow:'none'}} onClick={addLT}>
-      <span className="mi" style={{fontSize:28,color:'var(--placeholder)'}}>add_circle_outline</span>
-      <span style={{fontSize:13,color:'var(--mid)'}}>New loose thread</span>
-    </div>
-  </div>
+
 </div>
   )}
 </div>
@@ -1743,14 +1756,19 @@ function TableView({app}){
     ,{id:'strandTags',label:'Strands'}
   ].concat(draftFieldDefs.map(function(f){return{id:'cf_'+f.id,label:f.label};}));
   function toggleCol(id){var next=visCols.includes(id)?visCols.filter(function(c){return c!==id;}):visCols.concat([id]);setVisCols(next);try{localStorage.setItem(projKey,JSON.stringify(next));}catch(e){}}
-  useEffect(function(){if(!colOpen)return;function onDown(e){if(colRef.current&&!colRef.current.contains(e.target))setColOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[colOpen]);
+  var colDropRef=useRef(null);
+  useEffect(function(){if(!colOpen)return;function onDown(e){
+    if(colRef.current&&colRef.current.contains(e.target))return;
+    if(colDropRef.current&&colDropRef.current.contains(e.target))return;
+    setColOpen(false);
+  }document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[colOpen]);
   var allDrafts=app.allDrafts[app.projId]||[];
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
   var displayed=applyFS(tree,filter,sort);
   function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
   function renderCell(col,draft){
-    if(col==='title')return <input className="tbl-inp" style={{fontFamily:'var(--serif)',fontWeight:600,fontSize:14}} defaultValue={draft.title} placeholder="Untitled" onBlur={function(e){app.updateDraft(app.projId,draft.id,{title:e.target.value});}}/>;
+    if(col==='title')return <input className="tbl-inp" style={{fontFamily:'var(--serif)',fontWeight:600,fontSize:14,textOverflow:'ellipsis',overflow:'hidden',whiteSpace:'nowrap'}} title={draft.title||''} defaultValue={draft.title} placeholder="Untitled" onBlur={function(e){app.updateDraft(app.projId,draft.id,{title:e.target.value});}}/>;
     if(col==='status'){return <StatusDotWithArchive draft={draft} app={app} showLabel={true}/>;}
     if(col==='wordCount')return <span style={{fontSize:12,color:'var(--mid)'}}>{draft.wordCount||0}</span>;
     if(col==='synopsis')return <input className="tbl-inp syn" defaultValue={draft.synopsis} placeholder="Synopsis..." onBlur={function(e){app.updateDraft(app.projId,draft.id,{synopsis:e.target.value});}} style={{width:'100%'}}/>;
@@ -1826,7 +1844,7 @@ function TableView({app}){
     )}
   </div>
   {colOpen&&(
-<div className="col-vis-drop" style={{top:colPos.top,right:colPos.right,maxHeight:'60vh',overflowY:'auto'}}>
+<div ref={colDropRef} className="col-vis-drop" style={{top:colPos.top,right:colPos.right,maxHeight:'60vh',overflowY:'auto'}}>
   <div style={{padding:'4px 8px 6px',fontSize:11,color:'var(--mid)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.06em'}}>Columns</div>
   {allAvailCols.map(function(col){var isVis=visCols.includes(col.id);return(
 <div key={col.id} className="col-vis-item" onClick={function(){toggleCol(col.id);}}>
@@ -3143,7 +3161,14 @@ function App(){
     setProfileState({firstName:'',lastName:'',email:'',plan:'Free'});
     loadDB('woven:global_lt',{}).then(function(g){setGlobalLT(g||{});});
     loadDB('woven:goal',500).then(function(g){setGoalState(g);});
-    loadDB('woven:sessions',[]).then(function(s){setSessions(s);});
+    // Load sessions from localStorage first (faster, avoids async timing issues)
+    loadLS('woven:sessions',[]).then(function(local){
+      if(local&&local.length>0){setSessions(local);}
+      // Then try Supabase in background and merge if newer
+      loadDB('woven:sessions',[]).then(function(remote){
+        if(remote&&remote.length>0){setSessions(remote);}
+      });
+    });
     loadDB('woven:profile',{firstName:'',lastName:'',email:'',plan:'Free'}).then(function(p){
       if(!p.email&&window.__wovenUserId){
         supabase.auth.getUser().then(function(r){
@@ -3229,7 +3254,9 @@ function App(){
     var t=todayStr();
     setSessions(function(prev){
       var next=prev.filter(function(s){return s.date!==t;});
-      saveDB('woven:sessions',next);return next;
+      saveLS('woven:sessions',next);
+      if(window.__wovenUserId){supabase.from('wf_data').upsert({key:'woven:sessions',user_id:window.__wovenUserId,value:next,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(){});}
+      return next;
     });
   }
   function recordSession(pid,wordsAdded){
@@ -3247,9 +3274,13 @@ function App(){
         next.push({id:genId(),date:t,projId:pid,words:wordsAdded});
       }
       // Keep only last 90 days
-      var cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);var cutoffStr=cutoff.toISOString().slice(0,10);
+      var cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);var cutoffStr=cutoff.getFullYear()+'-'+String(cutoff.getMonth()+1).padStart(2,'0')+'-'+String(cutoff.getDate()).padStart(2,'0');
       next=next.filter(function(s){return s.date>=cutoffStr;});
-      saveDB('woven:sessions',next);
+      // Sessions: always save to localStorage first for reliability, then sync to Supabase
+      saveLS('woven:sessions',next);
+      if(window.__wovenUserId){
+        supabase.from('wf_data').upsert({key:'woven:sessions',user_id:window.__wovenUserId,value:next,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(){});
+      }
       return next;
     });
   }
