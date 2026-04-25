@@ -264,7 +264,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .card-hdr{height:44px;background:linear-gradient(135deg,var(--bg2),var(--bg3));display:flex;align-items:center;justify-content:space-between;padding:0 10px;flex-shrink:0;}
 .card-seq{font-family:var(--scribble);font-size:15px;font-weight:600;color:var(--mid);}
 .card-body{flex:1;padding:8px 10px;overflow:hidden;display:flex;flex-direction:column;gap:4px;}
-.card-title-f{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--text);width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;resize:none;overflow:hidden;line-height:1.35;min-height:38px;max-height:52px;display:block;}
+.card-title-f{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--text);width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;resize:none;overflow:hidden;line-height:1.35;min-height:20px;max-height:52px;display:block;}
 .card-title-f:focus{background:var(--bg2);outline:1px solid var(--indigo);}
 .card-title-f::placeholder{color:var(--placeholder);}
 .card-syn-f{font-size:12px;color:var(--mid);flex:1;resize:none;overflow-y:auto;width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;font-family:var(--ui);line-height:1.4;}
@@ -399,7 +399,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .col-vis-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;font-size:13px;color:var(--text);}
 .col-vis-item:hover{background:var(--bg2);}
 .auth-grain{position:absolute;inset:0;opacity:.07;mix-blend-mode:multiply;pointer-events:none;z-index:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23g)'/%3E%3C/svg%3E");}
-.coming-soon{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:16px;color:var(--placeholder);}@keyframes spin{to{transform:rotate(360deg);}}
+.coming-soon{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:16px;color:var(--placeholder);}@keyframes spin{to{transform:rotate(360deg);}}@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
 .has-tooltip{position:relative;}
 .has-tooltip:hover .tooltip-text{opacity:1;pointer-events:none;}
 .tooltip-text{position:fixed;background:var(--text);color:var(--bg0);font-size:11px;font-family:var(--ui);padding:4px 10px;border-radius:4px;white-space:nowrap;opacity:0;transition:opacity .15s;pointer-events:none;z-index:9999;transform:translateX(-50%) translateY(-100%);margin-top:-6px;max-width:220px;text-align:center;white-space:normal;line-height:1.4;}
@@ -965,42 +965,72 @@ function stripHtmlForExport(html){
   return html.replace(/<h1[^>]*>(.*?)<\/h1>/gi,'\n\n$1\n').replace(/<h2[^>]*>(.*?)<\/h2>/gi,'\n\n$1\n').replace(/<br\s*\/?>/gi,'\n').replace(/<p[^>]*>(.*?)<\/p>/gi,'$1\n').replace(/<li[^>]*>(.*?)<\/li>/gi,'• $1\n').replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ').trim();
 }
 
-function doExport(format,drafts,project,isSingleDraft){
-  // For single draft export use draft title; for bind use project title
+function cleanBodyForExport(html){
+  if(!html)return'<p></p>';
+  return html
+    .replace(/<mark[^>]*>/gi,'<span style="background:#fff3cd;">')
+    .replace(/<\/mark>/gi,'</span>')
+    .replace(/<div([^>]*)>/gi,'<p$1>')
+    .replace(/<\/div>/gi,'</p>')
+    .replace(/(<[a-z][^>]*?)\s+class="[^"]*"/gi,'$1')
+    .replace(/(<[a-z][^>]*?)\s+style="[^"]*color:[^;"]*;?([^"]*)"?/gi,'$1')
+    .replace(/<!--[\s\S]*?-->/g,'')
+    .trim();
+}
+
+function doExport(format,drafts,project,isSingleDraft,authorName){
   var isSingle=isSingleDraft||(drafts&&drafts.length===1);
   var projectTitle=(project&&project.title)||'Manuscript';
-  var title=isSingle&&drafts&&drafts[0]?(drafts[0].title||'Untitled'):projectTitle;
-  // Sort drafts by order to guarantee correct sequence
-  var sorted=drafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
+  var displayTitle=isSingle&&drafts&&drafts[0]?(drafts[0].title||'Untitled'):projectTitle;
+  var author=authorName||((project&&project.authorName)||'');
+  var totalWords=drafts.reduce(function(s,d){return s+(d.wordCount||0);},0);
+  // Stable sort: by order, preserving original array position as tiebreaker
+  var sorted=drafts.map(function(d,i){return{d:d,i:i};})
+    .sort(function(a,b){
+      var ao=a.d.order!=null?a.d.order:999;
+      var bo=b.d.order!=null?b.d.order:999;
+      if(ao!==bo)return ao-bo;
+      return a.i-b.i;
+    }).map(function(x){return x.d;});
+
   if(format==='PDF'){
     var jspdfLib=window.jspdf||window.jsPDF;
-    if(!jspdfLib){
-      // Try alternate global
-      if(window.jspdf&&window.jspdf.jsPDF)jspdfLib=window.jspdf;
-      else{alert('PDF export is still loading. Please try again in a moment.');return false;}
-    }
+    if(jspdfLib&&jspdfLib.jsPDF)jspdfLib=jspdfLib;
+    else if(!jspdfLib){alert('PDF export is still loading. Please try again in a moment.');return false;}
     var JsPDF=jspdfLib.jsPDF||jspdfLib;
     var doc=new JsPDF({unit:'mm',format:'a4'});
     var margin=25;var pageW=210-margin*2;var y=margin;var lineH=7;
-    // Title page
-    if(isSingle&&sorted.length===1){
-      var sd=sorted[0];
-      doc.setFontSize(11);doc.setFont('times','normal');
-      doc.text((projectTitle).toUpperCase(),105,70,{align:'center'});
-      doc.setFontSize(26);doc.setFont('times','bold');
-      doc.text(sd.title||'Untitled',105,90,{align:'center'});
-      doc.setFontSize(14);doc.setFont('times','italic');
-    } else {
-      doc.setFontSize(26);doc.setFont('times','bold');
-      doc.text(title,105,90,{align:'center'});
-      doc.setFontSize(12);doc.setFont('times','normal');
-      doc.text('Written in Woven',105,105,{align:'center'});
-    }
+
+    // ── Cover page ──
+    doc.setFontSize(11);doc.setFont('times','normal');
+    doc.text(projectTitle.toUpperCase(),105,60,{align:'center'});
+    doc.setFontSize(28);doc.setFont('times','bold');
+    var titleLines=doc.splitTextToSize(displayTitle,pageW);
+    doc.text(titleLines,105,85,{align:'center'});
+    var coverY=85+titleLines.length*12;
+    if(author){doc.setFontSize(14);doc.setFont('times','italic');doc.text('By '+author,105,coverY+8,{align:'center'});coverY+=16;}
+    doc.setFontSize(11);doc.setFont('times','normal');
+    doc.text(totalWords.toLocaleString()+' words',105,coverY+8,{align:'center'});
+    doc.text('Written in Woven',105,coverY+18,{align:'center'});
+
+    // ── Index page ──
+    doc.addPage();y=30;
+    doc.setFontSize(16);doc.setFont('times','bold');
+    doc.text('Contents',margin,y);y+=12;
+    doc.setFontSize(12);doc.setFont('times','normal');
+    sorted.forEach(function(draft,i){
+      if(y>270){doc.addPage();y=30;}
+      var num=(i+1)+'.  ';
+      var draftTitle=doc.splitTextToSize(num+(draft.title||'Untitled'),pageW);
+      doc.text(draftTitle,margin,y);y+=draftTitle.length*lineH+2;
+    });
+
+    // ── Draft pages ──
     sorted.forEach(function(draft){
       doc.addPage();y=margin;
       doc.setFontSize(18);doc.setFont('times','bold');
-      var titleLines=doc.splitTextToSize(draft.title||'Untitled',pageW);
-      doc.text(titleLines,margin,y);y+=titleLines.length*9+8;
+      var dTitle=doc.splitTextToSize(draft.title||'Untitled',pageW);
+      doc.text(dTitle,margin,y);y+=dTitle.length*9+10;
       doc.setFontSize(12);doc.setFont('times','normal');
       var bodyText=stripHtmlForExport(draft.body||'');
       if(bodyText){
@@ -1011,43 +1041,61 @@ function doExport(format,drafts,project,isSingleDraft){
         });
       }
     });
-    doc.save(title.replace(/\s+/g,'_')+'.pdf');
+    doc.save(displayTitle.replace(/\s+/g,'_')+'.pdf');
     return true;
+
   } else {
-    // Word doc - use proper HTML that Word can parse
+    // ── DOCX (Word HTML format) ──
+    var filename=displayTitle.replace(/\s+/g,'_');
+    var css='';
+    css+='body{font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:1.8;margin:1in 1.25in;}';
+    css+='.cover{text-align:center;page-break-after:always;}';
+    css+='.cover-eyebrow{font-size:9pt;color:#888;text-transform:uppercase;letter-spacing:.12em;margin-bottom:48pt;margin-top:72pt;}';
+    css+='.cover-title{font-size:30pt;font-weight:bold;margin-bottom:16pt;line-height:1.2;}';
+    css+='.cover-byline{font-size:14pt;font-style:italic;margin-bottom:8pt;}';
+    css+='.cover-meta{font-size:10pt;color:#666;margin-bottom:6pt;}';
+    css+='.toc{page-break-after:always;}';
+    css+='.toc h1{font-size:18pt;margin-bottom:20pt;}';
+    css+='.toc-item{font-size:12pt;margin-bottom:6pt;}';
+    css+='h2{font-size:16pt;font-weight:bold;margin-top:0;margin-bottom:14pt;page-break-before:always;}';
+    css+='h2.first-chapter{page-break-before:avoid;}';
+    css+='p{margin-bottom:8pt;margin-top:0;}';
+    css+='strong,b{font-weight:bold;}';
+    css+='em,i{font-style:italic;}';
+    css+='ul{margin:0 0 8pt 24pt;}li{margin-bottom:4pt;}';
+
     var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">';
-    html+='<head><meta charset="utf-8"><style>';
-    html+='body{font-family:Times New Roman,Times,serif;font-size:12pt;line-height:1.8;margin:1in;}';
-    html+='h1{font-size:16pt;font-weight:bold;page-break-before:always;margin-top:0;margin-bottom:12pt;}';
-    html+='h1.first-draft{page-break-before:avoid;}';
-    html+='p{margin-bottom:8pt;margin-top:0;}';
-    html+='.title-page{text-align:center;margin-bottom:0;}';
-    html+='.book-title{font-size:28pt;font-weight:bold;margin-top:2in;margin-bottom:12pt;}';
-    html+='</style></head><body>';
-    html+='<div class="title-page">';
-    if(isSingle&&sorted.length===1){
-      var sd=sorted[0];
-      html+='<p style="font-size:9pt;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-bottom:20pt;">'+projectTitle+'</p>';
-      html+='<p class="book-title">'+(sd.title||'Untitled')+'</p>';
-    } else {
-      html+='<p class="book-title">'+title+'</p>';
-    }
+    html+='<head><meta charset="utf-8"><style>'+css+'</style></head><body>';
+
+    // Cover
+    html+='<div class="cover">';
+    html+='<p class="cover-eyebrow">'+projectTitle+'</p>';
+    html+='<p class="cover-title">'+displayTitle+'</p>';
+    if(author)html+='<p class="cover-byline">By '+author+'</p>';
+    html+='<p class="cover-meta">'+totalWords.toLocaleString()+' words</p>';
+    html+='<p class="cover-meta">Written in Woven</p>';
     html+='</div>';
-    var isFirst=true;
-    sorted.forEach(function(draft){
-      // Preserve rich text, just clean up mark tags and inline styles that Word can't handle
-      var body=(draft.body||'<p></p>')
-        .replace(/<mark[^>]*>/gi,'<span style="background:#fff3cd;">')
-        .replace(/<\/mark>/gi,'</span>');
-      html+='<h1 class="'+(isFirst?'first-draft':'')+'>'+(draft.title||'Untitled')+'</h1>';
-      html+=body;
-      isFirst=false;
+
+    // Index
+    html+='<div class="toc"><h1>Contents</h1>';
+    sorted.forEach(function(draft,i){
+      html+='<p class="toc-item">'+(i+1)+'.&nbsp;&nbsp;&nbsp;'+(draft.title||'Untitled')+'</p>';
     });
+    html+='</div>';
+
+    // Drafts
+    sorted.forEach(function(draft,i){
+      var body=cleanBodyForExport(draft.body||'');
+      html+='<h2 class="'+(i===0?'first-chapter':'')+'">'+(draft.title||'Untitled')+'</h2>';
+      html+=body;
+    });
+
     html+='</body></html>';
-    var blob=new Blob([html],{type:'application/msword'});
+    var blob=new Blob(['﻿'+html],{type:'application/msword;charset=utf-8'});
     var url=URL.createObjectURL(blob);
-    var a=document.createElement('a');a.href=url;a.download=title.replace(/\s+/g,'_')+'.doc';a.click();
-    setTimeout(function(){URL.revokeObjectURL(url);},1000);
+    var a=document.createElement('a');a.href=url;a.download=filename+'.doc';
+    document.body.appendChild(a);a.click();
+    setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},1500);
     return true;
   }
 }
@@ -1125,8 +1173,10 @@ function BindPanel({app,open,onClose}){
   function toggleExclude(id){setExcluded(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;});}
   function handleExport(){
     setExporting(true);
+    var profile=app.profile||{};
+    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
     setTimeout(function(){
-      doExport(format,filtered,app.currentProject);
+      doExport(format,filtered,app.currentProject,false,authorName);
       setExporting(false);
       onClose();
     },100);
@@ -1281,7 +1331,7 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
     ):<span style={{color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:16}}>drag_indicator</span></span>}
   </div>
   <div className="card-body">
-    <textarea className="card-title-f" defaultValue={draft.title} placeholder="Untitled draft" rows={2} onBlur={function(e){update({title:e.target.value});}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}}/>
+    <textarea className="card-title-f" defaultValue={draft.title} placeholder="Untitled draft" rows={1} ref={function(el){if(el){el.style.height='auto';el.style.height=el.scrollHeight+'px';}}} onInput={function(e){e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px';}} onBlur={function(e){update({title:e.target.value});}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}}/>
     {draft.synopsis?(
 <textarea className="card-syn-f" defaultValue={draft.synopsis} rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
     ):(
@@ -1961,8 +2011,10 @@ function ShareExportDropdown({pos,draft,app,editorRef,flushSave,onClose}){
     if(exporting)return;
     flushSave&&flushSave();
     setExporting(true);
+    var profile=app.profile||{};
+    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
     setTimeout(function(){
-      doExport(fmt,[draft],app.currentProject,true);
+      doExport(fmt,[draft],app.currentProject,true,authorName);
       setExporting(false);
     },80);
   }
@@ -2037,6 +2089,7 @@ function EditorView({app}){
   var sft=useState(null);var floatToolbar=sft[0];var setFloatToolbar=sft[1];
   var ssd2=useState(false);var showStrandDrop=ssd2[0];var setShowStrandDrop=ssd2[1];
   var editorRef=useRef(null);var saveTimer=useRef(null);var lastDraftId=useRef(null);var sessionStartWc=useRef(0);
+  var sst=useState('saved');var saveState=sst[0];var setSaveState=sst[1];
   var isMobile=useIsMobile();
   useEffect(function(){if(!draft)return;if(lastDraftId.current===draft.id)return;lastDraftId.current=draft.id;sessionStartWc.current=draft.wordCount||0;setWc(draft.wordCount||0);if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';},[did]);
   // Only reset editor when mode changes (not on re-renders)
@@ -2056,7 +2109,16 @@ function EditorView({app}){
     var added=Math.max(0,newWc-sessionStartWc.current);
     if(added>0&&added<500){app.recordSession(pid,added);sessionStartWc.current=newWc;}
   }
-  function scheduleSave(html,newWc){if(saveTimer.current)clearTimeout(saveTimer.current);saveTimer.current=setTimeout(function(){app.updateDraft(pid,did,{body:html,wordCount:newWc,updatedAt:new Date().toISOString()});var added=Math.max(0,newWc-sessionStartWc.current);if(added>0&&added<500){app.recordSession(pid,added);sessionStartWc.current=newWc;}},600);}
+  function scheduleSave(html,newWc){
+    setSaveState('saving');
+    if(saveTimer.current)clearTimeout(saveTimer.current);
+    saveTimer.current=setTimeout(function(){
+      app.updateDraft(pid,did,{body:html,wordCount:newWc,updatedAt:new Date().toISOString()});
+      var added=Math.max(0,newWc-sessionStartWc.current);
+      if(added>0&&added<500){app.recordSession(pid,added);sessionStartWc.current=newWc;}
+      setSaveState('saved');
+    },600);
+  }
   function handleRTInput(){if(!editorRef.current)return;var text=editorRef.current.innerText||editorRef.current.textContent||'';var newWc=countWords(text);setWc(newWc);scheduleSave(editorRef.current.innerHTML,newWc);}
   function handlePaste(e){
     e.preventDefault();
@@ -2186,7 +2248,17 @@ function EditorView({app}){
     {showStrands&&!strandDetailId&&<EditorStrandsPanel draft={draft} app={app} onClose={function(){setShowStrands(false);}} onOpenStrand={function(sid){setStrandDetailId(sid);}}/>}
   </div>
   <div className="editor-bottombar">
-    <span>{wc} words</span>
+    <div style={{display:'flex',alignItems:'center',gap:10}}>
+      <span>{wc} words</span>
+      <span style={{display:'flex',alignItems:'center',gap:4,opacity:.7,transition:'opacity .3s'}}>
+        {saveState==='saving'
+          ?<><span style={{width:6,height:6,borderRadius:'50%',background:'var(--indigoL)',display:'inline-block',animation:'pulse 1s infinite'}}/>
+            <span style={{fontSize:11}}>Saving...</span></>
+          :<><span style={{width:6,height:6,borderRadius:'50%',background:'var(--teal)',display:'inline-block'}}/>
+            <span style={{fontSize:11}}>Saved</span></>
+        }
+      </span>
+    </div>
     <div style={{display:'flex',alignItems:'center',gap:8}}>
       <span style={{fontSize:12}}>{zoom}%</span>
       <input type="range" min={70} max={150} step={10} value={zoom} onChange={function(e){setZoom(parseInt(e.target.value,10));}} style={{width:72}}/>
