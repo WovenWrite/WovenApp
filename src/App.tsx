@@ -1243,8 +1243,7 @@ function BindPanel({app,open,onClose,activeFilter}){
       // Concatenate all filtered drafts into one body
       var combinedBody=filtered.map(function(d){
         return '<h2 style="margin-top:32px;margin-bottom:8px;font-family:serif;">'+(d.title||'Untitled')+'</h2>'+(d.body||'');
-      }).join('
-');
+      }).join('');
       var res=await supabase.from('shared_drafts').insert({id:sid,title:projName||(activeStrand?activeStrand.name+' — '+projName:projName),body:combinedBody,project_name:projName,author_name:authorName});
       if(res.error){setShareLoading(false);return;}
       var link=window.location.origin+window.location.pathname+'?share='+sid;
