@@ -1,4 +1,5 @@
 // @ts-nocheck
+import ExploreCanvas from './ExploreCanvas'
 import { useState, useEffect, useRef } from "react";
 // ── Supabase (loaded via CDN) ──
 var SB_URL='https://mxsdiqrbxlvcwexfdtrj.supabase.co';
