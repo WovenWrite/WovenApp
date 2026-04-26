@@ -1,4 +1,5 @@
 // @ts-nocheck
+import ExploreCanvas from './ExploreCanvas'
 import { useState, useEffect, useRef } from "react";
 // ── Supabase (loaded via CDN) ──
 var SB_URL='https://mxsdiqrbxlvcwexfdtrj.supabase.co';
@@ -3313,7 +3314,7 @@ function App(){
   }else if(view==='editor'){inner=<EditorView app={app}/>;
   }else{
     var vc=null;
-    if(view==='canvas')vc=<div className="coming-soon dot-grid" style={{flex:1}}><span className="mi" style={{fontSize:56,color:'var(--placeholder)'}}>hub</span><div style={{fontFamily:'var(--serif)',fontSize:24,color:'var(--mid)'}}>Canvas</div><div style={{fontSize:14,color:'var(--border)',maxWidth:280,textAlign:'center',lineHeight:1.6}}>The visual mapping board is coming soon.</div></div>;
+   if(view==='canvas')vc=<ExploreCanvas app={app}/>;
     if(view==='cards')vc=<CardsView app={app}/>;
     if(view==='table')vc=<TableView app={app}/>;
     if(view==='strands')vc=<StrandsPage app={app} allProjects={projects}/>;
