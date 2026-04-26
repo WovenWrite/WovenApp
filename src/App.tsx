@@ -2137,7 +2137,7 @@ function EditorStrandsPanel({draft,app,onClose,onOpenStrand}){
   </div>
     <span className="mi" style={{fontSize:16,color:'var(--border)'}}>chevron_right</span>
   </div>
-  <button className="btn-icon" style={{padding:2,flexShrink:0}} title="Untag strand" onClick={function(){var tags=draft.strandTags||[];app.updateDraft(app.projId,draft.id,{strandTags:tags.filter(function(t){return t!==st.id;});});}}>
+  <button className="btn-icon" style={{padding:2,flexShrink:0}} title="Untag strand" onClick={function(){var tags=draft.strandTags||[];app.updateDraft(app.projId,draft.id,{strandTags:tags.filter(function(t){return t!==st.id;})});}}>
     <span className="mi" style={{fontSize:16,color:'var(--placeholder)'}}>close</span>
   </button>
 </div>
