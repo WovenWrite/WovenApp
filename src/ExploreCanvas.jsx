@@ -1,13 +1,13 @@
 // @ts-nocheck
-// Woven — ExploreCanvas
-// Drop into src/ExploreCanvas.jsx in the main app.
+// Woven — ExploreCanvas v2
+// src/ExploreCanvas.jsx
 //
 // Prerequisites:
-//   - npm install @xyflow/react
+//   - @xyflow/react in package.json
 //   - import '@xyflow/react/dist/style.css' in src/main.tsx
 //   - vite.config: resolve: { dedupe: ['react','react-dom'] }
 //
-// Usage in App.jsx (line ~3316):
+// Usage in App.jsx:
 //   import ExploreCanvas from './ExploreCanvas'
 //   if(view==='canvas') vc = <ExploreCanvas app={app} />;
 
@@ -19,27 +19,26 @@ import {
 } from '@xyflow/react'
 
 // ─────────────────────────────────────────────────────────────
-// STYLES  (canvas-specific only — design tokens come from main app)
+// STYLES
 // ─────────────────────────────────────────────────────────────
 const CANVAS_CSS = `
-/* Canvas shell */
 .ex-shell{display:flex;flex-direction:column;height:100%;width:100%;overflow:hidden;}
 .ex-body{display:flex;flex:1;overflow:hidden;min-height:0;}
 .ex-canvas-col{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0;}
 
-/* Tabs */
+/* Board tabs */
 .ex-tabs{display:flex;align-items:flex-end;height:36px;background:var(--bg1);
-  border-bottom:1px solid var(--border);padding:0 8px;gap:2px;flex-shrink:0;}
+  border-bottom:1px solid var(--border);padding:0 8px;gap:2px;flex-shrink:0;overflow:hidden;}
 .ex-tab{display:flex;align-items:center;gap:5px;height:28px;padding:0 10px;
   border-radius:6px 6px 0 0;font-size:12px;font-weight:500;cursor:pointer;
   color:var(--mid);border:1px solid transparent;border-bottom:none;
-  transition:all .12s;white-space:nowrap;max-width:160px;overflow:hidden;}
+  transition:all .12s;white-space:nowrap;max-width:160px;flex-shrink:0;}
 .ex-tab:hover{color:var(--text);background:var(--bg2);}
 .ex-tab.active{background:var(--bg0);color:var(--text);border-color:var(--border);
   border-bottom-color:var(--bg0);position:relative;top:1px;}
-.ex-tab-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ex-tab-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ex-tab-name-input{background:none;border:none;outline:none;font-family:var(--ui);
-  font-size:12px;font-weight:500;color:var(--text);width:90px;padding:0;}
+  font-size:12px;font-weight:500;color:var(--text);width:80px;padding:0;border-radius:0;}
 .ex-tab-close{font-size:13px;color:var(--placeholder);border-radius:3px;padding:1px 2px;
   display:flex;align-items:center;justify-content:center;font-family:'Material Icons';
   line-height:1;flex-shrink:0;}
@@ -50,7 +49,7 @@ const CANVAS_CSS = `
   transition:all .12s;line-height:1;user-select:none;}
 .ex-tab-add:hover{border-color:var(--indigo);color:var(--indigo);background:rgba(196,94,40,.05);}
 
-/* Canvas + right panel row */
+/* Canvas row */
 .ex-canvas-row{flex:1;display:flex;overflow:hidden;min-height:0;}
 .ex-canvas-area{flex:1;position:relative;overflow:hidden;min-height:0;}
 
@@ -72,10 +71,9 @@ const CANVAS_CSS = `
 .react-flow__node:hover .react-flow__handle{opacity:1;background:var(--indigo)!important;
   border-color:var(--indigoL)!important;box-shadow:0 0 0 3px rgba(196,94,40,.25);}
 .react-flow__handle:hover{transform:scale(1.4);opacity:1!important;
-  background:var(--indigo)!important;border-color:var(--indigoL)!important;
-  box-shadow:0 0 0 4px rgba(196,94,40,.3)!important;}
-.react-flow__handle-connecting,.react-flow__handle-valid{opacity:1!important;}
-.react-flow__node:hover .woven-card:not(.selected){box-shadow:0 0 0 2px rgba(196,94,40,.2),0 4px 16px rgba(42,31,16,.1);}
+  background:var(--indigo)!important;box-shadow:0 0 0 4px rgba(196,94,40,.3)!important;}
+.react-flow__node:hover .woven-card:not(.selected){
+  box-shadow:0 0 0 2px rgba(196,94,40,.2),0 4px 16px rgba(42,31,16,.1);}
 
 /* Right panel */
 .ex-right{display:flex;flex-direction:row-reverse;flex-shrink:0;}
@@ -97,18 +95,27 @@ const CANVAS_CSS = `
   border-left:1px solid var(--border);display:flex;flex-direction:column;}
 .ex-drawer.open{width:280px;margin:5px 5px 5px 0;border:1px solid var(--border);border-radius:var(--r);}
 .ex-drawer-inner{width:280px;display:flex;flex-direction:column;height:100%;overflow:hidden;}
-.ex-editor-drawer{background:var(--bg1);display:flex;flex-direction:column;height:100%;}
+.ex-edrawer{background:var(--bg1);display:flex;flex-direction:column;height:100%;}
 .ex-edrawer-hdr{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;
   align-items:center;justify-content:space-between;flex-shrink:0;background:var(--bg1);}
 .ex-edrawer-title{font-size:14px;font-weight:600;color:var(--text);}
 .ex-edrawer-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
-.ex-edrawer-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;
-  overflow-x:auto;background:var(--bg1);}
-.ex-edrawer-tab{padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;
-  color:var(--mid);border-bottom:2px solid transparent;white-space:nowrap;transition:all .12s;}
-.ex-edrawer-tab:hover{color:var(--text);}
-.ex-edrawer-tab.active{color:var(--indigo);border-bottom-color:var(--indigo);}
-.ex-edrawer-section{padding:10px 14px;border-bottom:1px solid var(--border);}
+
+/* Strand collection tabs — scrollable with overflow arrows */
+.ex-coll-tabs-wrap{display:flex;align-items:center;border-bottom:1px solid var(--border);
+  flex-shrink:0;background:var(--bg1);}
+.ex-coll-tabs-scroll{display:flex;overflow-x:auto;flex:1;scrollbar-width:none;}
+.ex-coll-tabs-scroll::-webkit-scrollbar{display:none;}
+.ex-coll-tab{padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;
+  color:var(--mid);border-bottom:2px solid transparent;white-space:nowrap;
+  transition:color .12s;flex-shrink:0;}
+.ex-coll-tab:hover{color:var(--text);}
+.ex-coll-tab.active{color:var(--indigo);border-bottom-color:var(--indigo);}
+.ex-coll-arrow{width:24px;height:32px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--mid);flex-shrink:0;font-size:14px;}
+.ex-coll-arrow:hover{color:var(--text);}
+
+.ex-edrawer-section{padding:10px 14px;}
 .ex-edrawer-lbl{font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;
   letter-spacing:.08em;margin-bottom:7px;display:block;}
 .ex-edrawer-row{display:flex;align-items:center;gap:10px;padding:9px 14px;
@@ -123,9 +130,9 @@ const CANVAS_CSS = `
 .ex-edrawer-name{font-family:var(--serif);font-size:14px;font-weight:600;color:var(--text);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .ex-edrawer-sub{font-size:11px;color:var(--mid);}
-.ex-edrawer-drag-hint{font-size:12px;color:var(--placeholder);font-family:var(--scribble);
+.ex-edrawer-hint{font-size:12px;color:var(--placeholder);font-family:var(--scribble);
   opacity:0;transition:opacity .12s;flex-shrink:0;}
-.ex-edrawer-row:hover .ex-edrawer-drag-hint{opacity:1;}
+.ex-edrawer-row:hover .ex-edrawer-hint{opacity:1;}
 
 /* Woven cards */
 .woven-card{background:var(--bg1);border:1.5px solid var(--border);border-radius:10px;
@@ -140,8 +147,8 @@ const CANVAS_CSS = `
 .woven-card-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
 .woven-card-name{font-family:var(--serif);font-size:14px;font-weight:600;color:var(--text);
   flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.woven-card-status{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
-  color:#fff;padding:2px 5px;border-radius:3px;flex-shrink:0;white-space:nowrap;}
+.woven-card-status-badge{font-size:9px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.05em;color:#fff;padding:2px 5px;border-radius:3px;flex-shrink:0;}
 .woven-card-body.has-content{padding:7px 10px;border-top:1px solid var(--border);}
 .woven-card-field{margin-bottom:5px;}
 .woven-card-field:last-child{margin-bottom:0;}
@@ -151,34 +158,36 @@ const CANVAS_CSS = `
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
 
 /* Sticky note */
-.ex-sticky-node{border-radius:8px;display:flex;flex-direction:column;overflow:hidden;
+.ex-sticky{border-radius:8px;display:flex;flex-direction:column;overflow:hidden;
   min-width:160px;min-height:60px;box-shadow:2px 3px 10px rgba(0,0,0,.08);}
-.ex-sticky-drag{height:20px;cursor:grab;display:flex;align-items:center;
-  padding:0 8px;flex-shrink:0;opacity:.5;}
+.ex-sticky-drag{height:18px;cursor:grab;display:flex;align-items:center;
+  padding:0 6px;flex-shrink:0;opacity:.4;}
 .ex-sticky-drag:active{cursor:grabbing;}
-.ex-sticky-drag .mi{font-size:14px;}
-.ex-sticky-content{padding:6px 12px 10px;flex:1;}
-.ex-sticky-input{background:none;border:none;outline:none;width:100%;resize:none;
-  font-family:var(--serif);line-height:1.45;color:#2a1f00;}
-.ex-sticky-input.is-title{font-size:16px;font-weight:600;}
-.ex-sticky-input.is-body{font-size:13px;font-weight:400;font-family:var(--ui);}
+.ex-sticky-drag .mi{font-size:13px;}
+.ex-sticky-content{padding:4px 12px 10px;flex:1;}
+.ex-sticky-input{background:none;border:none;outline:none;width:100%;resize:none;line-height:1.45;}
+.ex-sticky-input.is-title{font-family:var(--serif);font-size:16px;font-weight:600;}
+.ex-sticky-input.is-body{font-family:var(--ui);font-size:13px;}
 .ex-sticky-input::placeholder{opacity:.4;}
 
-/* Image node */
+/* Image node — no header bar */
 .ex-image-node{border:1.5px solid var(--border);border-radius:8px;overflow:hidden;
-  box-shadow:0 2px 8px rgba(42,31,16,.08);background:var(--bg1);display:flex;flex-direction:column;}
-.ex-image-drag{padding:5px 8px;background:var(--bg2);cursor:grab;display:flex;
-  align-items:center;gap:4px;font-size:11px;color:var(--mid);flex-shrink:0;}
-.ex-image-drag:active{cursor:grabbing;}
-.ex-image-drag .mi{font-size:14px;}
-.ex-image-body img{display:block;max-width:100%;max-height:220px;object-fit:cover;}
+  box-shadow:0 2px 8px rgba(42,31,16,.08);background:var(--bg1);
+  display:flex;align-items:center;justify-content:center;position:relative;}
+.ex-image-grip{position:absolute;top:4px;left:4px;width:20px;height:20px;
+  border-radius:4px;background:rgba(255,255,255,.7);display:flex;align-items:center;
+  justify-content:center;cursor:grab;z-index:1;opacity:0;transition:opacity .15s;}
+.ex-image-node:hover .ex-image-grip{opacity:1;}
+.ex-image-grip:active{cursor:grabbing;}
+.ex-image-grip .mi{font-size:13px;color:var(--mid);}
+.ex-image-node img{display:block;width:100%;height:100%;object-fit:cover;}
 .ex-image-empty{width:180px;height:130px;display:flex;align-items:center;
   justify-content:center;flex-direction:column;gap:6px;cursor:pointer;color:var(--placeholder);}
 .ex-image-empty .mi{font-size:32px;}
 .ex-image-empty span{font-size:12px;}
 
 /* Context menu */
-.ex-ctx-menu{position:fixed;z-index:9999;background:var(--bg1);border:1px solid var(--border);
+.ex-ctx{position:fixed;z-index:9999;background:var(--bg1);border:1px solid var(--border);
   border-radius:var(--rl);box-shadow:0 8px 32px rgba(42,31,16,.16);
   min-width:220px;font-family:var(--ui);}
 .ex-ctx-lbl{font-size:9px;font-weight:600;color:var(--indigo);text-transform:uppercase;
@@ -191,7 +200,7 @@ const CANVAS_CSS = `
   background:var(--bg0);transition:all .1s;}
 .ex-ctx-check.on{background:var(--indigo);border-color:var(--indigo);}
 .ex-ctx-check svg{display:block;}
-.ex-ctx-swatch-row{display:flex;align-items:center;gap:6px;padding:6px 14px 10px;}
+.ex-ctx-swatches{display:flex;align-items:center;gap:6px;padding:6px 14px 10px;}
 .ex-ctx-swatch{width:18px;height:18px;border-radius:50%;cursor:pointer;
   border:2px solid transparent;transition:transform .1s;flex-shrink:0;}
 .ex-ctx-swatch:hover,.ex-ctx-swatch.active{transform:scale(1.25);border-color:rgba(0,0,0,.25);}
@@ -203,9 +212,9 @@ const CANVAS_CSS = `
 .ex-ctx-action .mi{font-size:15px;}
 
 /* Delete board modal */
-.ex-modal-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;}
-.ex-modal-backdrop{position:absolute;inset:0;background:rgba(42,31,16,.4);backdrop-filter:blur(2px);}
-.ex-modal-box{position:relative;background:var(--bg1);border:1px solid var(--border);
+.ex-modal-wrap{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;}
+.ex-modal-bg{position:absolute;inset:0;background:rgba(42,31,16,.4);backdrop-filter:blur(2px);}
+.ex-modal{position:relative;background:var(--bg1);border:1px solid var(--border);
   border-radius:var(--rl);padding:28px;width:420px;max-width:92vw;
   box-shadow:0 20px 60px rgba(42,31,16,.18);z-index:1;}
 .ex-modal-title{font-family:var(--serif);font-size:20px;font-weight:600;color:var(--text);margin-bottom:10px;}
@@ -214,7 +223,7 @@ const CANVAS_CSS = `
   padding:8px 12px;font-family:var(--ui);font-size:14px;background:var(--bg0);
   color:var(--text);outline:none;margin-bottom:16px;}
 .ex-modal-input:focus{border-color:var(--indigo);}
-.ex-modal-actions{display:flex;gap:8px;}
+.ex-modal-btns{display:flex;gap:8px;}
 `
 
 function CanvasStyles() {
@@ -233,12 +242,12 @@ const STATUSES = {
 }
 
 const STICKY_COLORS = [
-  { id: 'none',   bg: '#fdf8f0', border: '#e2d0b8', text: '#2a1f10', label: 'None'   },
-  { id: 'amber',  bg: '#fff4e0', border: '#f0c878', text: '#5a3800', label: 'Amber'  },
-  { id: 'sage',   bg: '#eaf5ee', border: '#9ecfaa', text: '#1a3d25', label: 'Sage'   },
-  { id: 'rose',   bg: '#fdeef2', border: '#f0a8bc', text: '#5a1a2a', label: 'Rose'   },
-  { id: 'sky',    bg: '#e8f2fc', border: '#9abee8', text: '#1a3050', label: 'Sky'    },
-  { id: 'lilac',  bg: '#f2eefa', border: '#c8aae8', text: '#3a1a5a', label: 'Lilac'  },
+  { id: 'none',  bg: '#fdf8f0', border: '#e2d0b8', text: '#2a1f10' },
+  { id: 'amber', bg: '#fff4e0', border: '#f0c878', text: '#5a3800' },
+  { id: 'sage',  bg: '#eaf5ee', border: '#9ecfaa', text: '#1a3d25' },
+  { id: 'rose',  bg: '#fdeef2', border: '#f0a8bc', text: '#5a1a2a' },
+  { id: 'sky',   bg: '#e8f2fc', border: '#9abee8', text: '#1a3050' },
+  { id: 'lilac', bg: '#f2eefa', border: '#c8aae8', text: '#3a1a5a' },
 ]
 
 const TOOL_ITEMS = [
@@ -246,7 +255,6 @@ const TOOL_ITEMS = [
   { id: 'sticky', icon: 'sticky_note_2',       label: 'Sticky' },
   { id: 'image',  icon: 'add_photo_alternate', label: 'Image'  },
 ]
-
 const DRAWER_ITEMS = [
   { id: 'strands',       icon: 'share',        label: 'Strands' },
   { id: 'drafts',        icon: 'edit_note',    label: 'Drafts'  },
@@ -259,29 +267,19 @@ const DRAWER_ITEMS = [
 function genId() {
   return '_' + Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
-
 function initials(name) {
-  if (!name || !name.trim()) return '?'
+  if (!name?.trim()) return '?'
   const p = name.trim().split(/\s+/).filter(w => w.length > 0)
-  if (p.length === 0) return '?'
+  if (!p.length) return '?'
   if (p.length === 1) return p[0][0].toUpperCase()
   return (p[0][0] + p[p.length - 1][0]).toUpperCase()
 }
-
 function accentColor(item) {
   if (!item) return '#aaa'
   if (item.itemType === 'strand') return item.color || '#aaa'
   return STATUSES[item.status]?.color || '#aaa'
 }
 
-function badgeLabel(item) {
-  if (!item) return ''
-  if (item.itemType === 'strand') return item.collectionName
-  if (item.itemType === 'draft') return `Draft ${item.order}`
-  return 'Loose Thread'
-}
-
-// Build a draggable payload from a strand/draft/loose_thread
 function buildPayload(raw, itemType, templates) {
   if (itemType === 'strand') {
     const tpl = (templates || []).find(t => t.id === raw.templateId)
@@ -299,59 +297,71 @@ function buildPayload(raw, itemType, templates) {
     }
   }
   return {
-    ...raw, itemType, name: raw.title || '(untitled)',
+    ...raw, itemType, name: raw.title || raw.synopsis || '(untitled)',
     fields: { synopsis: raw.synopsis },
     fieldDefs: [{ id: 'synopsis', label: 'Synopsis' }],
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// PERSISTENCE — uses app's saveDB/loadDB (wf_data table)
+// PERSISTENCE via wf_data (matches main app pattern exactly)
 // ─────────────────────────────────────────────────────────────
-function saveBoardList(projId, boards, activeId) {
-  window.__wovenSaveDB
-    ? window.__wovenSaveDB(`canvas:boards:${projId}`, { boards, activeId })
-    : saveDBFallback(`canvas:boards:${projId}`, { boards, activeId })
-}
-function loadBoardList(projId) {
-  return window.__wovenLoadDB
-    ? window.__wovenLoadDB(`canvas:boards:${projId}`, null)
-    : loadDBFallback(`canvas:boards:${projId}`, null)
-}
-function saveBoardState(projId, boardId, nodes, edges) {
-  window.__wovenSaveDB
-    ? window.__wovenSaveDB(`canvas:state:${projId}:${boardId}`, { nodes, edges })
-    : saveDBFallback(`canvas:state:${projId}:${boardId}`, { nodes, edges })
-}
-function loadBoardState(projId, boardId) {
-  return window.__wovenLoadDB
-    ? window.__wovenLoadDB(`canvas:state:${projId}:${boardId}`, null)
-    : loadDBFallback(`canvas:state:${projId}:${boardId}`, null)
+function getClient() {
+  if (window.__sb) return window.__sb
+  if (window.supabase?.createClient) {
+    window.__sb = window.supabase.createClient(
+      'https://mxsdiqrbxlvcwexfdtrj.supabase.co',
+      'sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u'
+    )
+    return window.__sb
+  }
+  return null
 }
 
-// Fallbacks to localStorage if app bridge isn't set up yet
-function saveDBFallback(key, val) {
+function canvasSave(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)) } catch {}
+  const uid = window.__wovenUserId
+  if (!uid) return
+  const sb = getClient()
+  if (sb) sb.from('wf_data').upsert(
+    { key, user_id: uid, value: val, updated_at: new Date().toISOString() },
+    { onConflict: 'key,user_id' }
+  ).then(() => {})
 }
-function loadDBFallback(key, def) {
-  try { const r = localStorage.getItem(key); return Promise.resolve(r ? JSON.parse(r) : def) }
-  catch { return Promise.resolve(def) }
+
+function canvasLoad(key, def) {
+  const uid = window.__wovenUserId
+  if (!uid) {
+    try { const r = localStorage.getItem(key); return Promise.resolve(r ? JSON.parse(r) : def) }
+    catch { return Promise.resolve(def) }
+  }
+  const sb = getClient()
+  if (!sb) {
+    try { const r = localStorage.getItem(key); return Promise.resolve(r ? JSON.parse(r) : def) }
+    catch { return Promise.resolve(def) }
+  }
+  return sb.from('wf_data').select('value').eq('key', key).eq('user_id', uid)
+    .maybeSingle().then(r => {
+      if (r.data?.value !== undefined) return r.data.value
+      try { const local = localStorage.getItem(key); return local ? JSON.parse(local) : def }
+      catch { return def }
+    })
 }
 
 // ─────────────────────────────────────────────────────────────
-// REACT FLOW HANDLES
+// HANDLES
 // ─────────────────────────────────────────────────────────────
 function Handles() {
   return (
     <>
-      <Handle type="source" position={Position.Top}    id="top"      style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Right}  id="right"    style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Bottom} id="bottom"   style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Left}   id="left"     style={{ opacity: 0 }} />
-      <Handle type="target" position={Position.Top}    id="top-t"    style={{ opacity: 0 }} />
-      <Handle type="target" position={Position.Right}  id="right-t"  style={{ opacity: 0 }} />
-      <Handle type="target" position={Position.Bottom} id="bottom-t" style={{ opacity: 0 }} />
-      <Handle type="target" position={Position.Left}   id="left-t"   style={{ opacity: 0 }} />
+      <Handle type="source" position={Position.Top}    id="top"     style={{ opacity: 0 }} />
+      <Handle type="source" position={Position.Right}  id="right"   style={{ opacity: 0 }} />
+      <Handle type="source" position={Position.Bottom} id="bottom"  style={{ opacity: 0 }} />
+      <Handle type="source" position={Position.Left}   id="left"    style={{ opacity: 0 }} />
+      <Handle type="target" position={Position.Top}    id="top-t"   style={{ opacity: 0 }} />
+      <Handle type="target" position={Position.Right}  id="right-t" style={{ opacity: 0 }} />
+      <Handle type="target" position={Position.Bottom} id="bot-t"   style={{ opacity: 0 }} />
+      <Handle type="target" position={Position.Left}   id="left-t"  style={{ opacity: 0 }} />
     </>
   )
 }
@@ -376,36 +386,35 @@ function Checkbox({ checked }) {
 // WOVEN CARD NODE
 // ─────────────────────────────────────────────────────────────
 function WovenCardNode({ id, data, selected }) {
-  const { itemId, itemType, name, color, visibleFields = [], showStatus, onContextMenu, findItemFn } = data
-  const item = findItemFn ? findItemFn(itemId) : null
+  const { itemType, name, color, visibleFields = [], showStatus, onCtx, findItemFn } = data
+  // Re-resolve item on every render so ctx menu always has fresh data
+  const item = findItemFn ? findItemFn(data.itemId) : null
   const statusInfo = item?.status ? STATUSES[item.status] : null
   const shownFields = (item?.fieldDefs || []).filter(
     fd => fd.id !== 'status' && visibleFields.includes(fd.id) && item?.fields?.[fd.id]
   )
-  const hasContent = shownFields.length > 0
 
   return (
     <div
       className={`woven-card ${selected ? 'selected' : ''}`}
-      onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onContextMenu?.(e, id, data) }}
+      onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onCtx?.(e, id, data) }}
     >
       <Handles />
       <div className="woven-card-hdr">
-        {itemType === 'strand' ? (
-          <div className="woven-card-av" style={{ background: color }}>
-            {item?.image ? <img src={item.image} alt={name} /> : initials(name)}
-          </div>
-        ) : (
-          <div className="woven-card-dot" style={{ background: color }} />
-        )}
+        {itemType === 'strand'
+          ? <div className="woven-card-av" style={{ background: color }}>
+              {item?.image ? <img src={item.image} alt={name} /> : initials(name)}
+            </div>
+          : <div className="woven-card-dot" style={{ background: color }} />
+        }
         <div className="woven-card-name" title={name}>{name}</div>
         {showStatus && statusInfo && (
-          <div className="woven-card-status" style={{ background: statusInfo.color }}>
+          <div className="woven-card-status-badge" style={{ background: statusInfo.color }}>
             {statusInfo.label}
           </div>
         )}
       </div>
-      {hasContent && (
+      {shownFields.length > 0 && (
         <div className="woven-card-body has-content">
           {shownFields.map(fd => (
             <div className="woven-card-field" key={fd.id}>
@@ -424,18 +433,15 @@ function WovenCardNode({ id, data, selected }) {
 // ─────────────────────────────────────────────────────────────
 function StickyNoteNode({ id, data, selected }) {
   const { setNodes } = useReactFlow()
-  const colorId = data.colorId ?? 'amber'
-  const isTitle = data.isTitle ?? true
-  const text    = data.text   ?? ''
-  const scheme  = STICKY_COLORS.find(c => c.id === colorId) || STICKY_COLORS[1]
+  const scheme = STICKY_COLORS.find(c => c.id === (data.colorId ?? 'amber')) || STICKY_COLORS[1]
 
-  function updateData(patch) {
-    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...patch } } : n))
+  function patch(p) {
+    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...p } } : n))
   }
 
   return (
     <div
-      className="ex-sticky-node"
+      className="ex-sticky"
       style={{
         background: scheme.bg, border: `1.5px solid ${scheme.border}`,
         outline: selected ? '2px solid var(--indigo)' : 'none',
@@ -449,7 +455,7 @@ function StickyNoteNode({ id, data, selected }) {
         }))
       }}
     >
-      <NodeResizer isVisible={selected} minWidth={140} minHeight={80}
+      <NodeResizer isVisible={selected} minWidth={140} minHeight={60}
         lineStyle={{ border: '1px dashed var(--indigo)' }}
         handleStyle={{ width: 8, height: 8, background: 'var(--indigo)', border: 'none', borderRadius: 2 }} />
       <Handles />
@@ -458,12 +464,12 @@ function StickyNoteNode({ id, data, selected }) {
       </div>
       <div className="ex-sticky-content">
         <textarea
-          className={`ex-sticky-input nodrag ${isTitle ? 'is-title' : 'is-body'}`}
-          value={text}
-          placeholder={isTitle ? 'Note title...' : 'Write a note...'}
-          onChange={e => updateData({ text: e.target.value })}
+          className={`ex-sticky-input nodrag ${data.isTitle !== false ? 'is-title' : 'is-body'}`}
+          value={data.text || ''}
+          placeholder={data.isTitle !== false ? 'Note title...' : 'Write a note...'}
+          onChange={e => patch({ text: e.target.value })}
           style={{ color: scheme.text }}
-          rows={isTitle ? 2 : 4}
+          rows={data.isTitle !== false ? 2 : 4}
         />
       </div>
     </div>
@@ -471,7 +477,7 @@ function StickyNoteNode({ id, data, selected }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// IMAGE NODE
+// IMAGE NODE — no header bar, corner grip only
 // ─────────────────────────────────────────────────────────────
 function ImageNode({ id, data, selected }) {
   const { setNodes } = useReactFlow()
@@ -490,7 +496,10 @@ function ImageNode({ id, data, selected }) {
   return (
     <div
       className="ex-image-node"
-      style={{ outline: selected ? '2px solid var(--indigo)' : 'none', outlineOffset: 2, width: '100%', height: '100%' }}
+      style={{
+        outline: selected ? '2px solid var(--indigo)' : 'none',
+        outlineOffset: 2, width: '100%', height: '100%', minWidth: 120, minHeight: 80,
+      }}
       onContextMenu={e => {
         e.preventDefault(); e.stopPropagation()
         e.target.dispatchEvent(new CustomEvent('woven:ctx', {
@@ -499,28 +508,25 @@ function ImageNode({ id, data, selected }) {
         }))
       }}
     >
-      <NodeResizer isVisible={selected} minWidth={120} minHeight={80}
+      <NodeResizer isVisible={selected} minWidth={100} minHeight={80}
         lineStyle={{ border: '1px dashed var(--indigo)' }}
         handleStyle={{ width: 8, height: 8, background: 'var(--indigo)', border: 'none', borderRadius: 2 }} />
       <Handles />
-      <div className="ex-image-drag drag-handle__custom">
+      {/* Corner grip — drag handle */}
+      <div className="ex-image-grip drag-handle__custom">
         <span className="mi">drag_indicator</span>
-        <span>Image</span>
-        {data.src && (
-          <span style={{ marginLeft: 'auto', cursor: 'pointer', fontSize: 12, color: 'var(--placeholder)' }}
-            onMouseDown={e => { e.stopPropagation(); inputRef.current?.click() }}>change</span>
-        )}
       </div>
-      <div className="ex-image-body">
-        {data.src
-          ? <img src={data.src} alt="canvas" />
-          : <div className="ex-image-empty nodrag" onClick={() => inputRef.current?.click()}>
-              <span className="mi">add_photo_alternate</span>
-              <span>Click to add image</span>
-            </div>
-        }
-      </div>
-      <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
+      {data.src
+        ? <img src={data.src} alt="canvas"
+            onClick={() => inputRef.current?.click()}
+            style={{ cursor: 'pointer', width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        : <div className="ex-image-empty nodrag" onClick={() => inputRef.current?.click()}>
+            <span className="mi">add_photo_alternate</span>
+            <span>Click to add image</span>
+          </div>
+      }
+      <input ref={inputRef} type="file" accept="image/*"
+        style={{ display: 'none' }} onChange={handleFile} />
     </div>
   )
 }
@@ -528,33 +534,37 @@ function ImageNode({ id, data, selected }) {
 // ─────────────────────────────────────────────────────────────
 // CONTEXT MENU
 // ─────────────────────────────────────────────────────────────
-function ContextMenu({ ctx, onClose, onUpdateNode, onDeleteNode }) {
+function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
   const ref = useRef(null)
+
   useEffect(() => {
-    function onAnyClick(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
-    document.addEventListener('click', onAnyClick, true)
-    document.addEventListener('contextmenu', onAnyClick, true)
+    function onAny(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    document.addEventListener('click', onAny, true)
+    document.addEventListener('contextmenu', onAny, true)
     return () => {
-      document.removeEventListener('click', onAnyClick, true)
-      document.removeEventListener('contextmenu', onAnyClick, true)
+      document.removeEventListener('click', onAny, true)
+      document.removeEventListener('contextmenu', onAny, true)
     }
   }, [onClose])
 
   const { nodeId, nodeType, x, y, data } = ctx
-  const item = nodeType === 'wovenCard' ? data._resolvedItem : null
+  // Always re-resolve item fresh so checkboxes reflect current state
+  const item = nodeType === 'wovenCard' ? findItem(data.itemId) : null
   const visibleFields = data.visibleFields || []
   const showStatus    = data.showStatus    || false
 
   return (
-    <div className="ex-ctx-menu" ref={ref} style={{
+    <div className="ex-ctx" ref={ref} style={{
       left: Math.min(x, window.innerWidth  - 250),
       top:  Math.min(y, window.innerHeight - 400),
     }}>
+      {/* Card fields */}
       {nodeType === 'wovenCard' && item?.fieldDefs?.length > 0 && (
         <>
           <div className="ex-ctx-lbl">Show on card</div>
           {item.itemType !== 'strand' && (
-            <div className="ex-ctx-row" onClick={() => onUpdateNode(nodeId, { showStatus: !showStatus })}>
+            <div className="ex-ctx-row"
+              onClick={() => onUpdateNode(nodeId, { showStatus: !showStatus })}>
               <Checkbox checked={showStatus} /><span>Status</span>
             </div>
           )}
@@ -562,7 +572,8 @@ function ContextMenu({ ctx, onClose, onUpdateNode, onDeleteNode }) {
             const checked  = visibleFields.includes(fd.id)
             const hasValue = !!(item.fields?.[fd.id])
             return (
-              <div key={fd.id} className="ex-ctx-row" style={{ opacity: hasValue ? 1 : 0.45 }}
+              <div key={fd.id} className="ex-ctx-row"
+                style={{ opacity: hasValue ? 1 : 0.45 }}
                 onClick={() => {
                   const next = checked
                     ? visibleFields.filter(f => f !== fd.id)
@@ -570,13 +581,16 @@ function ContextMenu({ ctx, onClose, onUpdateNode, onDeleteNode }) {
                   onUpdateNode(nodeId, { visibleFields: next })
                 }}>
                 <Checkbox checked={checked} /><span>{fd.label}</span>
-                {!hasValue && <span style={{ fontSize: 10, color: 'var(--placeholder)', marginLeft: 'auto' }}>empty</span>}
+                {!hasValue && (
+                  <span style={{ fontSize: 10, color: 'var(--placeholder)', marginLeft: 'auto' }}>empty</span>
+                )}
               </div>
             )
           })}
         </>
       )}
 
+      {/* Sticky options */}
       {nodeType === 'stickyNote' && (
         <>
           <div className="ex-ctx-lbl">Style</div>
@@ -587,12 +601,11 @@ function ContextMenu({ ctx, onClose, onUpdateNode, onDeleteNode }) {
             <Checkbox checked={data.isTitle === false} /><span>Body style</span>
           </div>
           <div className="ex-ctx-lbl">Colour</div>
-          <div className="ex-ctx-swatch-row">
+          <div className="ex-ctx-swatches">
             {STICKY_COLORS.map(c => (
               <div key={c.id}
                 className={`ex-ctx-swatch ${data.colorId === c.id ? 'active' : ''}`}
                 style={{ background: c.bg, border: `2px solid ${c.border}` }}
-                title={c.label}
                 onClick={() => onUpdateNode(nodeId, { colorId: c.id })}
               />
             ))}
@@ -601,7 +614,8 @@ function ContextMenu({ ctx, onClose, onUpdateNode, onDeleteNode }) {
       )}
 
       <div className="ex-ctx-div" />
-      <div className="ex-ctx-action danger" onClick={() => { onDeleteNode(nodeId); onClose() }}>
+      <div className="ex-ctx-action danger"
+        onClick={() => { onDeleteNode(nodeId); onClose() }}>
         <span className="mi">delete</span>Remove from canvas
       </div>
     </div>
@@ -609,28 +623,59 @@ function ContextMenu({ ctx, onClose, onUpdateNode, onDeleteNode }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// DRAWER CONTENT
+// STRANDS DRAWER — tabs from live strandsObj keys only
 // ─────────────────────────────────────────────────────────────
-function StrandsDrawer({ templates, strandsObj, onDragStart }) {
-  const [activeTab, setActiveTab] = useState(templates[0]?.id || '')
-  const tpl = templates.find(t => t.id === activeTab) || templates[0]
-  const items = tpl ? (strandsObj[tpl.name] || []) : []
+function StrandsDrawer({ strandsObj, templates, onDragStart }) {
+  // Derive collection names from live data — not hardcoded, not from templates
+  const collections = Object.keys(strandsObj)
+  const [activeIdx, setActiveIdx] = useState(0)
+  const scrollRef = useRef(null)
+
+  // Reset active tab if collections change and current idx is out of bounds
+  useEffect(() => {
+    if (activeIdx >= collections.length && collections.length > 0) {
+      setActiveIdx(0)
+    }
+  }, [collections.length])
+
+  const activeColl = collections[activeIdx] || ''
+  const items = strandsObj[activeColl] || []
+
+  function scrollTabs(dir) {
+    if (scrollRef.current) scrollRef.current.scrollLeft += dir * 80
+  }
+
+  if (collections.length === 0) {
+    return (
+      <div style={{ padding: '16px 14px', fontSize: 13, color: 'var(--mid)' }}>
+        No strand collections yet. Create one in the Strands view.
+      </div>
+    )
+  }
 
   return (
     <>
-      <div className="ex-edrawer-tabs">
-        {templates.map(t => (
-          <div key={t.id}
-            className={`ex-edrawer-tab ${activeTab === t.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(t.id)}>
-            {t.name}
-          </div>
-        ))}
+      <div className="ex-coll-tabs-wrap">
+        <div className="ex-coll-arrow" onClick={() => scrollTabs(-1)}>
+          <span className="mi" style={{ fontSize: 16 }}>chevron_left</span>
+        </div>
+        <div className="ex-coll-tabs-scroll" ref={scrollRef}>
+          {collections.map((coll, i) => (
+            <div key={coll}
+              className={`ex-coll-tab ${i === activeIdx ? 'active' : ''}`}
+              onClick={() => setActiveIdx(i)}>
+              {coll}
+            </div>
+          ))}
+        </div>
+        <div className="ex-coll-arrow" onClick={() => scrollTabs(1)}>
+          <span className="mi" style={{ fontSize: 16 }}>chevron_right</span>
+        </div>
       </div>
       <div className="ex-edrawer-body">
         {items.length === 0
           ? <div style={{ padding: '12px 14px', fontSize: 13, color: 'var(--mid)' }}>
-              No {tpl?.name?.toLowerCase() || 'items'} yet.
+              No {activeColl.toLowerCase()} yet.
             </div>
           : items.map(s => (
               <div key={s.id} className="ex-edrawer-row" draggable
@@ -641,7 +686,7 @@ function StrandsDrawer({ templates, strandsObj, onDragStart }) {
                 <div className="ex-edrawer-info">
                   <div className="ex-edrawer-name">{s.name}</div>
                 </div>
-                <span className="ex-edrawer-drag-hint">drag</span>
+                <span className="ex-edrawer-hint">drag</span>
               </div>
             ))
         }
@@ -650,61 +695,68 @@ function StrandsDrawer({ templates, strandsObj, onDragStart }) {
   )
 }
 
+// ─────────────────────────────────────────────────────────────
+// DRAWER CONTENT
+// ─────────────────────────────────────────────────────────────
 function DrawerContent({ panel, templates, strandsObj, drafts, looseThreads, onDragStart }) {
   if (panel === 'strands') {
-    return <StrandsDrawer templates={templates} strandsObj={strandsObj} onDragStart={onDragStart} />
+    return (
+      <StrandsDrawer
+        strandsObj={strandsObj}
+        templates={templates}
+        onDragStart={onDragStart}
+      />
+    )
   }
-
   if (panel === 'drafts') {
     return (
       <div className="ex-edrawer-body">
-        <div className="ex-edrawer-section" style={{ paddingBottom: 6 }}>
+        <div className="ex-edrawer-section">
           <span className="ex-edrawer-lbl">Drafts</span>
         </div>
-        {drafts.map(d => (
-          <div key={d.id} className="ex-edrawer-row" draggable
-            onDragStart={e => onDragStart(e, buildPayload(d, 'draft', templates))}>
-            <div className="ex-edrawer-dot" style={{ background: STATUSES[d.status]?.color }} />
-            <div className="ex-edrawer-info">
-              <div className="ex-edrawer-name">{d.title || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}</div>
-              <div className="ex-edrawer-sub">{STATUSES[d.status]?.label}</div>
-            </div>
-            <span className="ex-edrawer-drag-hint">drag</span>
-          </div>
-        ))}
-        {drafts.length === 0 && (
-          <div style={{ padding: '12px 14px', fontSize: 13, color: 'var(--mid)' }}>No drafts yet.</div>
-        )}
+        {drafts.length === 0
+          ? <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--mid)' }}>No drafts yet.</div>
+          : drafts.map(d => (
+              <div key={d.id} className="ex-edrawer-row" draggable
+                onDragStart={e => onDragStart(e, buildPayload(d, 'draft', templates))}>
+                <div className="ex-edrawer-dot" style={{ background: STATUSES[d.status]?.color }} />
+                <div className="ex-edrawer-info">
+                  <div className="ex-edrawer-name">
+                    {d.title || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
+                  </div>
+                  <div className="ex-edrawer-sub">{STATUSES[d.status]?.label}</div>
+                </div>
+                <span className="ex-edrawer-hint">drag</span>
+              </div>
+            ))
+        }
       </div>
     )
   }
-
   if (panel === 'loose_threads') {
     return (
       <div className="ex-edrawer-body">
-        <div className="ex-edrawer-section" style={{ paddingBottom: 6 }}>
+        <div className="ex-edrawer-section">
           <span className="ex-edrawer-lbl">Loose Threads</span>
         </div>
-        {looseThreads.map(lt => (
-          <div key={lt.id} className="ex-edrawer-row" draggable
-            onDragStart={e => onDragStart(e, buildPayload(lt, 'loose_thread', templates))}>
-            <div className="ex-edrawer-dot" style={{ background: STATUSES.loose_thread.color }} />
-            <div className="ex-edrawer-info">
-              <div className="ex-edrawer-name">
-                {lt.title || lt.synopsis || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
+        {looseThreads.length === 0
+          ? <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--mid)' }}>No loose threads.</div>
+          : looseThreads.map(lt => (
+              <div key={lt.id} className="ex-edrawer-row" draggable
+                onDragStart={e => onDragStart(e, buildPayload(lt, 'loose_thread', templates))}>
+                <div className="ex-edrawer-dot" style={{ background: STATUSES.loose_thread.color }} />
+                <div className="ex-edrawer-info">
+                  <div className="ex-edrawer-name">
+                    {lt.title || lt.synopsis || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
+                  </div>
+                </div>
+                <span className="ex-edrawer-hint">drag</span>
               </div>
-              <div className="ex-edrawer-sub">Loose Thread</div>
-            </div>
-            <span className="ex-edrawer-drag-hint">drag</span>
-          </div>
-        ))}
-        {looseThreads.length === 0 && (
-          <div style={{ padding: '12px 14px', fontSize: 13, color: 'var(--mid)' }}>No loose threads.</div>
-        )}
+            ))
+        }
       </div>
     )
   }
-
   return null
 }
 
@@ -718,7 +770,7 @@ function CanvasTabs({ tabs, activeTab, onSelect, onAdd, onRename, onDeleteReques
 
   function startEdit(tab, e) {
     e.stopPropagation(); setEditing(tab.id); setEditVal(tab.name)
-    setTimeout(() => inputRef.current?.select(), 30)
+    setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select() }, 30)
   }
   function commitEdit(id) {
     if (editVal.trim()) onRename(id, editVal.trim())
@@ -734,7 +786,10 @@ function CanvasTabs({ tabs, activeTab, onSelect, onAdd, onRename, onDeleteReques
           onDoubleClick={e => startEdit(tab, e)}
           title="Double-click to rename">
           {editing === tab.id
-            ? <input ref={inputRef} className="ex-tab-name-input" value={editVal}
+            ? <input
+                ref={inputRef}
+                className="ex-tab-name-input"
+                value={editVal}
                 onChange={e => setEditVal(e.target.value)}
                 onBlur={() => commitEdit(tab.id)}
                 onKeyDown={e => {
@@ -742,12 +797,15 @@ function CanvasTabs({ tabs, activeTab, onSelect, onAdd, onRename, onDeleteReques
                   if (e.key === 'Escape') setEditing(null)
                   e.stopPropagation()
                 }}
-                onClick={e => e.stopPropagation()} />
+                onClick={e => e.stopPropagation()}
+              />
             : <span className="ex-tab-name">{tab.name}</span>
           }
           {tabs.length > 1 && (
             <span className="ex-tab-close"
-              onClick={e => { e.stopPropagation(); onDeleteRequest(tab) }}>close</span>
+              onClick={e => { e.stopPropagation(); onDeleteRequest(tab) }}>
+              close
+            </span>
           )}
         </div>
       ))}
@@ -787,9 +845,9 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle }) {
 function DeleteBoardModal({ boardName, onConfirm, onCancel }) {
   const [val, setVal] = useState('')
   return (
-    <div className="ex-modal-overlay">
-      <div className="ex-modal-backdrop" onClick={onCancel} />
-      <div className="ex-modal-box">
+    <div className="ex-modal-wrap">
+      <div className="ex-modal-bg" onClick={onCancel} />
+      <div className="ex-modal">
         <div className="ex-modal-title">Delete this board?</div>
         <div className="ex-modal-body">
           <strong>{boardName}</strong> and all its cards will be permanently removed.
@@ -797,9 +855,8 @@ function DeleteBoardModal({ boardName, onConfirm, onCancel }) {
           Type <strong>DELETE</strong> to confirm.
         </div>
         <input className="ex-modal-input" value={val}
-          onChange={e => setVal(e.target.value)}
-          placeholder="Type DELETE" autoFocus />
-        <div className="ex-modal-actions">
+          onChange={e => setVal(e.target.value)} placeholder="Type DELETE" autoFocus />
+        <div className="ex-modal-btns">
           <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}
             onClick={onCancel}>Cancel</button>
           <button className="btn btn-danger" style={{ flex: 1, justifyContent: 'center' }}
@@ -811,7 +868,7 @@ function DeleteBoardModal({ boardName, onConfirm, onCancel }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// FLOW CANVAS (inner — has access to ReactFlow hooks)
+// FLOW CANVAS
 // ─────────────────────────────────────────────────────────────
 function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, strandsObj, drafts, looseThreads }) {
   const { screenToFlowPosition } = useReactFlow()
@@ -819,12 +876,11 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [ctx, setCtx] = useState(null)
   const canvasRef = useRef(null)
+  const saveTimer = useRef(null)
   const boardIdRef = useRef(boardId)
-  const saveTimerRef = useRef(null)
-
   useEffect(() => { boardIdRef.current = boardId }, [boardId])
 
-  // Build item lookup from live app data
+  // Build live item lookup — always reflects latest app data
   const findItem = useCallback((id) => {
     for (const items of Object.values(strandsObj)) {
       const s = items.find(s => s.id === id)
@@ -837,50 +893,41 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     return null
   }, [strandsObj, drafts, looseThreads, templates])
 
-  // Load board state on mount / board change
+  // Load state on board change
   useEffect(() => {
-    loadBoardState(projId, boardId).then(saved => {
-      if (saved?.nodes) setNodes(saved.nodes)
-      else setNodes([])
-      if (saved?.edges) setEdges(saved.edges)
-      else setEdges([])
+    canvasLoad(`canvas:state:${projId}:${boardId}`, null).then(saved => {
+      setNodes(saved?.nodes || [])
+      setEdges(saved?.edges || [])
     })
   }, [projId, boardId])
 
-  // Auto-save with debounce
+  // Debounced auto-save
   useEffect(() => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => {
-      saveBoardState(projId, boardIdRef.current, nodes, edges)
+    clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      canvasSave(`canvas:state:${projId}:${boardIdRef.current}`, { nodes, edges })
     }, 800)
-    return () => clearTimeout(saveTimerRef.current)
+    return () => clearTimeout(saveTimer.current)
   }, [nodes, edges, projId])
 
-  // Listen for context menu events from sticky/image nodes
+  // Listen for sticky/image context menu events
   useEffect(() => {
+    const el = canvasRef.current
     function onWovenCtx(e) {
       const { nodeId, nodeType, x, y, data } = e.detail
       setCtx({ nodeId, nodeType, x, y, data })
     }
-    const el = canvasRef.current
     el?.addEventListener('woven:ctx', onWovenCtx)
     return () => el?.removeEventListener('woven:ctx', onWovenCtx)
   }, [])
 
-  // Inject findItem and context menu handler into card nodes
+  // Re-create nodeTypes when findItem changes so cards always see fresh data
   const nodeTypes = useMemo(() => ({
     wovenCard: (props) => (
       <WovenCardNode {...props} data={{
         ...props.data,
         findItemFn: findItem,
-        _resolvedItem: findItem(props.data.itemId),
-        onContextMenu: (e, id, data) => {
-          setCtx({
-            nodeId: id, nodeType: 'wovenCard',
-            x: e.clientX, y: e.clientY,
-            data: { ...data, _resolvedItem: findItem(data.itemId) }
-          })
-        },
+        onCtx: (e, id, data) => setCtx({ nodeId: id, nodeType: 'wovenCard', x: e.clientX, y: e.clientY, data }),
       }} />
     ),
     stickyNote: StickyNoteNode,
@@ -889,6 +936,11 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
 
   function updateNode(nodeId, patch) {
     setNodes(nds => nds.map(n => n.id !== nodeId ? n : { ...n, data: { ...n.data, ...patch } }))
+    // Also update ctx data so checkboxes reflect new state immediately
+    setCtx(prev => prev?.nodeId === nodeId
+      ? { ...prev, data: { ...prev.data, ...patch } }
+      : prev
+    )
   }
   function deleteNode(nodeId) {
     setNodes(nds => nds.filter(n => n.id !== nodeId))
@@ -965,7 +1017,9 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       </ReactFlow>
 
       {ctx && (
-        <ContextMenu ctx={ctx}
+        <ContextMenu
+          ctx={ctx}
+          findItem={findItem}
           onClose={() => setCtx(null)}
           onUpdateNode={updateNode}
           onDeleteNode={deleteNode}
@@ -976,62 +1030,30 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
 }
 
 // ─────────────────────────────────────────────────────────────
-// ROOT COMPONENT  — receives app object from main App.jsx
+// ROOT
 // ─────────────────────────────────────────────────────────────
-const INITIAL_BOARD_ID = genId()
-const INITIAL_BOARDS   = [{ id: INITIAL_BOARD_ID, name: 'Board 1' }]
+const INIT_ID     = genId()
+const INIT_BOARDS = [{ id: INIT_ID, name: 'Board 1' }]
 
 export default function ExploreCanvas({ app }) {
   const projId       = app.projId
-  const templates    = (app.allTemplates && app.allTemplates[projId]) || []
-  const strandsObj   = (app.allStrands   && app.allStrands[projId])   || {}
-  const allDrafts    = (app.allDrafts    && app.allDrafts[projId])    || []
-  const drafts       = allDrafts.filter(d => d.status !== 'loose_thread' && d.status !== 'loose_thread')
+  const templates    = app.allTemplates?.[projId] || []
+  const strandsObj   = app.allStrands?.[projId]   || {}
+  const allDrafts    = app.allDrafts?.[projId]     || []
+  const drafts       = allDrafts.filter(d => d.status !== 'loose_thread')
   const looseThreads = allDrafts.filter(d => d.status === 'loose_thread')
 
-  // Wire up saveDB/loadDB from main app via window bridge
-  // (avoids prop-drilling the raw Supabase functions)
-  useEffect(() => {
-    window.__wovenSaveDB = (key, val) => {
-      const uid = window.__wovenUserId
-      if (!uid) { try { localStorage.setItem(key, JSON.stringify(val)) } catch {} ; return }
-      try { localStorage.setItem(key, JSON.stringify(val)) } catch {}
-      const sb = window.__sb || (window.supabase?.createClient ? window.supabase.createClient(
-        'https://mxsdiqrbxlvcwexfdtrj.supabase.co',
-        'sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u'
-      ) : null)
-      if (sb) sb.from('wf_data').upsert({ key, user_id: uid, value: val, updated_at: new Date().toISOString() }, { onConflict: 'key,user_id' }).then(() => {})
-    }
-    window.__wovenLoadDB = (key, def) => {
-      const uid = window.__wovenUserId
-      if (!uid) {
-        try { const r = localStorage.getItem(key); return Promise.resolve(r ? JSON.parse(r) : def) }
-        catch { return Promise.resolve(def) }
-      }
-      const sb = window.__sb
-      if (!sb) {
-        try { const r = localStorage.getItem(key); return Promise.resolve(r ? JSON.parse(r) : def) }
-        catch { return Promise.resolve(def) }
-      }
-      return sb.from('wf_data').select('value').eq('key', key).eq('user_id', uid).maybeSingle().then(r => {
-        if (r.data?.value !== undefined) return r.data.value
-        try { const local = localStorage.getItem(key); return local ? JSON.parse(local) : def }
-        catch { return def }
-      })
-    }
-  }, [])
-
-  const [boards, setBoards]             = useState(INITIAL_BOARDS)
-  const [activeBoard, setActiveBoard]   = useState(INITIAL_BOARD_ID)
+  const [boards, setBoards]           = useState(INIT_BOARDS)
+  const [activeBoard, setActiveBoard] = useState(INIT_ID)
   const [activeDrawer, setActiveDrawer] = useState(null)
-  const [activeTool, setActiveTool]     = useState('select')
+  const [activeTool, setActiveTool]   = useState('select')
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [boardsLoaded, setBoardsLoaded] = useState(false)
 
-  // Load board list on mount
+  // Load board list for this project
   useEffect(() => {
     if (!projId) return
-    loadBoardList(projId).then(saved => {
+    canvasLoad(`canvas:boards:${projId}`, null).then(saved => {
       if (saved?.boards?.length) {
         setBoards(saved.boards)
         setActiveBoard(saved.activeId || saved.boards[0].id)
@@ -1043,7 +1065,7 @@ export default function ExploreCanvas({ app }) {
   // Save board list whenever it changes
   useEffect(() => {
     if (!boardsLoaded || !projId) return
-    saveBoardList(projId, boards, activeBoard)
+    canvasSave(`canvas:boards:${projId}`, { boards, activeId: activeBoard })
   }, [boards, activeBoard, boardsLoaded, projId])
 
   function addBoard() {
@@ -1054,6 +1076,7 @@ export default function ExploreCanvas({ app }) {
     setBoards(b => b.map(board => board.id === id ? { ...board, name } : board))
   }
   function confirmDelete() {
+    canvasSave(`canvas:state:${projId}:${deleteTarget.id}`, null)
     try { localStorage.removeItem(`canvas:state:${projId}:${deleteTarget.id}`) } catch {}
     const next = boards.filter(b => b.id !== deleteTarget.id)
     const idx  = boards.findIndex(b => b.id === deleteTarget.id)
@@ -1071,7 +1094,6 @@ export default function ExploreCanvas({ app }) {
   }
 
   const drawerLabel = DRAWER_ITEMS.find(p => p.id === activeDrawer)?.label || ''
-
   if (!projId) return null
 
   return (
@@ -1086,22 +1108,17 @@ export default function ExploreCanvas({ app }) {
           />
           <div className="ex-canvas-row">
             <div className="ex-canvas-area"
-              style={{ cursor: (activeTool === 'sticky' || activeTool === 'image') ? 'crosshair' : undefined }}>
+              style={{ cursor: isPlaceMode(activeTool) ? 'crosshair' : undefined }}>
               <ReactFlowProvider>
                 <FlowCanvas
                   key={`${projId}:${activeBoard}`}
-                  boardId={activeBoard}
-                  projId={projId}
-                  activeTool={activeTool}
-                  onToolReset={() => setActiveTool('select')}
-                  templates={templates}
-                  strandsObj={strandsObj}
-                  drafts={drafts}
-                  looseThreads={looseThreads}
+                  boardId={activeBoard} projId={projId}
+                  activeTool={activeTool} onToolReset={() => setActiveTool('select')}
+                  templates={templates} strandsObj={strandsObj}
+                  drafts={drafts} looseThreads={looseThreads}
                 />
               </ReactFlowProvider>
             </div>
-
             <div className="ex-right">
               <Toolbar
                 activeTool={activeTool} onToolSelect={handleToolSelect}
@@ -1109,7 +1126,7 @@ export default function ExploreCanvas({ app }) {
               />
               <div className={`ex-drawer ${activeDrawer ? 'open' : ''}`}>
                 <div className="ex-drawer-inner">
-                  <div className="ex-editor-drawer">
+                  <div className="ex-edrawer">
                     <div className="ex-edrawer-hdr">
                       <span className="ex-edrawer-title">{drawerLabel}</span>
                       <button className="btn-icon" onClick={() => setActiveDrawer(null)}>
@@ -1118,10 +1135,8 @@ export default function ExploreCanvas({ app }) {
                     </div>
                     <DrawerContent
                       panel={activeDrawer}
-                      templates={templates}
-                      strandsObj={strandsObj}
-                      drafts={drafts}
-                      looseThreads={looseThreads}
+                      templates={templates} strandsObj={strandsObj}
+                      drafts={drafts} looseThreads={looseThreads}
                       onDragStart={handleDragStart}
                     />
                   </div>
@@ -1142,3 +1157,5 @@ export default function ExploreCanvas({ app }) {
     </div>
   )
 }
+
+function isPlaceMode(tool) { return tool === 'sticky' || tool === 'image' }
