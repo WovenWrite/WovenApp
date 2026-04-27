@@ -1,6 +1,37 @@
 // @ts-nocheck
 import ExploreCanvas from './ExploreCanvas'
 import { useState, useEffect, useRef } from "react";
+
+// ── Version snapshots ──
+var MAX_SNAPSHOTS=20;
+var SNAPSHOT_INTERVAL_MS=60*60*1000; // 1 hour
+function getSnapshotKey(draftId){return 'woven:versions:'+draftId;}
+function loadSnapshots(draftId){try{var v=localStorage.getItem(getSnapshotKey(draftId));return v?JSON.parse(v):[];}catch(e){return[];}}
+function saveSnapshot(draftId,body,wordCount,label){
+  if(!body||!body.trim())return;
+  var snapshots=loadSnapshots(draftId);
+  var now=Date.now();
+  // Enforce hourly gate — skip if last snapshot was less than 1 hour ago (unless forced)
+  var last=snapshots[0];
+  if(label==='auto'&&last&&(now-last.ts)<SNAPSHOT_INTERVAL_MS)return;
+  var snap={id:genId(),ts:now,label:label||'auto',body:body,wordCount:wordCount||0};
+  var updated=[snap].concat(snapshots).slice(0,MAX_SNAPSHOTS);
+  try{localStorage.setItem(getSnapshotKey(draftId),JSON.stringify(updated));}catch(e){}
+  // Also push to Supabase in background
+  var uid=window.__wovenUserId;
+  if(uid){supabase.from('wf_data').upsert({key:getSnapshotKey(draftId),user_id:uid,value:updated,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(){});}
+}
+function formatSnapshotTime(ts){
+  var d=new Date(ts);var now=new Date();
+  var isToday=d.toDateString()===now.toDateString();
+  var yesterday=new Date(now);yesterday.setDate(yesterday.getDate()-1);
+  var isYesterday=d.toDateString()===yesterday.toDateString();
+  var time=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  if(isToday)return 'Today '+time;
+  if(isYesterday)return 'Yesterday '+time;
+  return d.toLocaleDateString([],{month:'short',day:'numeric'})+' '+time;
+}
+
 // ── Supabase (loaded via CDN) ──
 var SB_URL='https://mxsdiqrbxlvcwexfdtrj.supabase.co';
 var SB_KEY='sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u';
@@ -39,11 +70,87 @@ var supabase={
 // ── Storage ──
 function saveLS(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
 function loadLS(key,def){return Promise.resolve().then(function(){try{var v=localStorage.getItem(key);return v?JSON.parse(v):def;}catch(e){return def;}});}
+// Debounced save queue — only writes to Supabase after 800ms silence, and only if value changed
+var __saveQueue={};
+var __lastSaved={};
 function saveDB(key,val){
   var uid=window.__wovenUserId;
   if(!uid)return saveLS(key,val);
-  saveLS(key,val); // keep local copy too
-  supabase.from('wf_data').upsert({key:key,user_id:uid,value:val,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(r){if(r.error)console.error('saveDB error:',r.error);});
+  saveLS(key,val);
+  // Check if value actually changed (JSON compare)
+  var serialized=JSON.stringify(val);
+  if(__lastSaved[key]===serialized)return; // no change, skip write
+  if(__saveQueue[key])clearTimeout(__saveQueue[key]);
+  window.__wovenSaveState='saving';
+  window.dispatchEvent(new Event('woven-save-state'));
+  __saveQueue[key]=setTimeout(function(){
+    __lastSaved[key]=serialized;
+    function attempt(retries){
+      supabase.from('wf_data').upsert({key:key,user_id:uid,value:val,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(r){
+        if(r.error){
+          console.error('saveDB error ('+retries+' retries left):',r.error);
+          if(retries>0){
+            setTimeout(function(){attempt(retries-1);},2000*Math.pow(2,3-retries)); // exponential backoff
+          } else {
+            window.__wovenSaveState='error';
+            window.dispatchEvent(new Event('woven-save-state'));
+          }
+        } else {
+          window.__wovenSaveState='saved';
+          window.dispatchEvent(new Event('woven-save-state'));
+        }
+      });
+    }
+    attempt(3); // up to 3 retries with exponential backoff
+  },800);
+}
+
+// Delete old Supabase Storage image when replacing
+function deleteStorageImage(url){
+  if(!url||!url.includes('supabase'))return;
+  var client=getSupabase();if(!client)return;
+  // Extract path from public URL: .../object/public/woven-images/PATH
+  var marker='/object/public/woven-images/';
+  var idx=url.indexOf(marker);
+  if(idx<0)return;
+  var path=url.slice(idx+marker.length);
+  if(!path)return;
+  client.storage.from('woven-images').remove([path]).then(function(r){
+    if(r.error)console.warn('Storage delete failed:',r.error);
+  });
+}
+
+// Compress image to max 1200px wide, 80% JPEG quality before uploading
+function compressImage(file){
+  return new Promise(function(resolve){
+    var img=new Image();
+    var url=URL.createObjectURL(file);
+    img.onload=function(){
+      var MAX=1200;
+      var w=img.width;var h=img.height;
+      if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
+      var canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      var ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(function(blob){resolve(blob||file);},{type:'image/jpeg',quality:0.82});
+    };
+    img.onerror=function(){URL.revokeObjectURL(url);resolve(file);};
+    img.src=url;
+  });
+}
+
+// Supabase Storage image upload with compression
+async function uploadImage(file){
+  var client=getSupabase();
+  if(!client)return null;
+  var compressed=await compressImage(file);
+  var path='uploads/'+genId()+'.jpg';
+  var res=await client.storage.from('woven-images').upload(path,compressed,{upsert:true,contentType:'image/jpeg'});
+  if(res.error){console.error('Upload error:',res.error);return null;}
+  var pub=client.storage.from('woven-images').getPublicUrl(path);
+  return pub.data&&pub.data.publicUrl?pub.data.publicUrl:null;
 }
 function loadDB(key,def){
   var uid=window.__wovenUserId;
@@ -449,6 +556,36 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 }`;
 function GlobalStyles(){return <style dangerouslySetInnerHTML={{__html:CSS}}/>;}
 
+
+// ── GlobalSaveIndicator ──
+function GlobalSaveIndicator(){
+  var ss=useState('saved');var state=ss[0];var setState=ss[1];
+  useEffect(function(){
+    function onSave(){setState(window.__wovenSaveState||'saved');}
+    window.addEventListener('woven-save-state',onSave);
+    return function(){window.removeEventListener('woven-save-state',onSave);};
+  },[]);
+  if(state==='saved')return(
+<div style={{display:'flex',alignItems:'center',gap:4,opacity:.6}}>
+  <span style={{width:6,height:6,borderRadius:'50%',background:'var(--teal)',flexShrink:0}}/>
+  <span style={{fontSize:11,color:'var(--mid)',fontFamily:'var(--ui)'}}>Saved</span>
+</div>
+  );
+  if(state==='saving')return(
+<div style={{display:'flex',alignItems:'center',gap:4,opacity:.8}}>
+  <span style={{width:6,height:6,borderRadius:'50%',background:'var(--indigoL)',flexShrink:0,animation:'pulse 1s infinite'}}/>
+  <span style={{fontSize:11,color:'var(--mid)',fontFamily:'var(--ui)'}}>Saving...</span>
+</div>
+  );
+  if(state==='error')return(
+<div style={{display:'flex',alignItems:'center',gap:4}} title="Save failed — retrying automatically">
+  <span style={{width:6,height:6,borderRadius:'50%',background:'var(--danger)',flexShrink:0,animation:'pulse 1s infinite'}}/>
+  <span style={{fontSize:11,color:'var(--danger)',fontFamily:'var(--ui)'}}>Retrying...</span>
+</div>
+  );
+  return null;
+}
+
 // ── ArchiveConfirmModal ──
 function ArchiveConfirmModal({draft,allDrafts,onConfirm,onCancel}){
   var children=(allDrafts||[]).filter(function(d){return d.parentId===draft.id&&!d.archived;});
@@ -687,7 +824,7 @@ function ProjectEditPanel({proj,app,onClose}){
         <input type="file" accept="image/*" style={{display:'none'}} onChange={function(e){
           var file=e.target.files&&e.target.files[0];if(!file)return;
           if(file.size>3*1024*1024){alert('Image must be under 3 MB.');return;}
-          var reader=new FileReader();reader.onload=function(ev){setImage(ev.target.result);};reader.readAsDataURL(file);
+          uploadImage(file).then(function(url){if(url)setImage(url);});
         }}/>
       </label>
       {image&&<button className="btn-icon" onClick={function(){setImage(null);}}><span className="mi" style={{fontSize:16}}>delete</span></button>}
@@ -824,6 +961,15 @@ function Dashboard({app,onOpenProfile,onNewProject}){
   function getWC(pid){return(app.allDrafts[pid]||[]).reduce(function(s,d){return s+(d.wordCount||0);},0);}
   function openProject(pid){app.loadProjectData(pid);app.setProjId(pid);app.setView('cards');}
   var editProj=editingProjId?app.projects.find(function(p){return p.id===editingProjId;}):null;
+  if(app.dataLoading&&app.projects.length===0){return(
+<div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+  <nav className="nav" style={{justifyContent:'space-between'}}><WovenLogo size={26}/></nav>
+  <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,background:'var(--bg0)'}}>
+    <div style={{width:36,height:36,borderRadius:'50%',border:'3px solid var(--border)',borderTopColor:'var(--indigo)',animation:'spin .8s linear infinite'}}/>
+    <div style={{fontFamily:'var(--serif)',fontSize:18,color:'var(--mid)'}}>Loading your projects...</div>
+  </div>
+</div>
+  );}
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
   <nav className="nav" style={{justifyContent:'space-between'}}>
@@ -897,6 +1043,7 @@ function ProjectNav({app,onOpenProfile}){
   <div style={{flex:1,display:'flex',justifyContent:'center'}}>
     <ViewSwitcher view={app.view} setView={app.setView}/>
   </div>
+  <GlobalSaveIndicator/>
   <div className="avatar" onClick={function(){onOpenProfile(null);}}>{initials(((app.profile||{}).firstName||'')+' '+((app.profile||{}).lastName||''))}</div>
 </nav>
   );
@@ -1620,6 +1767,14 @@ function LooseThreadsSection({threads,app,view}){
 }
 
 // ── Empty state ──
+function DraftLoadingSpinner(){
+  return(
+<div className="empty-view">
+  <div style={{width:32,height:32,borderRadius:'50%',border:'3px solid var(--border)',borderTopColor:'var(--indigo)',animation:'spin .8s linear infinite'}}/>
+  <div style={{fontFamily:'var(--serif)',fontSize:18,color:'var(--mid)'}}>Loading drafts...</div>
+</div>
+  );
+}
 function EmptyDrafts({onAdd}){
   return(
 <div className="empty-view">
@@ -1648,7 +1803,7 @@ function CardsView({app}){
 <div className="view-layout">
   <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
   <div className="view-area dot-grid">
-    {tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
+    {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div className="cards-grid">
   {displayed.map(function(parent){
     var childCount=parent.children?parent.children.length:0;
@@ -1686,7 +1841,7 @@ function TilesView({app}){
 <div className="view-layout">
   <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
   <div className="view-area dot-grid">
-    {tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
+    {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>
   <div className="tiles-grid">
     {displayed.map(function(parent,i){
@@ -1806,7 +1961,7 @@ function TableView({app}){
 <div className="view-layout">
   <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
   <div className="table-wrap dot-grid" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto'}}>
-    {tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
+    {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>
   <table className="wt">
     <thead>
@@ -1920,10 +2075,8 @@ function PropertiesDrawer({draft,app,onClose,onOpenStrandDetail}){
         <input type="file" accept="image/*" style={{display:'none'}} onChange={function(e){
           var file=e.target.files&&e.target.files[0];
           if(!file)return;
-          if(file.size>2*1024*1024){alert('Image must be under 2 MB.');return;}
-          var reader=new FileReader();
-          reader.onload=function(ev){update({thumbnail:ev.target.result});};
-          reader.readAsDataURL(file);
+          if(file.size>5*1024*1024){alert('Image must be under 5 MB.');return;}
+          uploadImage(file).then(function(url){if(url)update({thumbnail:url});});
         }}/>
       </label>
       {draft.thumbnail&&<button className="btn-icon" onClick={function(){update({thumbnail:null});}}><span className="mi" style={{fontSize:16}}>delete</span></button>}
@@ -2164,6 +2317,55 @@ function EditorStrandsPanel({draft,app,onClose,onOpenStrand}){
 }
 
 
+
+// ── VersionHistoryPanel ──
+function VersionHistoryPanel({draftId,onRestore,onClose}){
+  var snapshots=loadSnapshots(draftId);
+  var sp=useState(null);var preview=sp[0];var setPreview=sp[1];
+  return(
+<div className="panel-overlay">
+  <div className="panel-backdrop" onClick={onClose}/>
+  <div className="panel-box">
+    <div className="panel-hdr">
+      <span className="panel-title">Version History</span>
+      <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
+    </div>
+    <div style={{display:'flex',flex:1,overflow:'hidden'}}>
+      {/* Snapshot list */}
+      <div style={{width:180,borderRight:'1px solid var(--border)',overflowY:'auto',flexShrink:0}}>
+        {snapshots.length===0&&<div style={{padding:16,fontSize:13,color:'var(--mid)'}}>No history yet. History saves hourly while you write.</div>}
+        {snapshots.map(function(snap,i){var labelMap={'session-end':'Closed editor','auto':'Autosave'};var isStatus=snap.label&&snap.label.startsWith('status:');var labelText=isStatus?'Status change':labelMap[snap.label]||snap.label;return(
+<div key={snap.id} onClick={function(){setPreview(snap);}} style={{padding:'10px 14px',borderBottom:'1px solid var(--border)',cursor:'pointer',background:preview&&preview.id===snap.id?'var(--bg2)':'transparent',transition:'background .1s'}}>
+  <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>{formatSnapshotTime(snap.ts)}</div>
+  <div style={{fontSize:11,color:'var(--mid)'}}>{labelText}</div>
+  <div style={{fontSize:11,color:'var(--placeholder)'}}>{snap.wordCount||0}w</div>
+</div>
+        );})}
+      </div>
+      {/* Preview pane */}
+      <div style={{flex:1,overflow:'auto',padding:'20px 24px'}}>
+        {!preview&&<div style={{color:'var(--mid)',fontSize:13,marginTop:24,textAlign:'center'}}>Select a version to preview</div>}
+        {preview&&(
+<div>
+  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,paddingBottom:12,borderBottom:'1px solid var(--border)'}}>
+    <div>
+      <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600}}>{formatSnapshotTime(preview.ts)}</div>
+      <div style={{fontSize:12,color:'var(--mid)'}}>{preview.wordCount||0} words</div>
+    </div>
+    <button className="btn btn-primary btn-sm" onClick={function(){if(window.confirm('Restore this version? Your current draft will be replaced.'))onRestore(preview.body);}}>
+      Restore this version
+    </button>
+  </div>
+  <div style={{fontFamily:'var(--serif)',fontSize:17,lineHeight:1.9,color:'var(--body-text)'}} dangerouslySetInnerHTML={{__html:preview.body}}/>
+</div>
+        )}
+      </div>
+    </div>
+  </div>
+</div>
+  );
+}
+
 // ── ShareExportDropdown ──
 function ShareExportDropdown({pos,draft,app,editorRef,flushSave,onClose}){
   var stab=useState('share');var tab=stab[0];var setTab=stab[1];
@@ -2296,6 +2498,7 @@ function EditorView({app}){
   var ssd2=useState(false);var showStrandDrop=ssd2[0];var setShowStrandDrop=ssd2[1];
   var editorRef=useRef(null);var saveTimer=useRef(null);var lastDraftId=useRef(null);var sessionStartWc=useRef(0);
   var sst=useState('saved');var saveState=sst[0];var setSaveState=sst[1];
+  var svh=useState(false);var showHistory=svh[0];var setShowHistory=svh[1];
   var isMobile=useIsMobile();
   useEffect(function(){if(!draft)return;if(lastDraftId.current===draft.id)return;lastDraftId.current=draft.id;sessionStartWc.current=draft.wordCount||0;setWc(draft.wordCount||0);if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';},[did]);
   // Only reset editor when mode changes (not on re-renders)
@@ -2321,8 +2524,13 @@ function EditorView({app}){
     saveTimer.current=setTimeout(function(){
       app.updateDraft(pid,did,{body:html,wordCount:newWc,updatedAt:new Date().toISOString()});
       var added=Math.max(0,newWc-sessionStartWc.current);
-      if(added>0&&added<500){app.recordSession(pid,added);sessionStartWc.current=newWc;}
+      if(added>0&&added<500){
+        app.recordSession(pid,added,did,html);
+        sessionStartWc.current=newWc;
+      }
       setSaveState('saved');
+      // Auto snapshot: hourly gate enforced inside saveSnapshot
+      saveSnapshot(did,html,newWc,'auto');
     },600);
   }
   function handleRTInput(){if(!editorRef.current)return;var text=editorRef.current.innerText||editorRef.current.textContent||'';var newWc=countWords(text);setWc(newWc);scheduleSave(editorRef.current.innerHTML,newWc);}
@@ -2419,11 +2627,23 @@ function EditorView({app}){
 <div className="editor-layout">
   <div className="editor-topbar">
     <div className="editor-topbar-row1">
-      <button className="editor-back" onClick={function(){if(saveTimer.current)clearTimeout(saveTimer.current);app.setView('cards');app.setDraftId(null);}}><span className="mi">arrow_back</span></button>
+      <button className="editor-back" onClick={function(){
+        if(saveTimer.current)clearTimeout(saveTimer.current);
+        if(editorRef.current){
+          var html=editorRef.current.innerHTML;
+          var wc=countWords(editorRef.current.innerText||'');
+          app.updateDraft(pid,did,{body:html,wordCount:wc,updatedAt:new Date().toISOString()});
+          saveSnapshot(did,html,wc,'session-end');
+        }
+        app.setView('cards');app.setDraftId(null);
+      }}><span className="mi">arrow_back</span></button>
       <input key={draft.id+'-et-'+draft.title} className="editor-title-inp" defaultValue={draft.title} placeholder="Untitled draft" onBlur={function(e){app.updateDraft(pid,did,{title:e.target.value,updatedAt:new Date().toISOString()});}}/>
     </div>
     <div className="editor-topbar-row2">
     <button className="btn btn-ghost btn-sm" style={showProps?{borderColor:'var(--indigo)',color:'var(--indigo)'}:{}} onClick={function(){setShowProps(!showProps);setStrandDetailId(null);}}>Properties</button>
+    <button className="btn btn-ghost btn-sm" onClick={function(){setShowHistory(true);}} title="Version history">
+      <span className="mi" style={{fontSize:16}}>history</span>
+    </button>
     <button className="btn btn-ghost btn-sm" style={showStrands?{borderColor:'var(--indigo)',color:'var(--indigo)'}:{}} onClick={function(){setShowStrands(!showStrands);setStrandDetailId(null);}}>Strands</button>
     <div ref={shareRef} style={{position:'relative'}}>
       <button className="btn btn-ghost btn-sm" onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setSharePos({top:r.bottom+4,left:r.right-280});setShareOpen(!shareOpen);}}>
@@ -2492,6 +2712,8 @@ function EditorView({app}){
   )}
 
 </div>
+  {showHistory&&<VersionHistoryPanel draftId={did} onClose={function(){setShowHistory(false);}} onRestore={function(body){if(editorRef.current)editorRef.current.innerHTML=body;setShowHistory(false);setSaveState('saving');scheduleSave(body,countWords(body));}}/>}
+</div>
   );
 }
 
@@ -2505,10 +2727,8 @@ function AvatarEditModal({strand,onSave,onClose}){
   var se=useState(strand.emoji||null);var emoji=se[0];var setEmoji=se[1];
   function handleFile(e){
     var file=e.target.files&&e.target.files[0];if(!file)return;
-    if(file.size>2*1024*1024){alert('Image must be under 2 MB.');return;}
-    var reader=new FileReader();
-    reader.onload=function(ev){setImage(ev.target.result);};
-    reader.readAsDataURL(file);
+    if(file.size>5*1024*1024){alert('Image must be under 5 MB.');return;}
+    uploadImage(file).then(function(url){if(url)setImage(url);});
   }
   function handleSave(){onSave({color:color,image:image,emoji:emoji});}
   function autoSaveColor(c){setColor(c);onSave({color:c,image:image,emoji:emoji});}
@@ -2595,7 +2815,7 @@ function StrandsPage({app,allProjects}){
   function updateField(sid,fieldId,val){if(!activeStrand)return;var nf=Object.assign({},activeStrand.fields||{});nf[fieldId]=val;updateStrand(sid,{fields:nf});}
   function addStrand(){var tpl=getTpl(activeColl);var existing=(app.allStrands[pid]&&app.allStrands[pid][activeColl])||[];var base='New '+activeColl.replace(/s$/,'');var num=existing.filter(function(s){return s.name&&s.name.startsWith(base);}).length+1;var ns={id:genId(),templateId:tpl?tpl.id:'',collectionName:activeColl,name:base+' '+num,color:({"Characters":"#c45e28","Locations":"#2f9966","Plot Threads":"#2f76e0","Sources":"#ce2fe0","Interviews":"#e02f79","Subjects":"#e8a030","Scenes":"#64e02f","Topics":"#2fe07f","Lore & World":"#e8a030","Reports":"#b83220","Audience Notes":"#f0c050"}[activeColl])||PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};app.addStrand(pid,activeColl,ns);setActiveStrandId(ns.id);if(isMobile)setMobileDetailOpen(true);}
   function addCollection(){var name=newCollName.trim();if(!name)return;var nt={id:genId(),projectId:pid,name:name,fields:defaultFields(name),sharedWith:[]};app.addTemplate(pid,nt);app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});setActiveColl(name);setNewColl(false);setNewCollName('');setEditingFields(defaultFields(name));setSharedWith([]);setShowCollSettings(true);}
-  function handleImageUpload(e,sid){var file=e.target.files&&e.target.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(ev){updateStrand(sid,{image:ev.target.result});};reader.readAsDataURL(file);}
+  function handleImageUpload(e,sid){var file=e.target.files&&e.target.files[0];if(!file)return;uploadImage(file).then(function(url){if(url)updateStrand(sid,{image:url});});}
   function getDraftAppearances(sid){return(app.allDrafts[pid]||[]).filter(function(d){return(d.strandTags||[]).includes(sid);});}
   function renderFieldInput(f,sid,val){
     if(f.type==='long_text')return <textarea key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} rows={3} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
@@ -3176,8 +3396,29 @@ function App(){
     return function(){sub.data.subscription.unsubscribe();};
   },[]);
 
+  function checkLocalStorageQuota(){
+    try{
+      var used=0;
+      for(var k in localStorage){
+        if(localStorage.hasOwnProperty(k))used+=((localStorage[k].length+k.length)*2);
+      }
+      var usedMB=(used/1024/1024).toFixed(1);
+      if(used>40*1024*1024){
+        console.warn('localStorage usage: '+usedMB+'MB — approaching limit');
+        // Prune oldest snapshots across all draft keys to free space
+        var snapshotKeys=Object.keys(localStorage).filter(function(k){return k.startsWith('woven:versions:');});
+        snapshotKeys.forEach(function(k){
+          try{
+            var snaps=JSON.parse(localStorage.getItem(k)||'[]');
+            if(snaps.length>5){localStorage.setItem(k,JSON.stringify(snaps.slice(0,5)));}
+          }catch(e){}
+        });
+      }
+    }catch(e){}
+  }
   function loadAllData(){
     setDataLoading(true);
+    checkLocalStorageQuota();
     // Reset React state first so previous user's data never shows
     setProjects([]);setAllDrafts({});setAllStrands({});setAllTemplates({});
     setSessions([]);setGlobalLT({});setGoalState(500);
@@ -3227,7 +3468,19 @@ function App(){
     });
   }
 
-  function updateDraft(pid,did,changes){setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).map(function(d){return d.id!==did?d:Object.assign({},d,changes);});next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});}
+  function updateDraft(pid,did,changes){setAllDrafts(function(prev){
+    var next=Object.assign({},prev);
+    var ds=(next[pid]||[]).map(function(d){
+      if(d.id!==did)return d;
+      if(changes.thumbnail!==undefined&&d.thumbnail&&d.thumbnail!==changes.thumbnail)deleteStorageImage(d.thumbnail);
+      var updated=Object.assign({},d,changes);
+      if(changes.status&&changes.status!==d.status&&d.body){
+        saveSnapshot(did,d.body,d.wordCount,'status:'+changes.status);
+      }
+      return updated;
+    });
+    next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;
+  });}
   function addDraft(pid,nd){setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).concat([nd]);next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});}
   function reorderDraft(pid,fromId,toOrder){
     setAllDrafts(function(prev){
@@ -3248,13 +3501,26 @@ function App(){
       next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;
     });
   }
-  function updateStrand(pid,coll,sid,changes){setAllStrands(function(prev){var next=Object.assign({},prev);var ps=Object.assign({},next[pid]||{});ps[coll]=(ps[coll]||[]).map(function(s){return s.id!==sid?s:Object.assign({},s,changes);});next[pid]=ps;saveDB('woven:strands:'+pid,ps);return next;});}
+  function updateStrand(pid,coll,sid,changes){setAllStrands(function(prev){
+    var next=Object.assign({},prev);var ps=Object.assign({},next[pid]||{});
+    ps[coll]=(ps[coll]||[]).map(function(s){
+      if(s.id!==sid)return s;
+      if(changes.image!==undefined&&s.image&&s.image!==changes.image)deleteStorageImage(s.image);
+      return Object.assign({},s,changes);
+    });
+    next[pid]=ps;saveDB('woven:strands:'+pid,ps);return next;
+  });}
   function addStrand(pid,coll,ns){setAllStrands(function(prev){var next=Object.assign({},prev);var ps=Object.assign({},next[pid]||{});ps[coll]=(ps[coll]||[]).concat([ns]);next[pid]=ps;saveDB('woven:strands:'+pid,ps);return next;});}
   function addTemplate(pid,tpl){setAllTemplates(function(prev){var next=Object.assign({},prev);next[pid]=(next[pid]||[]).concat([tpl]);saveDB('woven:templates:'+pid,next[pid]);return next;});}
   function updateTemplate(pid,tid,changes){setAllTemplates(function(prev){var next=Object.assign({},prev);next[pid]=(next[pid]||[]).map(function(t){return t.id!==tid?t:Object.assign({},t,changes);});saveDB('woven:templates:'+pid,next[pid]);return next;});}
   function updateProjectTitle(pid,newTitle){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{title:newTitle});});saveDB('woven:projects',next);return next;});}
   function updateProjectSynopsis(pid,syn){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{synopsis:syn});});saveDB('woven:projects',next);return next;});}
-  function updateProjectImage(pid,img){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{image:img});});saveDB('woven:projects',next);return next;});}
+  function updateProjectImage(pid,img){setProjects(function(prev){
+    var old=prev.find(function(p){return p.id===pid;});
+    if(old&&old.image&&old.image!==img)deleteStorageImage(old.image);
+    var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{image:img});});
+    saveDB('woven:projects',next);return next;
+  });}
   function updateProjectType(pid,type){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{type:type});});saveDB('woven:projects',next);return next;});}
   function archiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:true});});saveDB('woven:projects',next);return next;});}
   function unarchiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:false});});saveDB('woven:projects',next);return next;});}
@@ -3282,7 +3548,7 @@ function App(){
       return next;
     });
   }
-  function recordSession(pid,wordsAdded){
+  function recordSession(pid,wordsAdded,draftId,body){
     var t=todayStr();
     if(!wordsAdded||wordsAdded<=0||wordsAdded>500)return;
     setSessions(function(prev){
@@ -3328,7 +3594,12 @@ function App(){
   var shareId=urlParams.get('share');
   if(shareId)return(<div className="woven-root"><GlobalStyles/><SharedDraftView shareId={shareId}/></div>);
 
-  if(authLoading)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg0)',fontFamily:'var(--serif)',fontSize:24,color:'var(--mid)'}}>Loading...</div>);
+  if(authLoading)return(
+<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg0)',flexDirection:'column',gap:16}}>
+  <WovenLogo size={32} dark={true}/>
+  <div style={{width:28,height:28,borderRadius:'50%',border:'3px solid var(--border)',borderTopColor:'var(--indigo)',animation:'spin .8s linear infinite'}}/>
+</div>
+  );
   if(!currentUser)return(<div><GlobalStyles/><AuthScreen onAuth={function(user){window.__wovenUserId=user.id;setCurrentUser(user);loadAllData();}}/></div>);
 
   var inner=null;
