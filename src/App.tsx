@@ -2591,7 +2591,6 @@ function EditorView({app}){
         }
       </span>
     </div>
-    </div>
     <div style={{display:'flex',alignItems:'center',gap:8}}>
       <span style={{fontSize:12}}>{zoom}%</span>
       <input type="range" min={70} max={150} step={10} value={zoom} onChange={function(e){setZoom(parseInt(e.target.value,10));}} style={{width:72}}/>
