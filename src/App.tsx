@@ -1192,7 +1192,18 @@ function StatusDotWithArchive({draft,app,showLabel}){
 // ── Export helpers ──
 function stripHtmlForExport(html){
   if(!html)return'';
-  return html.replace(/<h1[^>]*>(.*?)<\/h1>/gi,'\n\n$1\n').replace(/<h2[^>]*>(.*?)<\/h2>/gi,'\n\n$1\n').replace(/<br\s*\/?>/gi,'\n').replace(/<p[^>]*>(.*?)<\/p>/gi,'$1\n').replace(/<li[^>]*>(.*?)<\/li>/gi,'• $1\n').replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ').trim();
+  var s=html
+    .replace(/[ \t\r\n]+/g,' ')
+    .replace(/<h[12][^>]*>(.*?)<\/h[12]>/gi,' $1 ')
+    .replace(/<br\s*\/?>/gi,' ')
+    .replace(/<\/p>/gi,' ')
+    .replace(/<p[^>]*>/gi,' ')
+    .replace(/<li[^>]*>(.*?)<\/li>/gi,' $1 ')
+    .replace(/<[^>]+>/g,'')
+    .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ')
+    .replace(/  +/g,' ')
+    .trim();
+  return s;
 }
 
 function cleanBodyForExport(html){
@@ -1595,6 +1606,7 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
   var isMobile=useIsMobile();
   var so=useState(false);var over=so[0];var setOver=so[1];
   var sn=useState(false);var nestTarget=sn[0];var setNestTarget=sn[1];
+  var nestTargetRef=useRef(false);
   var sac=useState(false);var archiveConfirm=sac[0];var setArchiveConfirm=sac[1];
   var nestTimer=useRef(null);
   var projStrands=app.allStrands[app.projId]||{};
@@ -1618,11 +1630,11 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
   function handleDragOver(e){
     e.preventDefault();setOver(true);
     if(!nestTimer.current){
-      nestTimer.current=setTimeout(function(){setNestTarget(true);},2000);
+      nestTimer.current=setTimeout(function(){setNestTarget(true);nestTargetRef.current=true;},2000);
     }
   }
   function handleDragLeave(){
-    setOver(false);setNestTarget(false);
+    setOver(false);setNestTarget(false);nestTargetRef.current=false;
     if(nestTimer.current){clearTimeout(nestTimer.current);nestTimer.current=null;}
   }
   function handleDrop(e){
@@ -1632,7 +1644,7 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
       var fromDraft=(app.allDrafts[app.projId]||[]).find(function(d){return d.id===fromId;});
       var isLT=fromDraft&&fromDraft.status==='loose_thread';
       // Read nestTarget from ref to get current value at drop time
-      var isNesting=nestTarget&&!draft.parentId&&!isLT&&!fromDraft.parentId;
+      var isNesting=nestTargetRef.current&&!draft.parentId&&!isLT&&!fromDraft.parentId;
       if(isNesting){
         app.nestDraft(app.projId,fromId,draft.id);
       } else if(isLT){
@@ -1642,7 +1654,7 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
         app.reorderDraft(app.projId,fromId,draft.order||0);
       }
     }
-    setOver(false);setNestTarget(false);
+    setOver(false);setNestTarget(false);nestTargetRef.current=false;
     if(nestTimer.current){clearTimeout(nestTimer.current);nestTimer.current=null;}
   }
   var chips=tagged.slice(0,2);
@@ -1671,7 +1683,7 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
     ):<span style={{color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:16}}>drag_indicator</span></span>}
   </div>
   <div className="card-body">
-    <textarea className="card-title-f" title={draft.title||''} defaultValue={draft.title} placeholder="Untitled draft" rows={2} onBlur={function(e){update({title:e.target.value});}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}}/>
+    <textarea className="card-title-f" title={draft.title||''} defaultValue={draft.title} placeholder="Untitled draft" rows={1} ref={function(el){if(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,52)+'px';}}} onInput={function(e){e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,52)+'px';}} onBlur={function(e){update({title:e.target.value});}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}}/>
     {draft.synopsis?(
 <textarea className="card-syn-f" defaultValue={draft.synopsis} rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
     ):(
@@ -2365,46 +2377,30 @@ function VersionHistoryPanel({draftId,onRestore,onClose}){
   var snapshots=loadSnapshots(draftId);
   var sp=useState(null);var preview=sp[0];var setPreview=sp[1];
   return(
-<div className="panel-overlay">
-  <div className="panel-backdrop" onClick={onClose}/>
-  <div className="panel-box">
-    <div className="panel-hdr">
-      <span className="panel-title">Version History</span>
-      <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
+<Panel open={true} onClose={onClose} title="Version History">
+    <div style={{display:'flex',flexDirection:'column',gap:0}}>
+      {snapshots.length===0&&<div style={{padding:16,fontSize:13,color:'var(--mid)',textAlign:'center'}}>No history yet — saves hourly while you write.</div>}
+      {snapshots.map(function(snap){var labelMap={'session-end':'Session end','auto':'Autosave'};var isStatus=snap.label&&snap.label.startsWith('status:');var labelText=isStatus?'Status change':labelMap[snap.label]||snap.label;var isActive=preview&&preview.id===snap.id;return(
+<div key={snap.id} style={{borderBottom:'1px solid var(--border)'}}>
+  <div onClick={function(){setPreview(isActive?null:snap);}} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 0',cursor:'pointer'}}>
+    <div style={{flex:1}}>
+      <div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{formatSnapshotTime(snap.ts)}</div>
+      <div style={{fontSize:11,color:'var(--mid)'}}>{labelText} · {snap.wordCount||0}w</div>
     </div>
-    <div style={{display:'flex',flex:1,overflow:'hidden'}}>
-      {/* Snapshot list */}
-      <div style={{width:180,borderRight:'1px solid var(--border)',overflowY:'auto',flexShrink:0}}>
-        {snapshots.length===0&&<div style={{padding:16,fontSize:13,color:'var(--mid)'}}>No history yet. History saves hourly while you write.</div>}
-        {snapshots.map(function(snap,i){var labelMap={'session-end':'Closed editor','auto':'Autosave'};var isStatus=snap.label&&snap.label.startsWith('status:');var labelText=isStatus?'Status change':labelMap[snap.label]||snap.label;return(
-<div key={snap.id} onClick={function(){setPreview(snap);}} style={{padding:'10px 14px',borderBottom:'1px solid var(--border)',cursor:'pointer',background:preview&&preview.id===snap.id?'var(--bg2)':'transparent',transition:'background .1s'}}>
-  <div style={{fontSize:12,fontWeight:600,color:'var(--text)',marginBottom:2}}>{formatSnapshotTime(snap.ts)}</div>
-  <div style={{fontSize:11,color:'var(--mid)'}}>{labelText}</div>
-  <div style={{fontSize:11,color:'var(--placeholder)'}}>{snap.wordCount||0}w</div>
-</div>
-        );})}
-      </div>
-      {/* Preview pane */}
-      <div style={{flex:1,overflow:'auto',padding:'20px 24px'}}>
-        {!preview&&<div style={{color:'var(--mid)',fontSize:13,marginTop:24,textAlign:'center'}}>Select a version to preview</div>}
-        {preview&&(
-<div>
-  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,paddingBottom:12,borderBottom:'1px solid var(--border)'}}>
-    <div>
-      <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600}}>{formatSnapshotTime(preview.ts)}</div>
-      <div style={{fontSize:12,color:'var(--mid)'}}>{preview.wordCount||0} words</div>
-    </div>
-    <button className="btn btn-primary btn-sm" onClick={function(){if(window.confirm('Restore this version? Your current draft will be replaced.'))onRestore(preview.body);}}>
-      Restore this version
-    </button>
+    <span className="mi" style={{fontSize:16,color:'var(--border)',transform:isActive?'rotate(90deg)':'none',transition:'transform .15s'}}>chevron_right</span>
   </div>
-  <div style={{fontFamily:'var(--serif)',fontSize:17,lineHeight:1.9,color:'var(--body-text)'}} dangerouslySetInnerHTML={{__html:preview.body}}/>
+  {isActive&&(
+<div style={{paddingBottom:12}}>
+  <div style={{fontFamily:'var(--serif)',fontSize:15,lineHeight:1.8,color:'var(--body-text)',maxHeight:200,overflow:'auto',padding:'8px 0',borderTop:'1px solid var(--border)',marginBottom:8}} dangerouslySetInnerHTML={{__html:snap.body}}/>
+  <button className="btn btn-primary btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={function(){if(window.confirm('Restore this version?'))onRestore(snap.body);}}>
+    Restore this version
+  </button>
 </div>
-        )}
-      </div>
+  )}
+</div>
+      );})}
     </div>
-  </div>
-</div>
+</Panel>
   );
 }
 
@@ -2836,6 +2832,33 @@ function AvatarEditModal({strand,onSave,onClose}){
   );
 }
 
+
+// ── CollTab: collection tab with inline rename on double-click ──
+function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrandId,setSearch,setShowCollSettings}){
+  var se=useState(false);var editing=se[0];var setEditing=se[1];
+  var sv=useState(coll);var val=sv[0];var setVal=sv[1];
+  function commitRename(){
+    var nc=val.trim();
+    if(nc&&nc!==coll){
+      app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[nc]=ps[coll]||[];delete ps[coll];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});
+      if(activeColl===coll)setActiveColl(nc);
+    } else {setVal(coll);}
+    setEditing(false);
+  }
+  if(editing){return(
+<div className="strands-tab active" style={{padding:'0 4px'}}>
+  <input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commitRename} onKeyDown={function(e){if(e.key==='Enter')commitRename();if(e.key==='Escape'){setVal(coll);setEditing(false);}}} style={{width:90,height:24,fontSize:13,padding:'2px 6px',borderRadius:4}}/>
+</div>
+  );}
+  return(
+<div className={'strands-tab'+(isActive?' active':'')}
+  onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}}
+  onDoubleClick={function(){setEditing(true);}}>
+  {coll}
+</div>
+  );
+}
+
 // ── StrandsPage ──
 function StrandsPage({app,allProjects}){
   var pid=app.projId;
@@ -2992,9 +3015,7 @@ function StrandsPage({app,allProjects}){
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
   <div className="strands-subnav">
     {collNames.map(function(coll){return(
-<div key={coll} className={'strands-tab'+(activeColl===coll?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){var nn=window.prompt('Rename collection:',coll);if(nn&&nn.trim()&&nn.trim()!==coll){var nc=nn.trim();app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[nc]=ps[coll]||[];delete ps[coll];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});if(activeColl===coll)setActiveColl(nc);}}}>
-  {coll}
-</div>
+<CollTab key={coll} coll={coll} isActive={activeColl===coll} pid={pid} app={app} activeColl={activeColl} setActiveColl={setActiveColl} setActiveStrandId={setActiveStrandId} setSearch={setSearch} setShowCollSettings={setShowCollSettings}/>
     );})}
     {newColl?(
 <div style={{display:'flex',alignItems:'center',gap:4}}>
@@ -3125,13 +3146,14 @@ function ProjectWizard({app,onClose}){
   var spt=useState(null);var projType=spt[0];var setProjType=spt[1];
   var st=useState('');var title=st[0];var setTitle=st[1];
   var ssyn=useState('');var synopsis=ssyn[0];var setSynopsis=ssyn[1];
+  var swi=useState(null);var wizardImage=swi[0];var setWizardImage=swi[1];
   var ssc=useState([]);var selectedColls=ssc[0];var setSelectedColls=ssc[1];
   var titleRef=useRef(null);
   useEffect(function(){if(step===1&&titleRef.current)titleRef.current.focus();},[step]);
   var allColls=['Characters','Locations','Lore & World','Sources','Interviews','Subjects','Scenes','Plot Threads','Topics','Audience Notes','Reports'];
   function selectType(t){setProjType(t);setSelectedColls(t.colls);setStep(1);}
   function toggleColl(c){setSelectedColls(function(sc){return sc.includes(c)?sc.filter(function(x){return x!==c;}):sc.concat([c]);});}
-  function create(){if(!title.trim())return;var pid=genId();var now=new Date().toISOString();var proj={id:pid,title:title.trim(),type:projType?projType.label:'Other',synopsis:synopsis.trim(),lastEdited:now,createdAt:now,draftFieldDefs:[]};var tpls=selectedColls.map(function(c){return{id:genId(),projectId:pid,name:c,fields:defaultFields(c),sharedWith:[]};});var strandsObj={};selectedColls.forEach(function(c){strandsObj[c]=[];});app.createProject(proj,{templates:tpls,strandsObj:strandsObj});onClose();app.loadProjectData(pid);app.setProjId(pid);app.setView('cards');}
+  function create(){if(!title.trim())return;var pid=genId();var now=new Date().toISOString();var proj={id:pid,title:title.trim(),type:projType?projType.label:'Other',synopsis:synopsis.trim(),image:wizardImage||null,lastEdited:now,createdAt:now,draftFieldDefs:[]};var tpls=selectedColls.map(function(c){return{id:genId(),projectId:pid,name:c,fields:defaultFields(c),sharedWith:[]};});var strandsObj={};selectedColls.forEach(function(c){strandsObj[c]=[];});app.createProject(proj,{templates:tpls,strandsObj:strandsObj});onClose();app.loadProjectData(pid);app.setProjId(pid);app.setView('cards');}
   return(
 <div className="modal-overlay">
   <div className="modal-backdrop" onClick={onClose}/>
@@ -3156,6 +3178,17 @@ function ProjectWizard({app,onClose}){
 <div>
   <input ref={titleRef} style={{fontSize:18,padding:'12px 14px',background:'var(--bg2)',border:'2px solid var(--border)',borderRadius:10,width:'100%',marginBottom:14,color:'var(--text)',fontFamily:'var(--serif)',fontWeight:600}} value={title} onChange={function(e){setTitle(e.target.value);}} placeholder="Working title..." onKeyDown={function(e){if(e.key==='Enter'&&title.trim())setStep(2);}}/>
   <textarea style={{fontSize:14,padding:'10px 14px',background:'var(--bg2)',border:'2px solid var(--border)',borderRadius:10,width:'100%',color:'var(--text)',marginBottom:14}} value={synopsis} onChange={function(e){setSynopsis(e.target.value);}} placeholder="What is this about? (optional)" rows={3}/>
+  <div style={{marginBottom:14}}>
+    <div style={{fontSize:12,color:'var(--mid)',marginBottom:6}}>Cover image <span style={{opacity:.6}}>(optional)</span></div>
+    <div style={{display:'flex',alignItems:'center',gap:10}}>
+      {wizardImage&&<img src={wizardImage} alt="" style={{width:56,height:40,objectFit:'cover',borderRadius:6,flexShrink:0}}/>}
+      <label style={{cursor:'pointer'}}>
+        <span className="btn btn-ghost btn-sm">{wizardImage?'Change':'Upload cover'}</span>
+        <input type="file" accept="image/*" style={{display:'none'}} onChange={function(e){var file=e.target.files&&e.target.files[0];if(!file)return;uploadImage(file).then(function(url){if(url)setWizardImage(url);});}}/>
+      </label>
+      {wizardImage&&<button className="btn-icon" onClick={function(){setWizardImage(null);}}><span className="mi" style={{fontSize:16}}>delete</span></button>}
+    </div>
+  </div>
   <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
     <button className="btn btn-ghost" onClick={function(){setStep(0);}}>Back</button>
     <button className="btn btn-primary" onClick={function(){setStep(2);}} disabled={!title.trim()}>Next</button>
