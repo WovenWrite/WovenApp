@@ -371,7 +371,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .draft-card.nest-target{border-color:var(--teal);border-style:dashed;}
 .card-hdr{height:64px;background:linear-gradient(135deg,var(--bg2),var(--bg3));display:flex;align-items:center;justify-content:space-between;padding:0 10px;flex-shrink:0;}
 .card-seq{font-family:var(--scribble);font-size:15px;font-weight:600;color:var(--mid);}
-.card-body{flex:1;padding:8px 10px;overflow:hidden;display:flex;flex-direction:column;gap:4px;min-height:0;}
+.card-body{flex:1;padding:8px 10px;overflow:hidden;display:flex;flex-direction:column;gap:0;min-height:0;}
 .card-title-f{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--text);width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;resize:none;overflow:hidden;line-height:1.35;height:38px;max-height:52px;display:block;white-space:pre-wrap;}
 .card-title-f:focus{background:var(--bg2);outline:1px solid var(--indigo);}
 .card-title-f::placeholder{color:var(--placeholder);}
@@ -823,11 +823,11 @@ function ProjectEditPanel({proj,app,onClose}){
         <span className="btn btn-ghost btn-sm">{image?'Change':'Upload cover'}</span>
         <input type="file" accept="image/*" style={{display:'none'}} onChange={function(e){
           var file=e.target.files&&e.target.files[0];if(!file)return;
-          if(file.size>3*1024*1024){alert('Image must be under 3 MB.');return;}
-          uploadImage(file).then(function(url){if(url)setImage(url);});
+          if(file.size>5*1024*1024){alert('Image must be under 5 MB.');return;}
+          uploadImage(file).then(function(url){if(url){setImage(url);autoSaveField({image:url});}});
         }}/>
       </label>
-      {image&&<button className="btn-icon" onClick={function(){setImage(null);}}><span className="mi" style={{fontSize:16}}>delete</span></button>}
+      {image&&<button className="btn-icon" onClick={function(){setImage(null);autoSaveField({image:null});}}><span className="mi" style={{fontSize:16}}>delete</span></button>}
     </div>
   </div>
   <div style={{marginBottom:16}}><span className="sect-lbl">Title</span><input value={title} onChange={function(e){setTitle(e.target.value);}} onBlur={function(e){autoSaveField({title:e.target.value});}}/></div>
@@ -1050,6 +1050,34 @@ function ProjectNav({app,onOpenProfile}){
 }
 
 
+
+// ── CollFilterGroup ──
+function CollFilterGroup({coll,strands,filter,setFilter,setFilterOpen}){
+  var sc=useState(true);var collapsed=sc[0];var setCollapsed=sc[1];
+  var hasActive=strands.some(function(st){return st.id===filter;});
+  return(
+<div style={{borderBottom:'1px solid var(--border)'}}>
+  <div style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',cursor:'pointer',userSelect:'none'}} onClick={function(){setCollapsed(!collapsed);}}>
+    <span className="mi" style={{fontSize:14,color:'var(--mid)',transition:'transform .15s',transform:collapsed?'rotate(-90deg)':'rotate(0deg)'}}>expand_more</span>
+    <span style={{fontSize:12,fontWeight:600,color:hasActive?'var(--indigo)':'var(--text)',flex:1}}>{coll}</span>
+    {hasActive&&<span style={{width:6,height:6,borderRadius:'50%',background:'var(--indigo)',flexShrink:0}}/>}
+  </div>
+  {!collapsed&&(
+<div style={{paddingBottom:6}}>
+  {strands.map(function(st){var isActive=filter===st.id;return(
+<div key={st.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 10px 5px 28px',cursor:'pointer'}} onMouseDown={function(e){e.preventDefault();e.stopPropagation();setFilter(isActive?null:st.id);setFilterOpen(false);}}>
+  <span style={{width:14,height:14,borderRadius:3,border:'1px solid '+(isActive?'var(--indigo)':'var(--border)'),background:isActive?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
+    {isActive&&<span className="mi" style={{fontSize:11,color:'#fff'}}>check</span>}
+  </span>
+  <span style={{fontSize:13,color:isActive?'var(--indigo)':'var(--text)',fontWeight:isActive?500:400}}>{st.name}</span>
+</div>
+  );})}
+</div>
+  )}
+</div>
+  );
+}
+
 // ── SortDropdown ──
 function SortDropdown({sort,setSort}){
   var ss=useState(false);var open=ss[0];var setOpen=ss[1];
@@ -1103,21 +1131,18 @@ function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind}){
     {hasFilter&&<span style={{position:'absolute',top:-6,right:-6,background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:16,height:16,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>1</span>}
   </div>
   {filterOpen&&(
-<div className="filter-dropdown" style={{top:filterPos.top,left:filterPos.left}}>
-  <div style={{padding:'6px 8px 2px',fontSize:12,color:'var(--mid)'}}>Filter by strand</div>
-  {hasFilter&&<div style={{padding:'4px 8px'}}><button className="btn btn-ghost btn-sm" onClick={function(){setFilter(null);setFilterOpen(false);}}>Clear filter</button></div>}
-  {Object.keys(projStrands).map(function(coll){var collStrands=projStrands[coll]||[];if(collStrands.length===0)return null;return(
-<div key={coll}>
-  <span className="filter-coll-lbl">{coll}</span>
-  <div style={{display:'flex',flexWrap:'wrap',gap:4,padding:'0 8px 8px'}}>
-    {collStrands.map(function(st){var isActive=filter===st.id;var bg=isActive?st.color:'transparent';var col=isActive?'#fff':st.color;return(
-<span key={st.id} className="chip" style={{background:bg,color:col,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid',cursor:'pointer'}} onMouseDown={function(e){e.preventDefault();e.stopPropagation();setFilter(isActive?null:st.id);setFilterOpen(false);}}>
-  {st.name}
-</span>
-    );})}
+<div className="filter-dropdown" style={{top:filterPos.top,left:filterPos.left,minWidth:220}}>
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px 4px'}}>
+    <span style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em'}}>Filter by strand</span>
+    {hasFilter&&<button className="btn btn-ghost btn-sm" style={{padding:'2px 8px',fontSize:11}} onClick={function(){setFilter(null);setFilterOpen(false);}}>Clear</button>}
   </div>
-</div>
-  );})}
+  {Object.keys(projStrands).map(function(coll){
+    var collStrands=projStrands[coll]||[];
+    if(collStrands.length===0)return null;
+    return(
+<CollFilterGroup key={coll} coll={coll} strands={collStrands} filter={filter} setFilter={setFilter} setFilterOpen={setFilterOpen}/>
+    );
+  })}
   {Object.values(projStrands).flat().length===0&&<div style={{padding:'8px 12px',fontSize:13,color:'var(--mid)'}}>No strands yet.</div>}
 </div>
   )}
@@ -1208,7 +1233,7 @@ function doExport(format,drafts,project,isSingleDraft,authorName){
     else if(!jspdfLib){alert('PDF export is still loading. Please try again in a moment.');return false;}
     var JsPDF=jspdfLib.jsPDF||jspdfLib;
     var doc=new JsPDF({unit:'mm',format:'a4'});
-    var margin=20;var pageW=210-margin*2;var y=margin;var lineH=7;
+    var margin=20;var pageW=doc.internal.pageSize.getWidth()-margin*2;var y=margin;var lineH=7;
 
     if(isSingle){
       // ── Single draft: inline header, no cover/index page ──
@@ -1392,7 +1417,7 @@ function SharedDraftView({shareId}){
   <div style={{borderTop:'1px solid var(--border)',padding:'20px 24px',display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--bg1)',flexShrink:0}}>
     <WovenLogo size={22}/>
     <div style={{fontSize:11,color:'var(--mid)',fontFamily:'var(--ui)',textAlign:'center',lineHeight:1.5}}>
-    © {new Date().getFullYear()} Woven &nbsp;·&nbsp; All writing belongs to the author.
+    © {new Date().getFullYear()} Woven &nbsp;·&nbsp; All writing belongs to {data.author_name||'the author'}.
   </div>
     <a href="https://app.writewoven.com" style={{fontSize:12,color:'var(--indigo)',fontFamily:'var(--ui)',textDecoration:'none',fontWeight:500}}>Start writing free →</a>
   </div>
@@ -1606,11 +1631,11 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
     if(fromId&&fromId!==draft.id){
       var fromDraft=(app.allDrafts[app.projId]||[]).find(function(d){return d.id===fromId;});
       var isLT=fromDraft&&fromDraft.status==='loose_thread';
-      if(nestTarget&&!draft.parentId&&!isLT){
-        // Nest the dragged draft under this one (never nest a LT)
+      // Read nestTarget from ref to get current value at drop time
+      var isNesting=nestTarget&&!draft.parentId&&!isLT&&!fromDraft.parentId;
+      if(isNesting){
         app.nestDraft(app.projId,fromId,draft.id);
       } else if(isLT){
-        // Always promote loose thread to sequence (ignore nestTarget)
         var seqCount=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;
         app.updateDraft(app.projId,fromId,{status:'first_draft',order:draft.order||seqCount+1,parentId:null});
       } else {
@@ -1627,8 +1652,8 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
   onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}}
   onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
   <div className="card-hdr" style={{backgroundImage:draft.thumbnail?'url('+draft.thumbnail+')':undefined,backgroundSize:'cover',backgroundPosition:'center'}}>
-    <div style={{display:'flex',alignItems:'center',gap:5,background:draft.thumbnail?'rgba(253,248,240,.75)':'transparent',borderRadius:4,padding:'2px 5px'}}>
-      <span className="card-seq" style={{color:'var(--text)',background:draft.thumbnail?'rgba(253,248,240,.85)':'transparent',borderRadius:4,padding:'1px 6px'}}>{label}</span>
+    <div style={{display:'flex',alignItems:'center',gap:5}}>
+      <span className="card-seq" style={{color:draft.thumbnail?'#fff':'var(--text)',background:draft.thumbnail?'rgba(42,31,16,.45)':'transparent',borderRadius:4,padding:'1px 6px',backdropFilter:draft.thumbnail?'blur(2px)':'none'}}>{label}</span>
       {childCount>0&&(
 <div style={{display:'flex',alignItems:'center',gap:2,cursor:'pointer'}}
   onClick={function(e){e.stopPropagation();app.setView('table');app.updateDraft(app.projId,draft.id,{nestExpanded:true});}}>
@@ -1654,7 +1679,7 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
     )}
     {tagged.length>0&&(
 <div className="strand-chips" style={{marginTop:2,flexWrap:'nowrap',overflow:'hidden'}}>
-  {tagged.slice(0,2).map(function(st){var bg=st.color+'26';return <span key={st.id} className="chip" style={{background:bg,color:st.color,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid',fontSize:10,padding:'2px 6px',flexShrink:0}}>{st.name}</span>;})}
+  {tagged.slice(0,2).map(function(st){return <span key={st.id} className="chip" style={{background:'rgba(196,94,40,.1)',color:'var(--indigo)',borderColor:'rgba(196,94,40,.25)',borderWidth:1,borderStyle:'solid',fontSize:10,padding:'2px 6px',flexShrink:0}}>{st.name}</span>;})}
   {tagged.length>2&&<OverflowTooltip label={'+'+(tagged.length-2)} names={tagged.slice(2).map(function(s){return s.name;})}/>}
 </div>
     )}
@@ -1895,10 +1920,27 @@ function TableView({app}){
   var colWidths=scw[0];var setColWidths=scw[1];
   var resizing=useRef(null);
   function startResize(col,e){
-    e.preventDefault();
-    resizing.current={col:col,startX:e.clientX,startW:colWidths[col]||160};
-    function onMove(e2){if(!resizing.current)return;var diff=e2.clientX-resizing.current.startX;var nw=Math.max(60,resizing.current.startW+diff);setColWidths(function(prev){var n=Object.assign({},prev);n[resizing.current.col]=nw;return n;});}
-    function onUp(){resizing.current=null;document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);}
+    e.preventDefault();e.stopPropagation();
+    var startX=e.clientX;var startW=colWidths[col]||160;
+    function onMove(e2){
+      try{
+        var diff=e2.clientX-startX;var nw=Math.max(60,startW+diff);
+        // Update DOM directly during drag for performance, commit to state on mouseup
+        var ths=document.querySelectorAll('th[data-col="'+col+'"]');
+        ths.forEach(function(th){th.style.width=nw+'px';th.style.maxWidth=nw+'px';});
+        if(resizing.current)resizing.current.liveW=nw;
+      }catch(err){}
+    }
+    function onUp(){
+      if(resizing.current&&resizing.current.liveW){
+        var nw=resizing.current.liveW;
+        setColWidths(function(prev){var n=Object.assign({},prev);n[col]=nw;return n;});
+      }
+      resizing.current=null;
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+    }
+    resizing.current={col:col,liveW:startW};
     document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
   }
   var project=app.currentProject||{};
@@ -1927,7 +1969,7 @@ function TableView({app}){
     if(col==='status'){return <StatusDotWithArchive draft={draft} app={app} showLabel={true}/>;}
     if(col==='wordCount')return <span style={{fontSize:12,color:'var(--mid)'}}>{draft.wordCount||0}</span>;
     if(col==='synopsis')return <input className="tbl-inp syn" defaultValue={draft.synopsis} placeholder="Synopsis..." onBlur={function(e){app.updateDraft(app.projId,draft.id,{synopsis:e.target.value});}} style={{width:'100%'}}/>;
-    if(col==='strandTags'){var ps2=app.allStrands[app.projId]||{};var ts2=[];Object.keys(ps2).forEach(function(c){(ps2[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id))ts2.push(st);});});return(<div style={{display:'flex',flexWrap:'nowrap',gap:3,overflow:'hidden'}}>{ts2.slice(0,2).map(function(st){var bg=st.color+'26';return <span key={st.id} className="chip" style={{background:bg,color:st.color,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid',fontSize:11,flexShrink:0}}>{st.name}</span>;})} {ts2.length>2&&<OverflowTooltip label={'+'+(ts2.length-2)} names={ts2.slice(2).map(function(s){return s.name;})}/>}</div>);}
+    if(col==='strandTags'){var ps2=app.allStrands[app.projId]||{};var ts2=[];Object.keys(ps2).forEach(function(c){(ps2[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id))ts2.push(st);});});return(<div style={{display:'flex',flexWrap:'nowrap',gap:3,overflow:'hidden'}}>{ts2.slice(0,2).map(function(st){return <span key={st.id} className="chip" style={{background:'rgba(196,94,40,.1)',color:'var(--indigo)',borderColor:'rgba(196,94,40,.25)',borderWidth:1,borderStyle:'solid',fontSize:11,flexShrink:0}}>{st.name}</span>;})} {ts2.length>2&&<OverflowTooltip label={'+'+(ts2.length-2)} names={ts2.slice(2).map(function(s){return s.name;})}/>}</div>);}
     if(col==='pov'){var projStrands=app.allStrands[app.projId]||{};var taggedStrands=[];Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id))taggedStrands.push(st);});});return(
 <select style={{background:'transparent',border:'none',padding:0,fontSize:12,color:'var(--mid)',width:90}} value={draft.pov||''} onChange={function(e){app.updateDraft(app.projId,draft.id,{pov:e.target.value});}}>
   <option value="">—</option>
@@ -1969,7 +2011,7 @@ function TableView({app}){
         <th style={{width:32}}/>
         <th style={{width:48}}>#</th>
         {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});return(
-<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160}} className="resizable">
+<th key={col} data-col={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160}} className="resizable">
   {av?av.label:col}
   <div className="col-resize-handle" onMouseDown={function(e){startResize(col,e);}}/>
 </th>
