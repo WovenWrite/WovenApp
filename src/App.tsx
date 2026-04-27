@@ -2716,8 +2716,6 @@ function EditorView({app}){
   </div>
 </div>
   )}
-
-</div>
   {showHistory?<VersionHistoryPanel draftId={did} onClose={function(){setShowHistory(false);}} onRestore={handleRestoreVersion}/>:null}
 </div>
   );
