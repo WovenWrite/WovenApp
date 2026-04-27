@@ -4,20 +4,17 @@ import { useState, useEffect, useRef } from "react";
 
 // ── Version snapshots ──
 var MAX_SNAPSHOTS=20;
-var SNAPSHOT_INTERVAL_MS=60*60*1000; // 1 hour
+var SNAPSHOT_INTERVAL_MS=60*60*1000;
 function getSnapshotKey(draftId){return 'woven:versions:'+draftId;}
 function loadSnapshots(draftId){try{var v=localStorage.getItem(getSnapshotKey(draftId));return v?JSON.parse(v):[];}catch(e){return[];}}
 function saveSnapshot(draftId,body,wordCount,label){
   if(!body||!body.trim())return;
-  var snapshots=loadSnapshots(draftId);
-  var now=Date.now();
-  // Enforce hourly gate — skip if last snapshot was less than 1 hour ago (unless forced)
+  var snapshots=loadSnapshots(draftId);var now=Date.now();
   var last=snapshots[0];
   if(label==='auto'&&last&&(now-last.ts)<SNAPSHOT_INTERVAL_MS)return;
   var snap={id:genId(),ts:now,label:label||'auto',body:body,wordCount:wordCount||0};
   var updated=[snap].concat(snapshots).slice(0,MAX_SNAPSHOTS);
   try{localStorage.setItem(getSnapshotKey(draftId),JSON.stringify(updated));}catch(e){}
-  // Also push to Supabase in background
   var uid=window.__wovenUserId;
   if(uid){supabase.from('wf_data').upsert({key:getSnapshotKey(draftId),user_id:uid,value:updated,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(){});}
 }
@@ -70,87 +67,11 @@ var supabase={
 // ── Storage ──
 function saveLS(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
 function loadLS(key,def){return Promise.resolve().then(function(){try{var v=localStorage.getItem(key);return v?JSON.parse(v):def;}catch(e){return def;}});}
-// Debounced save queue — only writes to Supabase after 800ms silence, and only if value changed
-var __saveQueue={};
-var __lastSaved={};
 function saveDB(key,val){
   var uid=window.__wovenUserId;
   if(!uid)return saveLS(key,val);
-  saveLS(key,val);
-  // Check if value actually changed (JSON compare)
-  var serialized=JSON.stringify(val);
-  if(__lastSaved[key]===serialized)return; // no change, skip write
-  if(__saveQueue[key])clearTimeout(__saveQueue[key]);
-  window.__wovenSaveState='saving';
-  window.dispatchEvent(new Event('woven-save-state'));
-  __saveQueue[key]=setTimeout(function(){
-    __lastSaved[key]=serialized;
-    var attempt=function(retries){
-      supabase.from('wf_data').upsert({key:key,user_id:uid,value:val,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(r){
-        if(r.error){
-          console.error('saveDB error ('+retries+' retries left):',r.error);
-          if(retries>0){
-            setTimeout(function(){attempt(retries-1);},2000*(retries===3?1:retries===2?2:4));
-          } else {
-            window.__wovenSaveState='error';
-            window.dispatchEvent(new Event('woven-save-state'));
-          }
-        } else {
-          window.__wovenSaveState='saved';
-          window.dispatchEvent(new Event('woven-save-state'));
-        }
-      });
-    };
-    attempt(3);
-  },800);
-}
-
-// Delete old Supabase Storage image when replacing
-function deleteStorageImage(url){
-  if(!url||!url.includes('supabase'))return;
-  var client=getSupabase();if(!client)return;
-  // Extract path from public URL: .../object/public/woven-images/PATH
-  var marker='/object/public/woven-images/';
-  var idx=url.indexOf(marker);
-  if(idx<0)return;
-  var path=url.slice(idx+marker.length);
-  if(!path)return;
-  client.storage.from('woven-images').remove([path]).then(function(r){
-    if(r.error)console.warn('Storage delete failed:',r.error);
-  });
-}
-
-// Compress image to max 1200px wide, 80% JPEG quality before uploading
-function compressImage(file){
-  return new Promise(function(resolve){
-    var img=new Image();
-    var url=URL.createObjectURL(file);
-    img.onload=function(){
-      var MAX=1200;
-      var w=img.width;var h=img.height;
-      if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
-      var canvas=document.createElement('canvas');
-      canvas.width=w;canvas.height=h;
-      var ctx=canvas.getContext('2d');
-      ctx.drawImage(img,0,0,w,h);
-      URL.revokeObjectURL(url);
-      canvas.toBlob(function(blob){resolve(blob||file);},{type:'image/jpeg',quality:0.82});
-    };
-    img.onerror=function(){URL.revokeObjectURL(url);resolve(file);};
-    img.src=url;
-  });
-}
-
-// Supabase Storage image upload with compression
-async function uploadImage(file){
-  var client=getSupabase();
-  if(!client)return null;
-  var compressed=await compressImage(file);
-  var path='uploads/'+genId()+'.jpg';
-  var res=await client.storage.from('woven-images').upload(path,compressed,{upsert:true,contentType:'image/jpeg'});
-  if(res.error){console.error('Upload error:',res.error);return null;}
-  var pub=client.storage.from('woven-images').getPublicUrl(path);
-  return pub.data&&pub.data.publicUrl?pub.data.publicUrl:null;
+  saveLS(key,val); // keep local copy too
+  supabase.from('wf_data').upsert({key:key,user_id:uid,value:val,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(r){if(r.error)console.error('saveDB error:',r.error);});
 }
 function loadDB(key,def){
   var uid=window.__wovenUserId;
@@ -163,6 +84,38 @@ function loadDB(key,def){
 
 // ── Utils ──
 function genId(){return '_'+Math.random().toString(36).slice(2)+Date.now().toString(36);}
+
+// ── Image helpers ──
+function compressImage(file){
+  return new Promise(function(resolve){
+    var img=new Image();var url=URL.createObjectURL(file);
+    img.onload=function(){
+      var MAX=1200;var w=img.width;var h=img.height;
+      if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
+      var canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(function(blob){resolve(blob||file);},{type:'image/jpeg',quality:0.82});
+    };
+    img.onerror=function(){URL.revokeObjectURL(url);resolve(file);};
+    img.src=url;
+  });
+}
+function deleteStorageImage(url){
+  if(!url||!url.includes('supabase'))return;
+  var client=getSupabase();if(!client)return;
+  var marker='/object/public/woven-images/';var idx=url.indexOf(marker);if(idx<0)return;
+  client.storage.from('woven-images').remove([url.slice(idx+marker.length)]).then(function(){});
+}
+async function uploadImage(file){
+  var client=getSupabase();if(!client)return null;
+  var compressed=await compressImage(file);
+  var path='uploads/'+genId()+'.jpg';
+  var res=await client.storage.from('woven-images').upload(path,compressed,{upsert:true,contentType:'image/jpeg'});
+  if(res.error){console.error('Upload error:',res.error);return null;}
+  var pub=client.storage.from('woven-images').getPublicUrl(path);
+  return pub.data&&pub.data.publicUrl?pub.data.publicUrl:null;
+}
 function countWords(t){if(!t)return 0;var s=t.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();return s?s.split(' ').filter(function(w){return w.length>0;}).length:0;}
 function stripHtml(html){return html?html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim():'';}
 function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
@@ -371,7 +324,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .draft-card.nest-target{border-color:var(--teal);border-style:dashed;}
 .card-hdr{height:64px;background:linear-gradient(135deg,var(--bg2),var(--bg3));display:flex;align-items:center;justify-content:space-between;padding:0 10px;flex-shrink:0;}
 .card-seq{font-family:var(--scribble);font-size:15px;font-weight:600;color:var(--mid);}
-.card-body{flex:1;padding:8px 10px;overflow:hidden;display:flex;flex-direction:column;gap:0;min-height:0;}
+.card-body{flex:1;padding:8px 10px;overflow:hidden;display:flex;flex-direction:column;gap:4px;}
 .card-title-f{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--text);width:100%;background:transparent;border:none;border-radius:4px;padding:2px 4px;resize:none;overflow:hidden;line-height:1.35;height:38px;max-height:52px;display:block;white-space:pre-wrap;}
 .card-title-f:focus{background:var(--bg2);outline:1px solid var(--indigo);}
 .card-title-f::placeholder{color:var(--placeholder);}
@@ -429,7 +382,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .editor-body:empty:before{content:attr(data-placeholder);color:var(--placeholder);pointer-events:none;}
 .editor-body h1{font-family:var(--serif);font-size:30px;font-weight:600;margin-bottom:14px;color:var(--text);}
 .editor-body h2{font-family:var(--serif);font-size:23px;font-weight:600;margin-bottom:10px;color:var(--text);}
-.editor-body p{margin-bottom:20px;margin-top:0;}.editor-body p+p{margin-top:0;}.editor-body h1+p,.editor-body h2+p{margin-top:8px;}.editor-body blockquote{border-left:3px solid var(--border);margin:0 0 16px 0;padding:4px 16px;color:var(--mid);}
+.editor-body p{margin-bottom:28px;margin-top:0;}.editor-body h1{margin-bottom:16px;}.editor-body h2{margin-bottom:12px;}.editor-body blockquote{border-left:3px solid var(--border);margin:0 0 20px 0;padding:4px 16px;color:var(--mid);}
 .editor-body ul{margin:0 0 14px 24px;list-style-type:disc;}.editor-body ol{margin:0 0 14px 24px;list-style-type:decimal;}.editor-body li{display:list-item;}
 .editor-body hr{border:none;border-top:1px solid var(--border);margin:24px 0;}
 .editor-body mark{border-radius:3px;padding:0 3px;background:rgba(240,192,80,.4);}
@@ -565,25 +518,9 @@ function GlobalSaveIndicator(){
     window.addEventListener('woven-save-state',onSave);
     return function(){window.removeEventListener('woven-save-state',onSave);};
   },[]);
-  if(state==='saved')return(
-<div style={{display:'flex',alignItems:'center',gap:4,opacity:.6}}>
-  <span style={{width:6,height:6,borderRadius:'50%',background:'var(--teal)',flexShrink:0}}/>
-  <span style={{fontSize:11,color:'var(--mid)',fontFamily:'var(--ui)'}}>Saved</span>
-</div>
-  );
-  if(state==='saving')return(
-<div style={{display:'flex',alignItems:'center',gap:4,opacity:.8}}>
-  <span style={{width:6,height:6,borderRadius:'50%',background:'var(--indigoL)',flexShrink:0,animation:'pulse 1s infinite'}}/>
-  <span style={{fontSize:11,color:'var(--mid)',fontFamily:'var(--ui)'}}>Saving...</span>
-</div>
-  );
-  if(state==='error')return(
-<div style={{display:'flex',alignItems:'center',gap:4}} title="Save failed — retrying automatically">
-  <span style={{width:6,height:6,borderRadius:'50%',background:'var(--danger)',flexShrink:0,animation:'pulse 1s infinite'}}/>
-  <span style={{fontSize:11,color:'var(--danger)',fontFamily:'var(--ui)'}}>Retrying...</span>
-</div>
-  );
-  return null;
+  if(state==='saving')return(<div style={{display:'flex',alignItems:'center',gap:4,opacity:.8}}><span style={{width:6,height:6,borderRadius:'50%',background:'var(--indigoL)',flexShrink:0,animation:'pulse 1s infinite'}}/><span style={{fontSize:11,color:'var(--mid)'}}>Saving...</span></div>);
+  if(state==='error')return(<div style={{display:'flex',alignItems:'center',gap:4}} title="Retrying..."><span style={{width:6,height:6,borderRadius:'50%',background:'var(--danger)',flexShrink:0,animation:'pulse 1s infinite'}}/><span style={{fontSize:11,color:'var(--danger)'}}>Retrying...</span></div>);
+  return(<div style={{display:'flex',alignItems:'center',gap:4,opacity:.5}}><span style={{width:6,height:6,borderRadius:'50%',background:'var(--teal)',flexShrink:0}}/><span style={{fontSize:11,color:'var(--mid)'}}>Saved</span></div>);
 }
 
 // ── ArchiveConfirmModal ──
@@ -830,8 +767,8 @@ function ProjectEditPanel({proj,app,onClose}){
       {image&&<button className="btn-icon" onClick={function(){setImage(null);autoSaveField({image:null});}}><span className="mi" style={{fontSize:16}}>delete</span></button>}
     </div>
   </div>
-  <div style={{marginBottom:16}}><span className="sect-lbl">Title</span><input value={title} onChange={function(e){setTitle(e.target.value);}} onBlur={function(e){autoSaveField({title:e.target.value});}}/></div>
-  <div style={{marginBottom:16}}><span className="sect-lbl">Synopsis</span><textarea value={synopsis} onChange={function(e){setSynopsis(e.target.value);}} onBlur={function(e){autoSaveField({synopsis:e.target.value});}} rows={4}/></div>
+  <div style={{marginBottom:16}}><span className="sect-lbl">Title</span><input value={title} onChange={function(e){setTitle(e.target.value);}}/></div>
+  <div style={{marginBottom:16}}><span className="sect-lbl">Synopsis</span><textarea value={synopsis} onChange={function(e){setSynopsis(e.target.value);}} rows={4}/></div>
   <div style={{marginBottom:16}}>
     <span className="sect-lbl">Type</span>
     <select value={projType} onChange={function(e){setProjType(e.target.value);}}>
@@ -961,15 +898,6 @@ function Dashboard({app,onOpenProfile,onNewProject}){
   function getWC(pid){return(app.allDrafts[pid]||[]).reduce(function(s,d){return s+(d.wordCount||0);},0);}
   function openProject(pid){app.loadProjectData(pid);app.setProjId(pid);app.setView('cards');}
   var editProj=editingProjId?app.projects.find(function(p){return p.id===editingProjId;}):null;
-  if(app.dataLoading&&app.projects.length===0){return(
-<div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
-  <nav className="nav" style={{justifyContent:'space-between'}}><WovenLogo size={26}/></nav>
-  <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,background:'var(--bg0)'}}>
-    <div style={{width:36,height:36,borderRadius:'50%',border:'3px solid var(--border)',borderTopColor:'var(--indigo)',animation:'spin .8s linear infinite'}}/>
-    <div style={{fontFamily:'var(--serif)',fontSize:18,color:'var(--mid)'}}>Loading your projects...</div>
-  </div>
-</div>
-  );}
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
   <nav className="nav" style={{justifyContent:'space-between'}}>
@@ -1131,18 +1059,12 @@ function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind}){
     {hasFilter&&<span style={{position:'absolute',top:-6,right:-6,background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:16,height:16,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>1</span>}
   </div>
   {filterOpen&&(
-<div className="filter-dropdown" style={{top:filterPos.top,left:filterPos.left,minWidth:220}}>
+<div className="filter-dropdown" style={{top:filterPos.top,left:filterPos.left,minWidth:220,padding:0}}>
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px 4px'}}>
     <span style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em'}}>Filter by strand</span>
     {hasFilter&&<button className="btn btn-ghost btn-sm" style={{padding:'2px 8px',fontSize:11}} onClick={function(){setFilter(null);setFilterOpen(false);}}>Clear</button>}
   </div>
-  {Object.keys(projStrands).map(function(coll){
-    var collStrands=projStrands[coll]||[];
-    if(collStrands.length===0)return null;
-    return(
-<CollFilterGroup key={coll} coll={coll} strands={collStrands} filter={filter} setFilter={setFilter} setFilterOpen={setFilterOpen}/>
-    );
-  })}
+  {Object.keys(projStrands).map(function(coll){var collStrands=projStrands[coll]||[];if(collStrands.length===0)return null;return(<CollFilterGroup key={coll} coll={coll} strands={collStrands} filter={filter} setFilter={setFilter} setFilterOpen={setFilterOpen}/>);})}
   {Object.values(projStrands).flat().length===0&&<div style={{padding:'8px 12px',fontSize:13,color:'var(--mid)'}}>No strands yet.</div>}
 </div>
   )}
@@ -1191,19 +1113,17 @@ function StatusDotWithArchive({draft,app,showLabel}){
 
 // ── Export helpers ──
 function stripHtmlForExport(html){
-  if(!html)return'';
+  if(!html)return[];
   var s=html
-    .replace(/[ \t\r\n]+/g,' ')
-    .replace(/<h[12][^>]*>(.*?)<\/h[12]>/gi,' $1 ')
-    .replace(/<br\s*\/?>/gi,' ')
-    .replace(/<\/p>/gi,' ')
-    .replace(/<p[^>]*>/gi,' ')
-    .replace(/<li[^>]*>(.*?)<\/li>/gi,' $1 ')
+    .replace(/<\/p>/gi,'{{PARA}}')
+    .replace(/<p[^>]*>/gi,'')
+    .replace(/<br\s*\/?>/gi,'{{PARA}}')
+    .replace(/<h[12][^>]*>(.*?)<\/h[12]>/gi,'$1{{PARA}}')
+    .replace(/<li[^>]*>(.*?)<\/li>/gi,'• $1{{PARA}}')
     .replace(/<[^>]+>/g,'')
     .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ')
-    .replace(/  +/g,' ')
-    .trim();
-  return s;
+    .replace(/[ 	]+/g,' ');
+  return s.split('{{PARA}}').map(function(p){return p.trim();}).filter(function(p){return p.length>0;});
 }
 
 function cleanBodyForExport(html){
@@ -1244,7 +1164,7 @@ function doExport(format,drafts,project,isSingleDraft,authorName){
     else if(!jspdfLib){alert('PDF export is still loading. Please try again in a moment.');return false;}
     var JsPDF=jspdfLib.jsPDF||jspdfLib;
     var doc=new JsPDF({unit:'mm',format:'a4'});
-    var margin=20;var pageW=doc.internal.pageSize.getWidth()-margin*2;var y=margin;var lineH=7;
+    var margin=25;var pageW=210-margin*2;var y=margin;var lineH=7;
 
     if(isSingle){
       // ── Single draft: inline header, no cover/index page ──
@@ -1259,13 +1179,9 @@ function doExport(format,drafts,project,isSingleDraft,authorName){
       doc.text(totalWords.toLocaleString()+' words  ·  Written in Woven',margin,y);y+=10;
       doc.setDrawColor(200,200,200);doc.line(margin,y,210-margin,y);y+=10;
       doc.setFontSize(12);doc.setFont('times','normal');
-      var bodyText=stripHtmlForExport(sorted[0].body||'');
+      var bodyParas=stripHtmlForExport(sorted[0].body||'');
       if(bodyText){
-        var lines=doc.splitTextToSize(bodyText,pageW);
-        lines.forEach(function(line){
-          if(y>275){doc.addPage();y=margin;}
-          doc.text(line,margin,y);y+=lineH;
-        });
+        bodyParas.forEach(function(para){var lines=doc.splitTextToSize(para,pageW);lines.forEach(function(line){if(y>275){doc.addPage();y=margin;}doc.text(line,margin,y);y+=lineH;});y+=lineH*0.7;});
       }
     } else {
       // ── Bind: cover page + index + draft pages ──
@@ -1297,7 +1213,7 @@ function doExport(format,drafts,project,isSingleDraft,authorName){
         var dTitle=doc.splitTextToSize(draft.title||'Untitled',pageW);
         doc.text(dTitle,margin,y);y+=dTitle.length*9+10;
         doc.setFontSize(12);doc.setFont('times','normal');
-        var bodyText=stripHtmlForExport(draft.body||'');
+        var bodyParas=stripHtmlForExport(draft.body||'');
         if(bodyText){
           var lines=doc.splitTextToSize(bodyText,pageW);
           lines.forEach(function(line){
@@ -1406,6 +1322,7 @@ function SharedDraftView({shareId}){
   var projectName=data.project_name||'';
   var authorName=data.author_name||'';
   var byline=authorName||'Your friendly neighbourhood novelist';
+  useEffect(function(){if(data&&data.title)document.title=data.title+' — Woven';return function(){document.title='Woven';};},[data]);
   return(
 <div style={{minHeight:'100vh',background:'var(--bg0)',display:'flex',flexDirection:'column',overflowY:'auto'}}>
   <style>{'::selection{background:rgba(240,192,80,0.4);color:inherit;}'}</style>
@@ -1427,9 +1344,7 @@ function SharedDraftView({shareId}){
   {/* Footer */}
   <div style={{borderTop:'1px solid var(--border)',padding:'20px 24px',display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--bg1)',flexShrink:0}}>
     <WovenLogo size={22}/>
-    <div style={{fontSize:11,color:'var(--mid)',fontFamily:'var(--ui)',textAlign:'center',lineHeight:1.5}}>
-    © {new Date().getFullYear()} Woven &nbsp;·&nbsp; All writing belongs to {data.author_name||'the author'}.
-  </div>
+    <div style={{fontSize:11,color:'var(--mid)',fontFamily:'var(--ui)',textAlign:'center',lineHeight:1.5}}>© {new Date().getFullYear()} Woven &nbsp;·&nbsp; All writing belongs to {data&&data.author_name?data.author_name:'the author'}.</div>
     <a href="https://app.writewoven.com" style={{fontSize:12,color:'var(--indigo)',fontFamily:'var(--ui)',textDecoration:'none',fontWeight:500}}>Start writing free →</a>
   </div>
 </div>
@@ -1630,7 +1545,7 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
   function handleDragOver(e){
     e.preventDefault();setOver(true);
     if(!nestTimer.current){
-      nestTimer.current=setTimeout(function(){setNestTarget(true);nestTargetRef.current=true;},2000);
+      nestTimer.current=setTimeout(function(){setNestTarget(true);nestTargetRef.current=true;},1200);
     }
   }
   function handleDragLeave(){
@@ -1643,7 +1558,6 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
     if(fromId&&fromId!==draft.id){
       var fromDraft=(app.allDrafts[app.projId]||[]).find(function(d){return d.id===fromId;});
       var isLT=fromDraft&&fromDraft.status==='loose_thread';
-      // Read nestTarget from ref to get current value at drop time
       var isNesting=nestTargetRef.current&&!draft.parentId&&!isLT&&!fromDraft.parentId;
       if(isNesting){
         app.nestDraft(app.projId,fromId,draft.id);
@@ -1664,8 +1578,8 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
   onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}}
   onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
   <div className="card-hdr" style={{backgroundImage:draft.thumbnail?'url('+draft.thumbnail+')':undefined,backgroundSize:'cover',backgroundPosition:'center'}}>
-    <div style={{display:'flex',alignItems:'center',gap:5}}>
-      <span className="card-seq" style={{color:draft.thumbnail?'#fff':'var(--text)',background:draft.thumbnail?'rgba(42,31,16,.45)':'transparent',borderRadius:4,padding:'1px 6px',backdropFilter:draft.thumbnail?'blur(2px)':'none'}}>{label}</span>
+    <div style={{display:'flex',alignItems:'center',gap:5,background:draft.thumbnail?'rgba(253,248,240,.75)':'transparent',borderRadius:4,padding:'2px 5px'}}>
+      <span className="card-seq" style={{color:'var(--text)',background:draft.thumbnail?'rgba(253,248,240,.8)':'transparent',borderRadius:4,padding:draft.thumbnail?'1px 6px':undefined}}>{label}</span>
       {childCount>0&&(
 <div style={{display:'flex',alignItems:'center',gap:2,cursor:'pointer'}}
   onClick={function(e){e.stopPropagation();app.setView('table');app.updateDraft(app.projId,draft.id,{nestExpanded:true});}}>
@@ -1683,7 +1597,7 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
     ):<span style={{color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:16}}>drag_indicator</span></span>}
   </div>
   <div className="card-body">
-    <textarea className="card-title-f" title={draft.title||''} defaultValue={draft.title} placeholder="Untitled draft" rows={1} ref={function(el){if(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,52)+'px';}}} onInput={function(e){e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,52)+'px';}} onBlur={function(e){update({title:e.target.value});}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}}/>
+    <textarea className="card-title-f" title={draft.title||''} defaultValue={draft.title} placeholder="Untitled draft" rows={1} ref={function(el){if(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,52)+'px';}}} onInput={function(e){e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,52)+'px';}} onBlur={function(e){update({title:e.target.value});}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}}/>
     {draft.synopsis?(
 <textarea className="card-syn-f" defaultValue={draft.synopsis} rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
     ):(
@@ -1804,13 +1718,9 @@ function LooseThreadsSection({threads,app,view}){
 }
 
 // ── Empty state ──
+
 function DraftLoadingSpinner(){
-  return(
-<div className="empty-view">
-  <div style={{width:32,height:32,borderRadius:'50%',border:'3px solid var(--border)',borderTopColor:'var(--indigo)',animation:'spin .8s linear infinite'}}/>
-  <div style={{fontFamily:'var(--serif)',fontSize:18,color:'var(--mid)'}}>Loading drafts...</div>
-</div>
-  );
+  return(<div className="empty-view"><div style={{width:32,height:32,borderRadius:'50%',border:'3px solid var(--border)',borderTopColor:'var(--indigo)',animation:'spin .8s linear infinite'}}/><div style={{fontFamily:'var(--serif)',fontSize:18,color:'var(--mid)'}}>Loading drafts...</div></div>);
 }
 function EmptyDrafts({onAdd}){
   return(
@@ -1932,27 +1842,10 @@ function TableView({app}){
   var colWidths=scw[0];var setColWidths=scw[1];
   var resizing=useRef(null);
   function startResize(col,e){
-    e.preventDefault();e.stopPropagation();
-    var startX=e.clientX;var startW=colWidths[col]||160;
-    function onMove(e2){
-      try{
-        var diff=e2.clientX-startX;var nw=Math.max(60,startW+diff);
-        // Update DOM directly during drag for performance, commit to state on mouseup
-        var ths=document.querySelectorAll('th[data-col="'+col+'"]');
-        ths.forEach(function(th){th.style.width=nw+'px';th.style.maxWidth=nw+'px';});
-        if(resizing.current)resizing.current.liveW=nw;
-      }catch(err){}
-    }
-    function onUp(){
-      if(resizing.current&&resizing.current.liveW){
-        var nw=resizing.current.liveW;
-        setColWidths(function(prev){var n=Object.assign({},prev);n[col]=nw;return n;});
-      }
-      resizing.current=null;
-      document.removeEventListener('mousemove',onMove);
-      document.removeEventListener('mouseup',onUp);
-    }
-    resizing.current={col:col,liveW:startW};
+    e.preventDefault();
+    resizing.current={col:col,startX:e.clientX,startW:colWidths[col]||160};
+    function onMove(e2){if(!resizing.current)return;var diff=e2.clientX-resizing.current.startX;var nw=Math.max(60,resizing.current.startW+diff);setColWidths(function(prev){var n=Object.assign({},prev);n[resizing.current.col]=nw;return n;});}
+    function onUp(){resizing.current=null;document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);}
     document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
   }
   var project=app.currentProject||{};
@@ -1962,7 +1855,8 @@ function TableView({app}){
     {id:'status',label:'Status'},
     {id:'wordCount',label:'Words'},
     {id:'synopsis',label:'Synopsis'},
-    {id:'strandTags',label:'Strands'}
+    {id:'pov',label:'POV'}
+    ,{id:'strandTags',label:'Strands'}
   ].concat(draftFieldDefs.map(function(f){return{id:'cf_'+f.id,label:f.label};}));
   function toggleCol(id){var next=visCols.includes(id)?visCols.filter(function(c){return c!==id;}):visCols.concat([id]);setVisCols(next);try{localStorage.setItem(projKey,JSON.stringify(next));}catch(e){}}
   var colDropRef=useRef(null);
@@ -2023,7 +1917,7 @@ function TableView({app}){
         <th style={{width:32}}/>
         <th style={{width:48}}>#</th>
         {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});return(
-<th key={col} data-col={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160}} className="resizable">
+<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160}} className="resizable">
   {av?av.label:col}
   <div className="col-resize-handle" onMouseDown={function(e){startResize(col,e);}}/>
 </th>
@@ -2075,15 +1969,24 @@ function TableView({app}){
 function AddFieldInline({onAdd}){
   var ss=useState(false);var show=ss[0];var setShow=ss[1];
   var sv=useState('');var val=sv[0];var setVal=sv[1];
+  var st=useState('short_text');var fieldType=st[0];var setFieldType=st[1];
   if(!show)return(
 <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={function(){setShow(true);}}>
   <span className="mi" style={{fontSize:14}}>add</span> Add field
 </button>
   );
   return(
-<div style={{display:'flex',gap:6,marginTop:4}}>
-  <input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} placeholder="Field name" style={{flex:1,fontSize:13}} onKeyDown={function(e){if(e.key==='Enter'&&val.trim()){onAdd(val);setVal('');setShow(false);}if(e.key==='Escape'){setShow(false);setVal('');}}}/>
-  <button className="btn btn-primary btn-sm" onClick={function(){if(val.trim()){onAdd(val);setVal('');setShow(false);}}}>Add</button>
+<div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
+  <div style={{display:'flex',gap:6}}>
+    <input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} placeholder="Field name" style={{flex:1,fontSize:13}} onKeyDown={function(e){if(e.key==='Enter'&&val.trim()){onAdd(val,fieldType);setVal('');setShow(false);}if(e.key==='Escape'){setShow(false);setVal('');}}}/>
+    <select value={fieldType} onChange={function(e){setFieldType(e.target.value);}} style={{fontSize:12,width:110}}>
+      {FIELD_TYPES.map(function(ft){return <option key={ft.id} value={ft.id}>{ft.label}</option>;})}
+    </select>
+  </div>
+  <div style={{display:'flex',gap:6}}>
+    <button className="btn btn-primary btn-sm" style={{flex:1,justifyContent:'center'}} onClick={function(){if(val.trim()){onAdd(val,fieldType);setVal('');setShow(false);}}}>Add field</button>
+    <button className="btn btn-ghost btn-sm" onClick={function(){setShow(false);setVal('');}}>Cancel</button>
+  </div>
 </div>
   );
 }
@@ -2092,7 +1995,6 @@ function AddFieldInline({onAdd}){
 function PropertiesDrawer({draft,app,onClose,onOpenStrandDetail}){
   var s1=useState(false);var advOpen=s1[0];var setAdvOpen=s1[1];
   var s2=useState(false);var addChipOpen=s2[0];var setAddChipOpen=s2[1];
-  useEffect(function(){if(!addChipOpen)return;function onDown(){setAddChipOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[addChipOpen]);
   if(!draft)return null;
   var projStrands=app.allStrands[app.projId]||{};
   var allStrandsList=[];
@@ -2129,7 +2031,7 @@ function PropertiesDrawer({draft,app,onClose,onOpenStrandDetail}){
         <input type="file" accept="image/*" style={{display:'none'}} onChange={function(e){
           var file=e.target.files&&e.target.files[0];
           if(!file)return;
-          if(file.size>5*1024*1024){alert('Image must be under 5 MB.');return;}
+          if(file.size>2*1024*1024){alert('Image must be under 2 MB.');return;}
           uploadImage(file).then(function(url){if(url)update({thumbnail:url});});
         }}/>
       </label>
@@ -2158,28 +2060,23 @@ function PropertiesDrawer({draft,app,onClose,onOpenStrandDetail}){
   <span style={{marginLeft:3,opacity:.6,fontSize:11}} onClick={function(e){e.stopPropagation();removeStrand(st.id);}}>×</span>
 </span>
       );})}
-      <div style={{position:'relative',zIndex:addChipOpen?501:1}}>
-        <span className="chip" style={{background:'var(--bg3)',color:'var(--mid)',borderColor:'var(--border)',borderWidth:1,borderStyle:'solid',cursor:'pointer'}} onClick={function(e){e.stopPropagation();setAddChipOpen(!addChipOpen);}}>
+      <div style={{position:'relative'}}>
+        <span className="chip" style={{background:'var(--bg3)',color:'var(--mid)',borderColor:'var(--border)',borderWidth:1,borderStyle:'solid',cursor:'pointer'}} onClick={function(){setAddChipOpen(!addChipOpen);}}>
           <span className="mi" style={{fontSize:14}}>add</span>
         </span>
-        {addChipOpen&&(
-<div style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:500,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--r)',boxShadow:'0 8px 24px rgba(0,0,0,.2)',minWidth:220,maxHeight:260,display:'flex',flexDirection:'column'}}
-  onMouseDown={function(e){e.stopPropagation();}}>
-  <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
-    <input autoFocus placeholder="Search strands..." style={{width:'100%',fontSize:12,padding:'4px 8px',border:'1px solid var(--border)',borderRadius:4,background:'var(--bg0)'}} id="strand-chip-search" onChange={function(e){var v=e.target.value.toLowerCase();document.querySelectorAll('[data-strand-item]').forEach(function(item){item.style.display=item.getAttribute('data-name').toLowerCase().includes(v)?'flex':'none';});}}/>
-  </div>
-  <div style={{overflowY:'auto',flex:1}}>
-    {untaggedStrands.length===0&&<div style={{padding:'10px',fontSize:13,color:'var(--mid)'}}>All strands tagged.</div>}
-    {untaggedStrands.map(function(st){return(
-<div key={st.id} data-strand-item data-name={st.name} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',cursor:'pointer',fontSize:13}} onClick={function(){addStrand(st.id);}} onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}} onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
-  <div style={{width:8,height:8,borderRadius:'50%',background:st.color,flexShrink:0}}/>
-  <span style={{flex:1}}>{st.name}</span>
-  <span style={{fontSize:11,color:'var(--mid)'}}>{st.collectionName}</span>
+        {addChipOpen&&untaggedStrands.length>0&&(
+<div style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:50,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:'var(--r)',boxShadow:'0 4px 16px rgba(0,0,0,.4)',minWidth:180,maxHeight:200,overflowY:'auto'}}>
+  {untaggedStrands.map(function(st){return(
+<div key={st.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',cursor:'pointer',fontSize:13}} onClick={function(){addStrand(st.id);}} onMouseOver={function(e){e.currentTarget.style.background='var(--bg3)';}} onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  <div style={{width:8,height:8,borderRadius:'50%',background:st.color}}/>
+  <span>{st.name}</span>
+  <span style={{fontSize:11,color:'var(--mid)',marginLeft:'auto'}}>{st.collectionName}</span>
 </div>
-    );})}
-  </div>
+  );})}
+  {untaggedStrands.length===0&&<div style={{padding:'8px 10px',fontSize:13,color:'var(--mid)'}}>All strands tagged.</div>}
 </div>
         )}
+        {addChipOpen&&untaggedStrands.length===0&&<div/>}
       </div>
     </div>
     {allStrandsList.length===0&&<span style={{fontSize:12,color:'var(--mid)'}}>No strands yet. Go to the Strands view.</span>}
@@ -2206,7 +2103,7 @@ function PropertiesDrawer({draft,app,onClose,onOpenStrandDetail}){
   );})}
   <div className="edrawer-section">
     <span className="edrawer-lbl" style={{marginBottom:8}}>Custom draft fields</span>
-    <AddFieldInline onAdd={function(name){app.addDraftFieldDef(app.projId,{id:genId(),label:name.trim(),type:'short_text'});}}/>
+    <AddFieldInline onAdd={function(name,type){app.addDraftFieldDef(app.projId,{id:genId(),label:name.trim(),type:type||'short_text'});}}/>
   </div>
 </div>
   )}
@@ -2231,7 +2128,7 @@ function StrandDetailDrawer({strandId,app,onClose}){
   <div className="edrawer-hdr">
     <div style={{display:'flex',alignItems:'center',gap:8}}>
       <div style={{width:24,height:24,borderRadius:'50%',background:strand.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600,color:'#fff',flexShrink:0}}>{initials(strand.name)}</div>
-      <input style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,background:'transparent',border:'none',borderBottom:'1px solid transparent',flex:1,padding:'0 0 1px 0',outline:'none',color:'var(--text)',textDecoration:'none'}} defaultValue={strand.name} placeholder="Strand name" onBlur={function(e){if(e.target.value.trim())app.updateStrand(pid,collName,selectedStrandId,{name:e.target.value.trim()});e.target.style.borderBottomColor='transparent';}} onFocus={function(e){e.target.style.borderBottomColor='var(--indigo)';}}/>
+      <input style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,background:'transparent',border:'none',flex:1,padding:0,outline:'none',color:'var(--text)'}} defaultValue={strand.name} placeholder="Strand name" onBlur={function(e){if(e.target.value.trim())app.updateStrand(pid,collName,selectedStrandId,{name:e.target.value.trim()});}} onFocus={function(e){e.target.style.borderBottom='1px solid var(--indigo)';}} onBlurCapture={function(e){e.target.style.borderBottom='none';}}/>
     </div>
     <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
   </div>
@@ -2241,7 +2138,7 @@ function StrandDetailDrawer({strandId,app,onClose}){
 <div key={f.id} style={{marginBottom:12}}>
   <span className="edrawer-lbl">{f.label}</span>
   {f.type==='long_text'
-    ?<textarea defaultValue={val} rows={4} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13,resize:'vertical'}}/>
+    ?<textarea defaultValue={val} rows={3} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
     :<input defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
   }
 </div>
@@ -2311,7 +2208,7 @@ function EditorStrandsPanel({draft,app,onClose,onOpenStrand}){
 <div key={f.id} style={{marginBottom:12}}>
   <span className="edrawer-lbl">{f.label}</span>
   {f.type==='long_text'
-    ?<textarea defaultValue={val} rows={4} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13,resize:'vertical'}}/>
+    ?<textarea defaultValue={val} rows={3} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
     :<input defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
   }
 </div>
@@ -2333,8 +2230,7 @@ function EditorStrandsPanel({draft,app,onClose,onOpenStrand}){
 </div>
   )}
   {tagged.map(function(st){return(
-<div key={st.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--border)'}}>
-  <div style={{flex:1,display:'flex',alignItems:'center',gap:10,cursor:'pointer',minWidth:0}} onClick={function(){setSelectedStrandId(st.id);}}>
+<div key={st.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--border)',cursor:'pointer'}} onClick={function(){setSelectedStrandId(st.id);}}>
   <div style={{width:28,height:28,borderRadius:'50%',background:st.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#fff',flexShrink:0,overflow:'hidden'}}>
     {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:16}}>{st.emoji}</span>:initials(st.name)}
   </div>
@@ -2342,11 +2238,7 @@ function EditorStrandsPanel({draft,app,onClose,onOpenStrand}){
     <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>{st.name}</div>
     <div style={{fontSize:11,color:'var(--mid)'}}>{st.collectionName}</div>
   </div>
-    <span className="mi" style={{fontSize:16,color:'var(--border)'}}>chevron_right</span>
-  </div>
-  <button className="btn-icon" style={{padding:2,flexShrink:0}} title="Untag strand" onClick={function(){var tags=draft.strandTags||[];app.updateDraft(app.projId,draft.id,{strandTags:tags.filter(function(t){return t!==st.id;})});}}>
-    <span className="mi" style={{fontSize:16,color:'var(--placeholder)'}}>close</span>
-  </button>
+  <span className="mi" style={{fontSize:16,color:'var(--border)'}}>chevron_right</span>
 </div>
   );})}
   {untagged.length>0&&(
@@ -2378,28 +2270,21 @@ function VersionHistoryPanel({draftId,onRestore,onClose}){
   var sp=useState(null);var preview=sp[0];var setPreview=sp[1];
   return(
 <Panel open={true} onClose={onClose} title="Version History">
-    <div style={{display:'flex',flexDirection:'column',gap:0}}>
-      {snapshots.length===0&&<div style={{padding:16,fontSize:13,color:'var(--mid)',textAlign:'center'}}>No history yet — saves hourly while you write.</div>}
-      {snapshots.map(function(snap){var labelMap={'session-end':'Session end','auto':'Autosave'};var isStatus=snap.label&&snap.label.startsWith('status:');var labelText=isStatus?'Status change':labelMap[snap.label]||snap.label;var isActive=preview&&preview.id===snap.id;return(
+  <div>
+    {snapshots.length===0&&<div style={{padding:16,fontSize:13,color:'var(--mid)',textAlign:'center'}}>No history yet — saves hourly while you write.</div>}
+    {snapshots.map(function(snap){var labelMap={'session-end':'Session end','auto':'Autosave'};var isStatus=snap.label&&snap.label.startsWith('status:');var labelText=isStatus?'Status change':labelMap[snap.label]||snap.label;var isActive=preview&&preview.id===snap.id;return(
 <div key={snap.id} style={{borderBottom:'1px solid var(--border)'}}>
   <div onClick={function(){setPreview(isActive?null:snap);}} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 0',cursor:'pointer'}}>
-    <div style={{flex:1}}>
-      <div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{formatSnapshotTime(snap.ts)}</div>
-      <div style={{fontSize:11,color:'var(--mid)'}}>{labelText} · {snap.wordCount||0}w</div>
-    </div>
+    <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{formatSnapshotTime(snap.ts)}</div><div style={{fontSize:11,color:'var(--mid)'}}>{labelText} · {snap.wordCount||0}w</div></div>
     <span className="mi" style={{fontSize:16,color:'var(--border)',transform:isActive?'rotate(90deg)':'none',transition:'transform .15s'}}>chevron_right</span>
   </div>
-  {isActive&&(
-<div style={{paddingBottom:12}}>
-  <div style={{fontFamily:'var(--serif)',fontSize:15,lineHeight:1.8,color:'var(--body-text)',maxHeight:200,overflow:'auto',padding:'8px 0',borderTop:'1px solid var(--border)',marginBottom:8}} dangerouslySetInnerHTML={{__html:snap.body}}/>
-  <button className="btn btn-primary btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={function(){if(window.confirm('Restore this version?'))onRestore(snap.body);}}>
-    Restore this version
-  </button>
+  {isActive&&(<div style={{paddingBottom:12}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:15,lineHeight:1.8,color:'var(--body-text)',maxHeight:200,overflow:'auto',padding:'8px 0',borderTop:'1px solid var(--border)',marginBottom:8}} dangerouslySetInnerHTML={{__html:snap.body}}/>
+    <button className="btn btn-primary btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={function(){if(window.confirm('Restore this version?'))onRestore(snap.body);}}>Restore this version</button>
+  </div>)}
 </div>
-  )}
-</div>
-      );})}
-    </div>
+    );})}
+  </div>
 </Panel>
   );
 }
@@ -2502,18 +2387,12 @@ function ShareExportDropdown({pos,draft,app,editorRef,flushSave,onClose}){
     {tab==='export'&&(
 <div style={{display:'flex',flexDirection:'column',gap:8}}>
   <button className="btn btn-ghost" style={{justifyContent:'flex-start',gap:10}} onClick={function(){handleExport('PDF');}} disabled={exporting}>
-    <span className="mi" style={{fontSize:20,color:'var(--mid)'}}>picture_as_pdf</span>
-    <div style={{textAlign:'left'}}>
-      <div style={{fontSize:13,fontWeight:500,color:'var(--text)'}}>PDF</div>
-      <div style={{fontSize:11,color:'var(--mid)'}}>Best for sharing & printing</div>
-    </div>
+    <span className="mi" style={{fontSize:18,color:'var(--mid)'}}>picture_as_pdf</span>
+    <span style={{fontSize:13,fontWeight:500,color:'var(--text)'}}>PDF</span>
   </button>
   <button className="btn btn-ghost" style={{justifyContent:'flex-start',gap:10}} onClick={function(){handleExport('Word (.docx)');}} disabled={exporting}>
-    <span className="mi" style={{fontSize:20,color:'var(--mid)'}}>description</span>
-    <div style={{textAlign:'left'}}>
-      <div style={{fontSize:13,fontWeight:500,color:'var(--text)'}}>Word Document</div>
-      <div style={{fontSize:11,color:'var(--mid)'}}>Edit in Word or Google Docs</div>
-    </div>
+    <span className="mi" style={{fontSize:18,color:'var(--mid)'}}>description</span>
+    <span style={{fontSize:13,fontWeight:500,color:'var(--text)'}}>Word Document</span>
   </button>
   {exporting&&<div style={{fontSize:12,color:'var(--mid)',textAlign:'center',padding:'4px 0'}}>Preparing download...</div>}
 </div>
@@ -2537,12 +2416,8 @@ function EditorView({app}){
   var editorRef=useRef(null);var saveTimer=useRef(null);var lastDraftId=useRef(null);var sessionStartWc=useRef(0);
   var sst=useState('saved');var saveState=sst[0];var setSaveState=sst[1];
   var svh=useState(false);var showHistory=svh[0];var setShowHistory=svh[1];
-  function handleRestoreVersion(body){
-    if(editorRef.current)editorRef.current.innerHTML=body;
-    setShowHistory(false);
-    setSaveState('saving');
-    scheduleSave(body,countWords(body));
-  }
+  function handleRestoreVersion(body){if(editorRef.current)editorRef.current.innerHTML=body;setShowHistory(false);setSaveState('saving');scheduleSave(body,countWords(body));}
+  var sst=useState('saved');var saveState=sst[0];var setSaveState=sst[1];
   var isMobile=useIsMobile();
   useEffect(function(){if(!draft)return;if(lastDraftId.current===draft.id)return;lastDraftId.current=draft.id;sessionStartWc.current=draft.wordCount||0;setWc(draft.wordCount||0);if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';},[did]);
   // Only reset editor when mode changes (not on re-renders)
@@ -2568,15 +2443,12 @@ function EditorView({app}){
     saveTimer.current=setTimeout(function(){
       app.updateDraft(pid,did,{body:html,wordCount:newWc,updatedAt:new Date().toISOString()});
       var added=Math.max(0,newWc-sessionStartWc.current);
-      if(added>0&&added<500){
-        app.recordSession(pid,added,did,html);
-        sessionStartWc.current=newWc;
-      }
+      if(added>0&&added<500){app.recordSession(pid,added);sessionStartWc.current=newWc;}
       setSaveState('saved');
-      // Auto snapshot: hourly gate enforced inside saveSnapshot
       saveSnapshot(did,html,newWc,'auto');
     },600);
   }
+  function flushSave(){if(!editorRef.current)return;if(saveTimer.current)clearTimeout(saveTimer.current);var html=editorRef.current.innerHTML;var wc2=countWords(editorRef.current.innerText||'');app.updateDraft(pid,did,{body:html,wordCount:wc2,updatedAt:new Date().toISOString()});}
   function handleRTInput(){if(!editorRef.current)return;var text=editorRef.current.innerText||editorRef.current.textContent||'';var newWc=countWords(text);setWc(newWc);scheduleSave(editorRef.current.innerHTML,newWc);}
   function handlePaste(e){
     e.preventDefault();
@@ -2671,23 +2543,12 @@ function EditorView({app}){
 <div className="editor-layout">
   <div className="editor-topbar">
     <div className="editor-topbar-row1">
-      <button className="editor-back" onClick={function(){
-        if(saveTimer.current)clearTimeout(saveTimer.current);
-        if(editorRef.current){
-          var html=editorRef.current.innerHTML;
-          var wc=countWords(editorRef.current.innerText||'');
-          app.updateDraft(pid,did,{body:html,wordCount:wc,updatedAt:new Date().toISOString()});
-          saveSnapshot(did,html,wc,'session-end');
-        }
-        app.setView('cards');app.setDraftId(null);
-      }}><span className="mi">arrow_back</span></button>
+      <button className="editor-back" onClick={function(){if(saveTimer.current)clearTimeout(saveTimer.current);if(editorRef.current){var html=editorRef.current.innerHTML;var wc=countWords(editorRef.current.innerText||'');app.updateDraft(pid,did,{body:html,wordCount:wc,updatedAt:new Date().toISOString()});}if(editorRef.current){var _html=editorRef.current.innerHTML;saveSnapshot(did,_html,countWords(editorRef.current.innerText||''),'session-end');}if(app.projId){app.setView('cards');app.setDraftId(null);}else{app.goBack();}}}><span className="mi">arrow_back</span></button>
       <input key={draft.id+'-et-'+draft.title} className="editor-title-inp" defaultValue={draft.title} placeholder="Untitled draft" onBlur={function(e){app.updateDraft(pid,did,{title:e.target.value,updatedAt:new Date().toISOString()});}}/>
     </div>
     <div className="editor-topbar-row2">
     <button className="btn btn-ghost btn-sm" style={showProps?{borderColor:'var(--indigo)',color:'var(--indigo)'}:{}} onClick={function(){setShowProps(!showProps);setStrandDetailId(null);}}>Properties</button>
-    <button className="btn btn-ghost btn-sm" onClick={function(){setShowHistory(true);}} title="Version history">
-      <span className="mi" style={{fontSize:16}}>history</span>
-    </button>
+    <button className="btn btn-ghost btn-sm" onClick={function(){setShowHistory(true);}} title="Version history"><span className="mi" style={{fontSize:16}}>history</span></button>
     <button className="btn btn-ghost btn-sm" style={showStrands?{borderColor:'var(--indigo)',color:'var(--indigo)'}:{}} onClick={function(){setShowStrands(!showStrands);setStrandDetailId(null);}}>Strands</button>
     <div ref={shareRef} style={{position:'relative'}}>
       <button className="btn btn-ghost btn-sm" onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setSharePos({top:r.bottom+4,left:r.right-280});setShareOpen(!shareOpen);}}>
@@ -2730,6 +2591,7 @@ function EditorView({app}){
         }
       </span>
     </div>
+    </div>
     <div style={{display:'flex',alignItems:'center',gap:8}}>
       <span style={{fontSize:12}}>{zoom}%</span>
       <input type="range" min={70} max={150} step={10} value={zoom} onChange={function(e){setZoom(parseInt(e.target.value,10));}} style={{width:72}}/>
@@ -2754,11 +2616,58 @@ function EditorView({app}){
   </div>
 </div>
   )}
-  {showHistory?<VersionHistoryPanel draftId={did} onClose={function(){setShowHistory(false);}} onRestore={handleRestoreVersion}/>:null}
+
 </div>
   );
 }
 
+
+
+// ── CustomColorPicker ──
+var SYSTEM_COLORS=['#c45e28','#e8a030','#2f9966','#2f76e0','#ce2fe0','#e02f79','#64e02f','#2fe07f'];
+function CustomColorPicker({color,onSelect}){
+  var sc=useState(false);var showCustom=sc[0];var setShowCustom=sc[1];
+  var sh=useState('');var hexVal=sh[0];var setHexVal=sh[1];
+  return(
+<div>
+  <div style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
+    {SYSTEM_COLORS.map(function(c){return(<div key={c} onClick={function(){onSelect(c);}} style={{width:28,height:28,borderRadius:'50%',background:c,cursor:'pointer',transform:color===c?'scale(1.2)':'scale(1)',boxShadow:color===c?'0 0 0 2px var(--bg1),0 0 0 4px '+c:'none',flexShrink:0,transition:'transform .15s'}}/>);})}
+    <div style={{width:28,height:28,borderRadius:'50%',background:'var(--bg2)',border:'2px dashed var(--border)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}} onClick={function(){setShowCustom(!showCustom);}}>
+      <span className="mi" style={{fontSize:14,color:'var(--mid)'}}>add</span>
+    </div>
+  </div>
+  {showCustom&&(<div style={{marginTop:10,display:'flex',gap:6,alignItems:'center'}}>
+    <input value={hexVal} onChange={function(e){setHexVal(e.target.value);}} placeholder="#3a7bd5" style={{flex:1,fontSize:13,fontFamily:'var(--mono)'}}/>
+    <div style={{width:24,height:24,borderRadius:'50%',background:hexVal.match(/^#[0-9a-f]{6}$/i)?hexVal:'var(--bg3)',border:'1px solid var(--border)'}}/>
+    <button className="btn btn-primary btn-sm" onClick={function(){if(hexVal.match(/^#[0-9a-f]{6}$/i)){onSelect(hexVal);setShowCustom(false);}}}>Apply</button>
+  </div>)}
+</div>
+  );
+}
+// ── EmojiPicker ──
+var EMOJI_ROW=['👩','👨','🧑','🧙','🦸','🐉','👑','🔮','⚔️','🌲','🔥','💀','🌙','⭐','❄️','🌊','🗡️','📖','🎭','🌹'];
+function EmojiPicker({emoji,onSelect}){
+  var ss=useState(false);var showAll=ss[0];var setShowAll=ss[1];
+  var sq=useState('');var query=sq[0];var setQuery=sq[1];
+  var ALL=['👩','👨','🧑','👧','👦','🧓','👴','👵','🧙','🧚','🧛','🧜','🧝','🦸','🦹','🧟','👮','🤴','👸','🐉','🐺','🦅','⚔️','🗡️','🏰','🌲','🔥','💀','👑','🗺️','📜','🌙','⭐','🔮','💎','🌊','🌹','🕯️','⚡','🛡️','🗝️','🎭','📖','🌿','❄️'];
+  return(
+<div>
+  <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'nowrap'}}>
+    {EMOJI_ROW.map(function(em){return(<span key={em} onClick={function(){onSelect(em===emoji?null:em);}} style={{width:30,height:30,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer',background:emoji===em?'var(--bg4)':'var(--bg2)',border:emoji===em?'1px solid var(--indigo)':'1px solid var(--border)',flexShrink:0}}>{em}</span>);})}
+    <span onClick={function(){setShowAll(!showAll);}} style={{width:30,height:30,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,cursor:'pointer',background:'var(--bg2)',border:'1px solid var(--border)',color:'var(--mid)',flexShrink:0}}>{showAll?'↑':'···'}</span>
+    {emoji&&<button className="btn-icon" style={{padding:2}} onClick={function(){onSelect(null);}}><span className="mi" style={{fontSize:14}}>close</span></button>}
+  </div>
+  {showAll&&(<div style={{marginTop:8,background:'var(--bg2)',borderRadius:'var(--r)',padding:8}}>
+    <input value={query} onChange={function(e){setQuery(e.target.value);}} placeholder="Type any emoji..." style={{marginBottom:8,fontSize:18}} autoFocus/>
+    <div style={{display:'flex',flexWrap:'wrap',gap:3,maxHeight:100,overflowY:'auto'}}>
+      {(query?[]:ALL).map(function(em){return(<span key={em} onClick={function(){onSelect(em);setShowAll(false);}} style={{width:30,height:30,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer',background:emoji===em?'var(--bg4)':'transparent'}}>{em}</span>);})}
+      {query&&<span style={{fontSize:20,cursor:'pointer',padding:4}} onClick={function(){onSelect(query);setShowAll(false);}}>{query}</span>}
+    </div>
+  </div>)}
+</div>
+  {showHistory&&<VersionHistoryPanel draftId={did} onClose={function(){setShowHistory(false);}} onRestore={handleRestoreVersion}/>}
+  );
+}
 
 // ── AvatarEditModal ──
 var QUICK_EMOJIS=['👩','👨','🧑','👧','👦','🧓','👴','👵','🧙','🧚','🧛','🧜','🧝','🦸','🦹','🧟','👮','🕵️','💂','🧑‍⚕️','🧑‍🎓','🧑‍🏫','🧑‍🌾','🧑‍🍳','🧑‍🔧','🧑‍🎨','🧑‍✈️','🧑‍🚀','🤴','👸','🐉','🐺','🦅','⚔️','🗡️','🏰','🌲','🔥','💀','👑','🗺️','📜','🌙','⭐','🔮','💎','🌊','🌹','🕯️','⚡','🛡️','🗝️','🎭','📖','🌿','❄️'];
@@ -2767,64 +2676,41 @@ function AvatarEditModal({strand,onSave,onClose}){
   var sc=useState(strand.color||PRESET_COLORS[0]);var color=sc[0];var setColor=sc[1];
   var si=useState(strand.image||null);var image=si[0];var setImage=si[1];
   var se=useState(strand.emoji||null);var emoji=se[0];var setEmoji=se[1];
-  function handleFile(e){
-    var file=e.target.files&&e.target.files[0];if(!file)return;
-    if(file.size>5*1024*1024){alert('Image must be under 5 MB.');return;}
-    uploadImage(file).then(function(url){if(url)setImage(url);});
-  }
+  function handleFile(e){var file=e.target.files&&e.target.files[0];if(!file)return;if(file.size>5*1024*1024){alert('Image must be under 5 MB.');return;}uploadImage(file).then(function(url){if(url)setImage(url);});}
   function handleSave(){onSave({color:color,image:image,emoji:emoji});}
   function autoSaveColor(c){setColor(c);onSave({color:c,image:image,emoji:emoji});}
-  // Preview: image takes priority, then emoji, then initials on colour bg
-  var previewContent=null;
-  if(image){previewContent=<img src={image} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>;}
-  else if(emoji){previewContent=<span style={{fontSize:34}}>{emoji}</span>;}
-  else{previewContent=<span style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600,color:'#fff'}}>{initials(strand.name)}</span>;}
-  var sectionLbl={fontSize:11,fontWeight:600,color:'var(--accent)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:10,display:'block'};
+  var sectionLbl={fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8,display:'block'};
   return(
 <div className="modal-overlay">
   <div className="modal-backdrop" onClick={onClose}/>
-  <div className="modal-box" style={{width:400}}>
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-      <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>Edit appearance</div>
+  <div className="modal-box" style={{width:380}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+      <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600}}>Edit appearance</div>
       <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
     </div>
-    <div style={{display:'flex',justifyContent:'center',marginBottom:24}}>
-      <div style={{width:80,height:80,borderRadius:'50%',background:color,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,boxShadow:'0 4px 16px rgba(0,0,0,.4)'}}>
-        {previewContent}
+    {/* Avatar circle with camera overlay */}
+    <div style={{position:'relative',width:72,margin:'0 auto 16px',display:'flex',justifyContent:'center'}}>
+      <div style={{width:72,height:72,borderRadius:'50%',background:color,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',boxShadow:'0 4px 12px rgba(0,0,0,.25)'}}>
+        {image?<img src={image} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:emoji?<span style={{fontSize:30}}>{emoji}</span>:<span style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,color:'#fff'}}>{initials(strand.name)}</span>}
       </div>
-    </div>
-    <div style={{marginBottom:20}}>
-      <span style={sectionLbl}>Colour</span>
-      <div style={{fontSize:12,color:'var(--mid)',marginBottom:10}}>Background colour — used when no photo is set, and for strand tags.</div>
-      <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-        {PRESET_COLORS.map(function(c){return(
-<div key={c} onClick={function(){autoSaveColor(c);}} style={{width:32,height:32,borderRadius:'50%',background:c,cursor:'pointer',transition:'transform .15s',transform:color===c?'scale(1.15)':'scale(1)',boxShadow:color===c?'0 0 0 3px var(--bg1),0 0 0 5px '+c:'none'}}/>
-        );})}
-      </div>
-    </div>
-    <div style={{marginBottom:20,paddingTop:16,borderTop:'1px solid var(--border)'}}>
-      <span style={sectionLbl}>Icon or Emoji</span>
-      <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
-        {QUICK_EMOJIS.map(function(em){return(
-<span key={em} onClick={function(){setEmoji(em===emoji?null:em);}} style={{width:36,height:36,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,cursor:'pointer',background:emoji===em?'var(--bg4)':'var(--bg2)',border:emoji===em?'1px solid var(--indigo)':'1px solid var(--border)',transition:'all .15s'}}>{em}</span>
-        );})}
-      </div>
-      <input placeholder="Or type any emoji..." style={{fontSize:18}} value={emoji||''} onChange={function(e){setEmoji(e.target.value||null);}}/>
-      {emoji&&<button className="btn-icon" style={{marginTop:6}} onClick={function(){setEmoji(null);}}><span className="mi" style={{fontSize:14}}>close</span> Clear emoji</button>}
-    </div>
-    <div style={{paddingTop:16,borderTop:'1px solid var(--border)'}}>
-      <span style={sectionLbl}>Photo</span>
-      <div style={{fontSize:12,color:'var(--mid)',marginBottom:10}}>Overrides colour and emoji when set.</div>
-      {image&&<div style={{marginBottom:10,borderRadius:8,overflow:'hidden',height:100,background:'var(--bg2)'}}><img src={image} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/></div>}
-      <label style={{cursor:'pointer',display:'block'}}>
-        <span className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}}><span className="mi" style={{fontSize:18}}>upload</span>{image?'Change photo':'Upload photo'}</span>
+      <label style={{position:'absolute',bottom:0,right:0,cursor:'pointer'}}>
+        <div style={{width:22,height:22,borderRadius:'50%',background:'var(--bg1)',border:'2px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <span className="mi" style={{fontSize:13,color:'var(--mid)'}}>photo_camera</span>
+        </div>
         <input type="file" accept="image/*" style={{display:'none'}} onChange={handleFile}/>
       </label>
-      {image&&<button className="btn btn-danger btn-sm" style={{marginTop:8,width:'100%',justifyContent:'center'}} onClick={function(){setImage(null);}}>Remove photo</button>}
-      <div style={{fontSize:11,color:'var(--mid)',marginTop:6}}>Max 2 MB. JPG, PNG, GIF, WebP.</div>
     </div>
-    <div style={{marginTop:20,display:'flex',gap:8}}>
-      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={handleSave}>Save changes</button>
+    {image&&<div style={{textAlign:'center',marginBottom:10}}><button className="btn btn-ghost btn-sm" onClick={function(){setImage(null);}}><span className="mi" style={{fontSize:13}}>delete</span>Remove photo</button></div>}
+    <div style={{marginBottom:14}}>
+      <span style={sectionLbl}>Colour</span>
+      <CustomColorPicker color={color} onSelect={autoSaveColor}/>
+    </div>
+    <div style={{marginBottom:14,paddingTop:12,borderTop:'1px solid var(--border)'}}>
+      <span style={sectionLbl}>Emoji</span>
+      <EmojiPicker emoji={emoji} onSelect={setEmoji}/>
+    </div>
+    <div style={{display:'flex',gap:8,paddingTop:12,borderTop:'1px solid var(--border)'}}>
+      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={handleSave}>Save</button>
       <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
     </div>
   </div>
@@ -2833,30 +2719,17 @@ function AvatarEditModal({strand,onSave,onClose}){
 }
 
 
-// ── CollTab: collection tab with inline rename on double-click ──
+// ── CollTab ──
 function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrandId,setSearch,setShowCollSettings}){
   var se=useState(false);var editing=se[0];var setEditing=se[1];
   var sv=useState(coll);var val=sv[0];var setVal=sv[1];
   function commitRename(){
     var nc=val.trim();
-    if(nc&&nc!==coll){
-      app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[nc]=ps[coll]||[];delete ps[coll];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});
-      if(activeColl===coll)setActiveColl(nc);
-    } else {setVal(coll);}
-    setEditing(false);
+    if(nc&&nc!==coll){app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[nc]=ps[coll]||[];delete ps[coll];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});if(activeColl===coll)setActiveColl(nc);}
+    else{setVal(coll);}setEditing(false);
   }
-  if(editing){return(
-<div className="strands-tab active" style={{padding:'0 4px'}}>
-  <input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commitRename} onKeyDown={function(e){if(e.key==='Enter')commitRename();if(e.key==='Escape'){setVal(coll);setEditing(false);}}} style={{width:90,height:24,fontSize:13,padding:'2px 6px',borderRadius:4}}/>
-</div>
-  );}
-  return(
-<div className={'strands-tab'+(isActive?' active':'')}
-  onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}}
-  onDoubleClick={function(){setEditing(true);}}>
-  {coll}
-</div>
-  );
+  if(editing)return(<div className="strands-tab active" style={{padding:'0 4px'}}><input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commitRename} onKeyDown={function(e){if(e.key==='Enter')commitRename();if(e.key==='Escape'){setVal(coll);setEditing(false);}}} style={{width:90,height:24,fontSize:13,padding:'2px 6px',borderRadius:4}}/></div>);
+  return(<div className={'strands-tab'+(isActive?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){setEditing(true);}}>{coll}</div>);
 }
 
 // ── StrandsPage ──
@@ -2883,7 +2756,7 @@ function StrandsPage({app,allProjects}){
   function updateStrand(sid,changes){app.updateStrand(pid,activeColl,sid,changes);}
   function updateField(sid,fieldId,val){if(!activeStrand)return;var nf=Object.assign({},activeStrand.fields||{});nf[fieldId]=val;updateStrand(sid,{fields:nf});}
   function addStrand(){var tpl=getTpl(activeColl);var existing=(app.allStrands[pid]&&app.allStrands[pid][activeColl])||[];var base='New '+activeColl.replace(/s$/,'');var num=existing.filter(function(s){return s.name&&s.name.startsWith(base);}).length+1;var ns={id:genId(),templateId:tpl?tpl.id:'',collectionName:activeColl,name:base+' '+num,color:({"Characters":"#c45e28","Locations":"#2f9966","Plot Threads":"#2f76e0","Sources":"#ce2fe0","Interviews":"#e02f79","Subjects":"#e8a030","Scenes":"#64e02f","Topics":"#2fe07f","Lore & World":"#e8a030","Reports":"#b83220","Audience Notes":"#f0c050"}[activeColl])||PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};app.addStrand(pid,activeColl,ns);setActiveStrandId(ns.id);if(isMobile)setMobileDetailOpen(true);}
-  function addCollection(){var name=newCollName.trim();if(!name)return;var nt={id:genId(),projectId:pid,name:name,fields:defaultFields(name),sharedWith:[]};app.addTemplate(pid,nt);app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});setActiveColl(name);setNewColl(false);setNewCollName('');setEditingFields(defaultFields(name));setSharedWith([]);setShowCollSettings(true);}
+  function addCollection(){var name=newCollName.trim();if(!name)return;var nt={id:genId(),projectId:pid,name:name,fields:defaultFields(name),sharedWith:[]};app.addTemplate(pid,nt);app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});setActiveColl(name);setNewColl(false);setNewCollName('');}
   function handleImageUpload(e,sid){var file=e.target.files&&e.target.files[0];if(!file)return;uploadImage(file).then(function(url){if(url)updateStrand(sid,{image:url});});}
   function getDraftAppearances(sid){return(app.allDrafts[pid]||[]).filter(function(d){return(d.strandTags||[]).includes(sid);});}
   function renderFieldInput(f,sid,val){
@@ -2922,7 +2795,7 @@ function StrandsPage({app,allProjects}){
   var detailContent=showCollSettings&&editingFields?(
 <div style={{padding:24}}>
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>Customize "{activeColl}"</div>
+    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>{activeColl} — Fields</div>
     <div style={{display:'flex',gap:8}}>
       <button className="btn btn-danger btn-sm" onClick={function(){setDeleteCollConfirm(true);}}><span className="mi" style={{fontSize:14}}>delete</span>Delete</button>
       <button className="btn btn-ghost btn-sm" onClick={function(){setShowCollSettings(false);}}>Cancel</button>
@@ -2944,9 +2817,13 @@ function StrandsPage({app,allProjects}){
 </div>
   )}
   {editingFields.map(function(f,i){return(
-<div key={f.id} className="field-edit-row">
-  <input defaultValue={f.label} style={{flex:1}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});setEditingFields(nf);}}/>
-  <select value={f.type} style={{width:110}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value});setEditingFields(nf);}}>
+<div key={f.id} className="field-edit-row" draggable={true}
+  onDragStart={function(e){e.dataTransfer.setData('fieldIdx',''+i);}}
+  onDragOver={function(e){e.preventDefault();}}
+  onDrop={function(e){e.preventDefault();var from=parseInt(e.dataTransfer.getData('fieldIdx'),10);if(isNaN(from)||from===i)return;var nf=editingFields.slice();var item=nf.splice(from,1)[0];nf.splice(i,0,item);setEditingFields(nf);}}>
+  <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab',flexShrink:0}}>drag_indicator</span>
+  <input defaultValue={f.label} style={{maxWidth:160,fontSize:13}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});setEditingFields(nf);}}/>
+  <select value={f.type} style={{width:110,fontSize:13}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value});setEditingFields(nf);}}>
     {FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}
   </select>
   <button className="btn-icon" onClick={function(){setEditingFields(editingFields.filter(function(_,j){return j!==i;}));}}><span className="mi" style={{fontSize:18}}>delete</span></button>
@@ -3146,14 +3023,13 @@ function ProjectWizard({app,onClose}){
   var spt=useState(null);var projType=spt[0];var setProjType=spt[1];
   var st=useState('');var title=st[0];var setTitle=st[1];
   var ssyn=useState('');var synopsis=ssyn[0];var setSynopsis=ssyn[1];
-  var swi=useState(null);var wizardImage=swi[0];var setWizardImage=swi[1];
   var ssc=useState([]);var selectedColls=ssc[0];var setSelectedColls=ssc[1];
   var titleRef=useRef(null);
   useEffect(function(){if(step===1&&titleRef.current)titleRef.current.focus();},[step]);
   var allColls=['Characters','Locations','Lore & World','Sources','Interviews','Subjects','Scenes','Plot Threads','Topics','Audience Notes','Reports'];
   function selectType(t){setProjType(t);setSelectedColls(t.colls);setStep(1);}
   function toggleColl(c){setSelectedColls(function(sc){return sc.includes(c)?sc.filter(function(x){return x!==c;}):sc.concat([c]);});}
-  function create(){if(!title.trim())return;var pid=genId();var now=new Date().toISOString();var proj={id:pid,title:title.trim(),type:projType?projType.label:'Other',synopsis:synopsis.trim(),image:wizardImage||null,lastEdited:now,createdAt:now,draftFieldDefs:[]};var tpls=selectedColls.map(function(c){return{id:genId(),projectId:pid,name:c,fields:defaultFields(c),sharedWith:[]};});var strandsObj={};selectedColls.forEach(function(c){strandsObj[c]=[];});app.createProject(proj,{templates:tpls,strandsObj:strandsObj});onClose();app.loadProjectData(pid);app.setProjId(pid);app.setView('cards');}
+  function create(){if(!title.trim())return;var pid=genId();var now=new Date().toISOString();var proj={id:pid,title:title.trim(),type:projType?projType.label:'Other',synopsis:synopsis.trim(),lastEdited:now,createdAt:now,draftFieldDefs:[]};var tpls=selectedColls.map(function(c){return{id:genId(),projectId:pid,name:c,fields:defaultFields(c),sharedWith:[]};});var strandsObj={};selectedColls.forEach(function(c){strandsObj[c]=[];});app.createProject(proj,{templates:tpls,strandsObj:strandsObj});onClose();app.loadProjectData(pid);app.setProjId(pid);app.setView('cards');}
   return(
 <div className="modal-overlay">
   <div className="modal-backdrop" onClick={onClose}/>
@@ -3178,17 +3054,6 @@ function ProjectWizard({app,onClose}){
 <div>
   <input ref={titleRef} style={{fontSize:18,padding:'12px 14px',background:'var(--bg2)',border:'2px solid var(--border)',borderRadius:10,width:'100%',marginBottom:14,color:'var(--text)',fontFamily:'var(--serif)',fontWeight:600}} value={title} onChange={function(e){setTitle(e.target.value);}} placeholder="Working title..." onKeyDown={function(e){if(e.key==='Enter'&&title.trim())setStep(2);}}/>
   <textarea style={{fontSize:14,padding:'10px 14px',background:'var(--bg2)',border:'2px solid var(--border)',borderRadius:10,width:'100%',color:'var(--text)',marginBottom:14}} value={synopsis} onChange={function(e){setSynopsis(e.target.value);}} placeholder="What is this about? (optional)" rows={3}/>
-  <div style={{marginBottom:14}}>
-    <div style={{fontSize:12,color:'var(--mid)',marginBottom:6}}>Cover image <span style={{opacity:.6}}>(optional)</span></div>
-    <div style={{display:'flex',alignItems:'center',gap:10}}>
-      {wizardImage&&<img src={wizardImage} alt="" style={{width:56,height:40,objectFit:'cover',borderRadius:6,flexShrink:0}}/>}
-      <label style={{cursor:'pointer'}}>
-        <span className="btn btn-ghost btn-sm">{wizardImage?'Change':'Upload cover'}</span>
-        <input type="file" accept="image/*" style={{display:'none'}} onChange={function(e){var file=e.target.files&&e.target.files[0];if(!file)return;uploadImage(file).then(function(url){if(url)setWizardImage(url);});}}/>
-      </label>
-      {wizardImage&&<button className="btn-icon" onClick={function(){setWizardImage(null);}}><span className="mi" style={{fontSize:16}}>delete</span></button>}
-    </div>
-  </div>
   <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
     <button className="btn btn-ghost" onClick={function(){setStep(0);}}>Back</button>
     <button className="btn btn-primary" onClick={function(){setStep(2);}} disabled={!title.trim()}>Next</button>
@@ -3475,29 +3340,8 @@ function App(){
     return function(){sub.data.subscription.unsubscribe();};
   },[]);
 
-  function checkLocalStorageQuota(){
-    try{
-      var used=0;
-      for(var k in localStorage){
-        if(localStorage.hasOwnProperty(k))used+=((localStorage[k].length+k.length)*2);
-      }
-      var usedMB=(used/1024/1024).toFixed(1);
-      if(used>40*1024*1024){
-        console.warn('localStorage usage: '+usedMB+'MB — approaching limit');
-        // Prune oldest snapshots across all draft keys to free space
-        var snapshotKeys=Object.keys(localStorage).filter(function(k){return k.startsWith('woven:versions:');});
-        snapshotKeys.forEach(function(k){
-          try{
-            var snaps=JSON.parse(localStorage.getItem(k)||'[]');
-            if(snaps.length>5){localStorage.setItem(k,JSON.stringify(snaps.slice(0,5)));}
-          }catch(e){}
-        });
-      }
-    }catch(e){}
-  }
   function loadAllData(){
     setDataLoading(true);
-    checkLocalStorageQuota();
     // Reset React state first so previous user's data never shows
     setProjects([]);setAllDrafts({});setAllStrands({});setAllTemplates({});
     setSessions([]);setGlobalLT({});setGoalState(500);
@@ -3547,19 +3391,7 @@ function App(){
     });
   }
 
-  function updateDraft(pid,did,changes){setAllDrafts(function(prev){
-    var next=Object.assign({},prev);
-    var ds=(next[pid]||[]).map(function(d){
-      if(d.id!==did)return d;
-      if(changes.thumbnail!==undefined&&d.thumbnail&&d.thumbnail!==changes.thumbnail)deleteStorageImage(d.thumbnail);
-      var updated=Object.assign({},d,changes);
-      if(changes.status&&changes.status!==d.status&&d.body){
-        saveSnapshot(did,d.body,d.wordCount,'status:'+changes.status);
-      }
-      return updated;
-    });
-    next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;
-  });}
+  function updateDraft(pid,did,changes){setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).map(function(d){return d.id!==did?d:Object.assign({},d,changes);});next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});}
   function addDraft(pid,nd){setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).concat([nd]);next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});}
   function reorderDraft(pid,fromId,toOrder){
     setAllDrafts(function(prev){
@@ -3580,26 +3412,13 @@ function App(){
       next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;
     });
   }
-  function updateStrand(pid,coll,sid,changes){setAllStrands(function(prev){
-    var next=Object.assign({},prev);var ps=Object.assign({},next[pid]||{});
-    ps[coll]=(ps[coll]||[]).map(function(s){
-      if(s.id!==sid)return s;
-      if(changes.image!==undefined&&s.image&&s.image!==changes.image)deleteStorageImage(s.image);
-      return Object.assign({},s,changes);
-    });
-    next[pid]=ps;saveDB('woven:strands:'+pid,ps);return next;
-  });}
+  function updateStrand(pid,coll,sid,changes){setAllStrands(function(prev){var next=Object.assign({},prev);var ps=Object.assign({},next[pid]||{});ps[coll]=(ps[coll]||[]).map(function(s){return s.id!==sid?s:Object.assign({},s,changes);});next[pid]=ps;saveDB('woven:strands:'+pid,ps);return next;});}
   function addStrand(pid,coll,ns){setAllStrands(function(prev){var next=Object.assign({},prev);var ps=Object.assign({},next[pid]||{});ps[coll]=(ps[coll]||[]).concat([ns]);next[pid]=ps;saveDB('woven:strands:'+pid,ps);return next;});}
   function addTemplate(pid,tpl){setAllTemplates(function(prev){var next=Object.assign({},prev);next[pid]=(next[pid]||[]).concat([tpl]);saveDB('woven:templates:'+pid,next[pid]);return next;});}
   function updateTemplate(pid,tid,changes){setAllTemplates(function(prev){var next=Object.assign({},prev);next[pid]=(next[pid]||[]).map(function(t){return t.id!==tid?t:Object.assign({},t,changes);});saveDB('woven:templates:'+pid,next[pid]);return next;});}
   function updateProjectTitle(pid,newTitle){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{title:newTitle});});saveDB('woven:projects',next);return next;});}
   function updateProjectSynopsis(pid,syn){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{synopsis:syn});});saveDB('woven:projects',next);return next;});}
-  function updateProjectImage(pid,img){setProjects(function(prev){
-    var old=prev.find(function(p){return p.id===pid;});
-    if(old&&old.image&&old.image!==img)deleteStorageImage(old.image);
-    var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{image:img});});
-    saveDB('woven:projects',next);return next;
-  });}
+  function updateProjectImage(pid,img){setProjects(function(prev){var old=prev.find(function(p){return p.id===pid;});if(old&&old.image&&old.image!==img)deleteStorageImage(old.image);var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{image:img});});saveDB('woven:projects',next);return next;});}
   function updateProjectType(pid,type){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{type:type});});saveDB('woven:projects',next);return next;});}
   function archiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:true});});saveDB('woven:projects',next);return next;});}
   function unarchiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:false});});saveDB('woven:projects',next);return next;});}
@@ -3627,7 +3446,7 @@ function App(){
       return next;
     });
   }
-  function recordSession(pid,wordsAdded,draftId,body){
+  function recordSession(pid,wordsAdded){
     var t=todayStr();
     if(!wordsAdded||wordsAdded<=0||wordsAdded>500)return;
     setSessions(function(prev){
@@ -3673,12 +3492,7 @@ function App(){
   var shareId=urlParams.get('share');
   if(shareId)return(<div className="woven-root"><GlobalStyles/><SharedDraftView shareId={shareId}/></div>);
 
-  if(authLoading)return(
-<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg0)',flexDirection:'column',gap:16}}>
-  <WovenLogo size={32} dark={true}/>
-  <div style={{width:28,height:28,borderRadius:'50%',border:'3px solid var(--border)',borderTopColor:'var(--indigo)',animation:'spin .8s linear infinite'}}/>
-</div>
-  );
+  if(authLoading)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg0)',fontFamily:'var(--serif)',fontSize:24,color:'var(--mid)'}}>Loading...</div>);
   if(!currentUser)return(<div><GlobalStyles/><AuthScreen onAuth={function(user){window.__wovenUserId=user.id;setCurrentUser(user);loadAllData();}}/></div>);
 
   var inner=null;
