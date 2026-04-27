@@ -2616,7 +2616,7 @@ function EditorView({app}){
   </div>
 </div>
   )}
-
+  {showHistory&&<VersionHistoryPanel draftId={did} onClose={function(){setShowHistory(false);}} onRestore={handleRestoreVersion}/>}
 </div>
   );
 }
@@ -2665,7 +2665,6 @@ function EmojiPicker({emoji,onSelect}){
     </div>
   </div>)}
 </div>
-  {showHistory&&<VersionHistoryPanel draftId={did} onClose={function(){setShowHistory(false);}} onRestore={handleRestoreVersion}/>}
   );
 }
 
