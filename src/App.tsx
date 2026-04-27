@@ -2712,7 +2712,18 @@ function EditorView({app}){
   )}
 
 </div>
-  {showHistory&&<VersionHistoryPanel draftId={did} onClose={function(){setShowHistory(false);}} onRestore={function(body){if(editorRef.current)editorRef.current.innerHTML=body;setShowHistory(false);setSaveState('saving');scheduleSave(body,countWords(body));}}/>}
+  {showHistory&&(
+<VersionHistoryPanel
+  draftId={did}
+  onClose={function(){setShowHistory(false);}}
+  onRestore={function(body){
+    if(editorRef.current)editorRef.current.innerHTML=body;
+    setShowHistory(false);
+    setSaveState('saving');
+    scheduleSave(body,countWords(body));
+  }}
+/>
+  )}
 </div>
   );
 }
