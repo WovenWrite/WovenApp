@@ -85,12 +85,12 @@ function saveDB(key,val){
   window.dispatchEvent(new Event('woven-save-state'));
   __saveQueue[key]=setTimeout(function(){
     __lastSaved[key]=serialized;
-    function attempt(retries){
+    var attempt=function(retries){
       supabase.from('wf_data').upsert({key:key,user_id:uid,value:val,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(r){
         if(r.error){
           console.error('saveDB error ('+retries+' retries left):',r.error);
           if(retries>0){
-            setTimeout(function(){attempt(retries-1);},2000*Math.pow(2,3-retries)); // exponential backoff
+            setTimeout(function(){attempt(retries-1);},2000*(retries===3?1:retries===2?2:4));
           } else {
             window.__wovenSaveState='error';
             window.dispatchEvent(new Event('woven-save-state'));
@@ -100,8 +100,8 @@ function saveDB(key,val){
           window.dispatchEvent(new Event('woven-save-state'));
         }
       });
-    }
-    attempt(3); // up to 3 retries with exponential backoff
+    };
+    attempt(3);
   },800);
 }
 
@@ -2499,6 +2499,12 @@ function EditorView({app}){
   var editorRef=useRef(null);var saveTimer=useRef(null);var lastDraftId=useRef(null);var sessionStartWc=useRef(0);
   var sst=useState('saved');var saveState=sst[0];var setSaveState=sst[1];
   var svh=useState(false);var showHistory=svh[0];var setShowHistory=svh[1];
+  function handleRestoreVersion(body){
+    if(editorRef.current)editorRef.current.innerHTML=body;
+    setShowHistory(false);
+    setSaveState('saving');
+    scheduleSave(body,countWords(body));
+  }
   var isMobile=useIsMobile();
   useEffect(function(){if(!draft)return;if(lastDraftId.current===draft.id)return;lastDraftId.current=draft.id;sessionStartWc.current=draft.wordCount||0;setWc(draft.wordCount||0);if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';},[did]);
   // Only reset editor when mode changes (not on re-renders)
@@ -2712,7 +2718,7 @@ function EditorView({app}){
   )}
 
 </div>
-  {showHistory&&<VersionHistoryPanel draftId={did} onClose={function(){setShowHistory(false);}} onRestore={function(body){if(editorRef.current){editorRef.current.innerHTML=body;}setShowHistory(false);setSaveState('saving');scheduleSave(body,countWords(body));}}/>}
+  {showHistory?<VersionHistoryPanel draftId={did} onClose={function(){setShowHistory(false);}} onRestore={handleRestoreVersion}/>:null}
 </div>
   );
 }
