@@ -2852,6 +2852,19 @@ function StrandsPage({app,allProjects}){
   function saveCollSettings(){if(!activeTpl)return;app.updateTemplate(pid,activeTpl.id,{fields:editingFields,sharedWith:sharedWith});setShowCollSettings(false);}
   function addFieldToSettings(){if(!newFieldName.trim()||!editingFields)return;setEditingFields(editingFields.concat([{id:genId(),label:newFieldName.trim(),type:newFieldType}]));setNewFieldName('');}
   var otherProjects=allProjects.filter(function(p){return p.id!==pid;});
+  var sco2=useState(null);var dragOverColl=sco2[0];var setDragOverColl=sco2[1];
+  function reorderColls(fromColl,toColl){
+    if(fromColl===toColl)return;
+    app.setAllStrands(function(prev){
+      var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});
+      var keys=Object.keys(ps);
+      var fi=keys.indexOf(fromColl);var ti=keys.indexOf(toColl);
+      if(fi<0||ti<0)return prev;
+      keys.splice(fi,1);keys.splice(ti,0,fromColl);
+      var reordered={};keys.forEach(function(k){reordered[k]=ps[k];});
+      n[pid]=reordered;saveDB('woven:strands:'+pid,reordered);return n;
+    });
+  }
   var detailContent=showCollSettings&&editingFields?(
 <div style={{padding:24}}>
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
@@ -2951,19 +2964,6 @@ function StrandsPage({app,allProjects}){
   );
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
-  var sco=useState(null);var dragOverColl=sco[0];var setDragOverColl=sco[1];
-  function reorderColls(fromColl,toColl){
-    if(fromColl===toColl)return;
-    app.setAllStrands(function(prev){
-      var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});
-      var keys=Object.keys(ps);
-      var fi=keys.indexOf(fromColl);var ti=keys.indexOf(toColl);
-      if(fi<0||ti<0)return prev;
-      keys.splice(fi,1);keys.splice(ti,0,fromColl);
-      var reordered={};keys.forEach(function(k){reordered[k]=ps[k];});
-      n[pid]=reordered;saveDB('woven:strands:'+pid,reordered);return n;
-    });
-  }
   <div className="strands-subnav">
     {collNames.map(function(coll){return(
 <div key={coll} draggable={true}
