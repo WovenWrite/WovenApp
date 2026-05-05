@@ -268,7 +268,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .proj-title-inp::placeholder{color:var(--placeholder);}
 .panel-overlay{position:fixed;inset:0;z-index:200;display:flex;justify-content:flex-end;}
 .panel-backdrop{position:absolute;inset:0;background:rgba(42,31,16,.25);}
-.panel-box{position:relative;width:380px;max-width:92vw;background:var(--bg1);border-left:1px solid var(--border);display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(42,31,16,.10);overflow:hidden;}
+.panel-box{position:relative;width:420px;max-width:92vw;background:var(--bg1);border-left:1px solid var(--border);display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(42,31,16,.10);overflow:hidden;}
 .panel-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0;}
 .panel-title{font-family:var(--serif);font-size:19px;font-weight:600;color:var(--text);}
 .panel-body{flex:1;overflow-y:auto;padding:18px;}
@@ -366,7 +366,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .bind-draft-list{border:1px solid var(--border);border-radius:var(--r);overflow-y:auto;max-height:360px;background:var(--bg0);}
 .bind-draft-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--bg2);font-size:13px;}
 .bind-draft-row:last-child{border-bottom:none;}
-.editor-layout{display:flex;flex-direction:column;flex:1;overflow:hidden;}
+.editor-layout{display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0;}
 .editor-topbar{display:flex;align-items:center;gap:8px;padding:0 14px;height:54px;background:var(--bg1);border-bottom:1px solid var(--border);flex-shrink:0;box-shadow:0 1px 4px rgba(42,31,16,.05);}
 .editor-topbar-row1{display:contents;}
 .editor-topbar-row2{display:contents;}
@@ -376,8 +376,8 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .editor-title-inp:focus{outline:1px solid var(--indigo);background:var(--bg1);}
 .editor-title-inp::placeholder{color:var(--placeholder);}
 .editor-main{display:flex;flex:1;overflow:hidden;}
-.editor-center{flex:1;overflow-y:auto;display:flex;flex-direction:column;position:relative;}
-.editor-body{flex:1;padding:48px 64px;font-family:var(--serif);line-height:1.9;color:var(--body-text);min-height:300px;font-size:19px;max-width:900px;margin:0 auto;width:100%;box-sizing:border-box;}
+.editor-center{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;position:relative;-webkit-overflow-scrolling:touch;}
+.editor-body{padding:48px 64px;font-family:var(--serif);line-height:1.9;color:var(--body-text);min-height:calc(100vh - 160px);font-size:19px;max-width:900px;margin:0 auto;width:100%;box-sizing:border-box;-webkit-user-select:text;user-select:text;touch-action:manipulation;cursor:text;}
 .editor-body:focus{outline:none;}
 .editor-body:empty:before{content:attr(data-placeholder);color:var(--placeholder);pointer-events:none;}
 .editor-body h1{font-family:var(--serif);font-size:30px;font-weight:600;margin-bottom:14px;color:var(--text);}
@@ -474,7 +474,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 @media(max-width:768px){
   .stat-hide-mobile{display:none;}
   input,textarea,select{font-size:16px!important;}
-  .woven-root{height:auto;min-height:100vh;overflow-y:auto;overflow-x:hidden;}
+  .woven-root{height:100%;min-height:100vh;overflow-x:hidden;}
   .dash-layout{flex:none;overflow:visible;flex-direction:column;height:auto;}
   .dash-main{flex:none;overflow-y:visible;padding:16px 16px 40px;background-color:var(--bg0);background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;order:1;}
   .dash-sidebar{width:100%;max-width:100%;border-left:none;border-bottom:1px solid var(--border);padding:12px 14px;overflow:visible;height:auto;flex:none;min-width:0;background-color:var(--bg0)!important;background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px)!important;background-size:22px 22px!important;order:0;}
@@ -487,10 +487,11 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
   .draft-card{height:auto;min-height:140px;}
   .strands-left{width:100%;}
   .editor-body,.editor-md{padding:20px;}
-  .editor-topbar{height:auto;flex-wrap:wrap;padding:0;}
+  .editor-topbar{height:auto;flex-wrap:wrap;padding:0;position:sticky;top:0;z-index:20;background:var(--bg1);}
   .editor-topbar-row1{display:flex;align-items:center;gap:6px;padding:6px 10px;width:100%;border-bottom:1px solid var(--border);}
   .editor-topbar-row2{display:flex;align-items:center;gap:6px;padding:6px 10px;width:100%;overflow-x:auto;}
   .editor-drawer{position:fixed;top:54px;bottom:0;left:0;right:0;z-index:50;width:100%;border-left:none;}
+  .editor-bottombar{position:sticky;bottom:0;z-index:20;}
   .panel-overlay{align-items:stretch;justify-content:flex-end;}
   .panel-box{width:100%;max-width:100%;border-left:none;border-top:none;border-radius:0;max-height:100%;}
   .modal-box{width:100%;max-width:100%;border-radius:0;margin:0;height:100%;max-height:100%;}
@@ -1613,7 +1614,8 @@ function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqC
   <div className="card-footer" style={{flexWrap:'wrap',gap:4}}>
     <StatusDot status={draft.status} onChange={onStatusChange}/>
     <span className="card-wc" style={{marginLeft:4}}>{(draft.wordCount||0)+'w'}</span>
-    <button className="card-open" style={{marginLeft:'auto'}} onClick={function(){app.openDraft(draft.id);}}>Draft</button>
+    <button className="card-open" style={{marginLeft:'auto'}} onClick={function(){app.openDraft(draft.id);}}>Open</button>
+    <button className="card-open" title="Duplicate as nested draft" onClick={function(e){e.stopPropagation();app.duplicateDraft(app.projId,draft.id);}}>⧉</button>
   </div>
 </div>
   );
@@ -2187,8 +2189,8 @@ function EditorStrandsPanel({draft,app,onClose,onOpenStrand}){
     var strand=null;var collName='';
     Object.keys(projS).forEach(function(c){(projS[c]||[]).forEach(function(st){if(st.id===selectedStrandId){strand=st;collName=c;}});});
     if(!strand){setSelectedStrandId(null);return null;}
-    var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.id===strand.templateId;})||null;
-    var fields=tpl?tpl.fields:[];
+    var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.id===strand.templateId;})||(app.allTemplates[pid]||[]).find(function(t){return t.name===collName;})||null;
+    var fields=tpl&&tpl.fields&&tpl.fields.length>0?tpl.fields:defaultFields(collName);
     function updateField(fid,val){var nf=Object.assign({},strand.fields||{});nf[fid]=val;app.updateStrand(pid,collName,selectedStrandId,{fields:nf});}
     return(
 <div className="editor-drawer">
@@ -2198,7 +2200,7 @@ function EditorStrandsPanel({draft,app,onClose,onOpenStrand}){
       <div style={{width:24,height:24,borderRadius:'50%',background:strand.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600,color:'#fff',flexShrink:0,cursor:'pointer',overflow:'hidden'}} onClick={function(){setShowAvatarEdit(true);}}>
         {strand.image?<img src={strand.image} alt={strand.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:strand.emoji?<span style={{fontSize:14}}>{strand.emoji}</span>:initials(strand.name)}
       </div>
-      <span className="edrawer-title">{strand.name}</span>
+      <span className="edrawer-title" spellCheck={false}>{strand.name}</span>
     </div>
     <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
   </div>
@@ -2276,10 +2278,10 @@ function VersionHistoryPanel({draftId,onRestore,onClose}){
 <div key={snap.id} style={{borderBottom:'1px solid var(--border)'}}>
   <div onClick={function(){setPreview(isActive?null:snap);}} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 0',cursor:'pointer'}}>
     <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{formatSnapshotTime(snap.ts)}</div><div style={{fontSize:11,color:'var(--mid)'}}>{labelText} · {snap.wordCount||0}w</div></div>
-    <span className="mi" style={{fontSize:16,color:'var(--border)',transform:isActive?'rotate(90deg)':'none',transition:'transform .15s'}}>chevron_right</span>
+    <span className="mi" style={{fontSize:16,color:isActive?'var(--indigo)':'var(--mid)',transform:isActive?'rotate(90deg)':'none',transition:'transform .15s'}}>chevron_right</span>
   </div>
   {isActive&&(<div style={{paddingBottom:12}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:15,lineHeight:1.8,color:'var(--body-text)',maxHeight:200,overflow:'auto',padding:'8px 0',borderTop:'1px solid var(--border)',marginBottom:8}} dangerouslySetInnerHTML={{__html:snap.body}}/>
+    <div style={{fontFamily:'var(--serif)',fontSize:15,lineHeight:1.8,color:'var(--body-text)',maxHeight:200,overflowY:'auto',padding:'8px 0',borderTop:'1px solid var(--border)',marginBottom:8,borderBottom:'2px solid var(--bg3)',WebkitMaskImage:'linear-gradient(to bottom, black 80%, transparent 100%)',maskImage:'linear-gradient(to bottom, black 80%, transparent 100%)'}} dangerouslySetInnerHTML={{__html:snap.body}}/>
     <button className="btn btn-primary btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={function(){if(window.confirm('Restore this version?'))onRestore(snap.body);}}>Restore this version</button>
   </div>)}
 </div>
@@ -2506,19 +2508,23 @@ function EditorView({app}){
   var allStrandsList=[];
   Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){allStrandsList.push(Object.assign({},st,{collectionName:c}));});});
   function tagStrand(st){var sel=window.getSelection();if(sel&&!sel.isCollapsed&&sel.rangeCount>0){var range=sel.getRangeAt(0);var mark=document.createElement('mark');mark.style.background=st.color+'33';mark.style.color=st.color;mark.style.borderRadius='3px';mark.style.padding='0 2px';mark.dataset.strandId=st.id;try{range.surroundContents(mark);}catch(e){}}var tags=draft.strandTags||[];if(!tags.includes(st.id))app.updateDraft(pid,did,{strandTags:tags.concat([st.id])});setShowStrandDrop(false);setFloatToolbar(null);}
+  var sncp=useState(null);var newStrandPending=sncp[0];var setNewStrandPending=sncp[1];
   function createNewStrand(){
     var sel=window.getSelection();
     var selectedText=sel&&!sel.isCollapsed?sel.toString().trim():'';
-    // Clear selection highlight
     if(sel)sel.removeAllRanges();
-    var colls=Object.keys(projStrands);var coll=colls.length>0?colls[0]:'Characters';
-    var ns={id:genId(),templateId:'',collectionName:coll,name:selectedText||'New Strand',color:PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};
+    setNewStrandPending({name:selectedText||''});
+    setShowStrandDrop(false);setFloatToolbar(null);
+  }
+  function confirmCreateStrand(coll,name){
+    var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.name===coll;})||null;
+    var ns={id:genId(),templateId:tpl?tpl.id:'',collectionName:coll,name:name||'New Strand',color:PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};
     app.addStrand(pid,coll,ns);
-    setShowStrandDrop(false);
-    setFloatToolbar(null);
-    // Open properties and strand detail for the new strand
-    setStrandDetailId(ns.id);
-    setShowProps(false);
+    // Auto-tag the current draft
+    var tags=draft.strandTags||[];
+    if(!tags.includes(ns.id))app.updateDraft(pid,did,{strandTags:tags.concat([ns.id])});
+    setNewStrandPending(null);
+    setStrandDetailId(ns.id);setShowProps(false);
   }
   if(!draft){
     if(app.dataLoading){
@@ -2547,6 +2553,9 @@ function EditorView({app}){
       <input key={draft.id+'-et-'+draft.title} className="editor-title-inp" defaultValue={draft.title} placeholder="Untitled draft" onBlur={function(e){app.updateDraft(pid,did,{title:e.target.value,updatedAt:new Date().toISOString()});}}/>
     </div>
     <div className="editor-topbar-row2">
+    <button className="btn btn-ghost btn-sm" title="Duplicate as nested draft" onClick={function(){app.duplicateDraft(pid,did);}}>
+      <span className="mi" style={{fontSize:16}}>content_copy</span>
+    </button>
     <button className="btn btn-ghost btn-sm" style={showProps?{borderColor:'var(--indigo)',color:'var(--indigo)'}:{}} onClick={function(){setShowProps(!showProps);setStrandDetailId(null);}}>Properties</button>
     <button className="btn btn-ghost btn-sm" onClick={function(){setShowHistory(true);}} title="Version history"><span className="mi" style={{fontSize:16}}>history</span></button>
     <button className="btn btn-ghost btn-sm" style={showStrands?{borderColor:'var(--indigo)',color:'var(--indigo)'}:{}} onClick={function(){setShowStrands(!showStrands);setStrandDetailId(null);}}>Strands</button>
@@ -2570,7 +2579,7 @@ function EditorView({app}){
   <div className="editor-main">
     <div className="editor-center">
       {mode==='rt'?(
-<div ref={editorRef} className="editor-body" contentEditable={true} suppressContentEditableWarning={true} data-placeholder="Start writing..." style={{fontSize:bodyFontSize,lineHeight:1.9}} onInput={handleRTInput} onKeyDown={handleKeyDown} onPaste={handlePaste}/>
+<div ref={editorRef} className="editor-body" contentEditable={true} suppressContentEditableWarning={true} data-placeholder="Start writing..." style={{fontSize:bodyFontSize,lineHeight:1.9}} onInput={handleRTInput} onKeyDown={handleKeyDown} onPaste={handlePaste} onFocus={function(){if(editorRef.current)editorRef.current.style.outline='none';}} onTouchEnd={function(e){e.currentTarget.focus();}}/>
       ):(
 <textarea className="editor-md" defaultValue={stripHtml(draft.body||'')} onChange={handleMDChange} placeholder="Write in Markdown..."/>
       )}
@@ -2616,6 +2625,26 @@ function EditorView({app}){
 </div>
   )}
   {showHistory&&<VersionHistoryPanel draftId={did} onClose={function(){setShowHistory(false);}} onRestore={handleRestoreVersion}/>}
+  {newStrandPending&&(
+<div className="modal-overlay">
+  <div className="modal-backdrop" onClick={function(){setNewStrandPending(null);}}/>
+  <div className="modal-box" style={{maxWidth:360}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600,marginBottom:16}}>Add to which collection?</div>
+    <div style={{marginBottom:14}}>
+      <span className="sect-lbl">Name</span>
+      <input defaultValue={newStrandPending.name} placeholder="Strand name" id="new-strand-name-input" autoFocus style={{marginBottom:8}}/>
+    </div>
+    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+      {Object.keys(app.allStrands[pid]||{}).map(function(coll){return(
+<button key={coll} className="btn btn-ghost" style={{justifyContent:'flex-start',gap:10}} onClick={function(){var nameEl=document.getElementById('new-strand-name-input');confirmCreateStrand(coll,nameEl?nameEl.value:newStrandPending.name);}}>
+  <span className="mi" style={{fontSize:16,color:'var(--indigo)'}}>add</span>{coll}
+</button>
+      );})}
+    </div>
+    <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center',marginTop:12}} onClick={function(){setNewStrandPending(null);}}>Cancel</button>
+  </div>
+</div>
+  )}
 </div>
   );
 }
@@ -2717,6 +2746,35 @@ function AvatarEditModal({strand,onSave,onClose}){
 }
 
 
+
+// ── StrandSortFilter ──
+function StrandSortFilter({sort,setSort,strandFilter,setStrandFilter,fields}){
+  var so=useState(false);var open=so[0];var setOpen=so[1];
+  var sp=useState({top:0,left:0});var pos=sp[0];var setPos=sp[1];
+  var ref=React.useRef(null);
+  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
+  var hasActive=strandFilter||sort!=='name';
+  return(
+<div ref={ref} style={{position:'relative',flexShrink:0}}>
+  <button className={'btn-icon'+(hasActive?' ':' ')} style={{padding:4,border:'1px solid '+(hasActive?'var(--indigo)':'var(--border)'),borderRadius:'var(--r)',color:hasActive?'var(--indigo)':'var(--mid)'}} onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setPos({top:r.bottom+4,left:r.right-180});setOpen(!open);}}>
+    <span className="mi" style={{fontSize:16}}>tune</span>
+  </button>
+  {open&&(
+<div style={{position:'fixed',top:pos.top,left:pos.left,zIndex:400,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--rl)',boxShadow:'0 8px 28px rgba(42,31,16,.14)',minWidth:180,padding:10}}>
+  <div style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Sort</div>
+  {[['name','Name A–Z'],['recent','Recently added']].map(function(o){return(
+<div key={o[0]} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',cursor:'pointer',fontSize:13,color:sort===o[0]?'var(--indigo)':'var(--text)',fontWeight:sort===o[0]?600:400}} onClick={function(){setSort(o[0]);}}>
+  <span style={{width:14,height:14,borderRadius:'50%',border:'2px solid '+(sort===o[0]?'var(--indigo)':'var(--border)'),background:sort===o[0]?'var(--indigo)':'transparent',flexShrink:0}}/>
+  {o[1]}
+</div>
+  );})}
+  {(strandFilter||sort!=='name')&&<button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center',marginTop:8}} onClick={function(){setSort('name');setStrandFilter(null);}}>Clear</button>}
+</div>
+  )}
+</div>
+  );
+}
+
 // ── CollTab ──
 function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrandId,setSearch,setShowCollSettings}){
   var se=useState(false);var editing=se[0];var setEditing=se[1];
@@ -2739,6 +2797,8 @@ function StrandsPage({app,allProjects}){
   var sac=useState(collNames[0]);var activeColl=sac[0];var setActiveColl=sac[1];
   var sasi=useState(null);var activeStrandId=sasi[0];var setActiveStrandId=sasi[1];
   var ssc=useState('');var search=ssc[0];var setSearch=ssc[1];
+  var sss=useState('name');var strandSort=sss[0];var setStrandSort=sss[1];
+  var ssf=useState(null);var strandFilter=ssf[0];var setStrandFilter=ssf[1];
   var snc=useState(false);var newColl=snc[0];var setNewColl=snc[1];
   var sncn=useState('');var newCollName=sncn[0];var setNewCollName=sncn[1];
   var scs=useState(false);var showCollSettings=scs[0];var setShowCollSettings=scs[1];
@@ -2746,7 +2806,9 @@ function StrandsPage({app,allProjects}){
   var smdo=useState(false);var mobileDetailOpen=smdo[0];var setMobileDetailOpen=smdo[1];
   var savt=useState(false);var showAvatarEdit=savt[0];var setShowAvatarEdit=savt[1];
   var collStrands=projStrands[activeColl]||[];
-  var filtered=search?collStrands.filter(function(s){return s.name&&s.name.toLowerCase().includes(search.toLowerCase());}):collStrands;
+  var filtered=(search?collStrands.filter(function(s){return s.name&&s.name.toLowerCase().includes(search.toLowerCase());}):collStrands)
+    .filter(function(s){if(!strandFilter)return true;var val=s.fields&&s.fields[strandFilter.fieldId];return val&&val.toLowerCase().includes(strandFilter.value.toLowerCase());})
+    .slice().sort(function(a,b){if(strandSort==='name')return (a.name||'').localeCompare(b.name||'');if(strandSort==='recent')return (b.createdAt||'').localeCompare(a.createdAt||'');return 0;});
   var activeStrand=activeStrandId?filtered.find(function(s){return s.id===activeStrandId;})||null:filtered.length>0?filtered[0]:null;
   function getTpl(coll){return projTemplates.find(function(t){return t.name===coll;})||null;}
   var activeTpl=getTpl(activeColl);
@@ -2850,7 +2912,7 @@ function StrandsPage({app,allProjects}){
 </div>
   ):activeStrand?(
 <div style={{padding:24,backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.12) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
-  <div className="strand-detail-hdr">
+  <div className="strand-detail-hdr" style={{alignItems:'center'}}>
     <div className="strand-av-wrap" style={{background:activeStrand.color}} onClick={function(){setShowAvatarEdit(true);}}>
       <div className="strand-av-overlay"><span className="mi" style={{fontSize:18,color:'#fff'}}>edit</span></div>
       {activeStrand.image
@@ -2861,7 +2923,7 @@ function StrandsPage({app,allProjects}){
       }
     </div>
     <div style={{flex:1}}>
-      <input key={activeStrand.id+'-n'} className="strand-name-inp" defaultValue={activeStrand.name} placeholder="Name" onBlur={function(e){updateStrand(activeStrand.id,{name:e.target.value});}}/>
+      <input key={activeStrand.id+'-n'} className="strand-name-inp" defaultValue={activeStrand.name} placeholder="Name" spellCheck={false} onBlur={function(e){updateStrand(activeStrand.id,{name:e.target.value});}}/>
     </div>
   </div>
   {showAvatarEdit&&<AvatarEditModal strand={activeStrand} onClose={function(){setShowAvatarEdit(false);}} onSave={function(updates){updateStrand(activeStrand.id,updates);setShowAvatarEdit(false);}}/>}
@@ -2881,16 +2943,37 @@ function StrandsPage({app,allProjects}){
 </div>
   ):(
 <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flex:1,gap:12,color:'var(--mid)',textAlign:'center',padding:32}}>
-  <span className="mi" style={{fontSize:40,color:'var(--border)'}}>person_outline</span>
-  <div style={{fontFamily:'var(--serif)',fontSize:20}}>{activeColl}</div>
+  <span className="mi" style={{fontSize:40,color:'var(--border)'}}>auto_awesome</span>
+  <div style={{fontFamily:'var(--serif)',fontSize:20,color:'var(--mid)'}}>{activeColl}</div>
+  <div style={{fontSize:13,color:'var(--placeholder)',marginBottom:4}}>No entries yet</div>
   <button className="btn btn-primary" onClick={addStrand}>+ Add {activeColl.replace(/s$/,'')}</button>
 </div>
   );
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+  var sco=useState(null);var dragOverColl=sco[0];var setDragOverColl=sco[1];
+  function reorderColls(fromColl,toColl){
+    if(fromColl===toColl)return;
+    app.setAllStrands(function(prev){
+      var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});
+      var keys=Object.keys(ps);
+      var fi=keys.indexOf(fromColl);var ti=keys.indexOf(toColl);
+      if(fi<0||ti<0)return prev;
+      keys.splice(fi,1);keys.splice(ti,0,fromColl);
+      var reordered={};keys.forEach(function(k){reordered[k]=ps[k];});
+      n[pid]=reordered;saveDB('woven:strands:'+pid,reordered);return n;
+    });
+  }
   <div className="strands-subnav">
     {collNames.map(function(coll){return(
-<CollTab key={coll} coll={coll} isActive={activeColl===coll} pid={pid} app={app} activeColl={activeColl} setActiveColl={setActiveColl} setActiveStrandId={setActiveStrandId} setSearch={setSearch} setShowCollSettings={setShowCollSettings}/>
+<div key={coll} draggable={true}
+  onDragStart={function(e){e.dataTransfer.setData('collName',coll);}}
+  onDragOver={function(e){e.preventDefault();setDragOverColl(coll);}}
+  onDragLeave={function(){setDragOverColl(null);}}
+  onDrop={function(e){e.preventDefault();var from=e.dataTransfer.getData('collName');reorderColls(from,coll);setDragOverColl(null);}}
+  style={{borderLeft:dragOverColl===coll?'2px solid var(--indigo)':'2px solid transparent'}}>
+  <CollTab coll={coll} isActive={activeColl===coll} pid={pid} app={app} activeColl={activeColl} setActiveColl={setActiveColl} setActiveStrandId={setActiveStrandId} setSearch={setSearch} setShowCollSettings={setShowCollSettings}/>
+</div>
     );})}
     {newColl?(
 <div style={{display:'flex',alignItems:'center',gap:4}}>
@@ -2907,14 +2990,28 @@ function StrandsPage({app,allProjects}){
   <div className="strands-layout">
     <div className="strands-left">
       <div className="strands-list">
-        <div style={{marginBottom:8}}><input placeholder={'Search '+activeColl+'...'} value={search} onChange={function(e){setSearch(e.target.value);}}/></div>
+        <div style={{marginBottom:8,display:'flex',gap:4}}>
+          <input placeholder={'Search '+activeColl+'...'} value={search} onChange={function(e){setSearch(e.target.value);}} style={{flex:1}}/>
+          <StrandSortFilter sort={strandSort} setSort={setStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>
+        </div>
         
         {filtered.map(function(st){var isAct=activeStrand&&st.id===activeStrand.id;return(
-<div key={st.id} className={'strand-item'+(isAct?' active':'')} onClick={function(){setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}>
-  <div className="strand-av" style={{background:st.color,position:'relative'}}>
-    {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:14}}>{st.emoji}</span>:<span>{initials(st.name)}</span>}
+<div key={st.id} className={'strand-item'+(isAct?' active':'')} style={{justifyContent:'space-between'}}>
+  <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0,cursor:'pointer'}} onClick={function(){setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}>
+    <div className="strand-av" style={{background:st.color,flexShrink:0}}>
+      {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:14}}>{st.emoji}</span>:<span>{initials(st.name)}</span>}
+    </div>
+    <span style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{st.name||'Unnamed'}</span>
   </div>
-  <span style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>{st.name||'Unnamed'}</span>
+  <button className="btn-icon" style={{padding:2,opacity:0,flexShrink:0}} title="Delete strand"
+    onMouseOver={function(e){e.currentTarget.style.opacity='1';}}
+    onMouseOut={function(e){e.currentTarget.style.opacity='0';}}
+    onClick={function(e){e.stopPropagation();if(window.confirm('Delete "'+( st.name||'Unnamed')+'"? This cannot be undone.')){
+      app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[activeColl]=(ps[activeColl]||[]).filter(function(s){return s.id!==st.id;});n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});
+      if(activeStrandId===st.id)setActiveStrandId(null);
+    }}}>
+    <span className="mi" style={{fontSize:15,color:'var(--danger)'}}>delete</span>
+  </button>
 </div>
         );})}
         <div className="strands-add-btn" onClick={addStrand}><span className="mi" style={{fontSize:18}}>add</span><span>Add to {activeColl}</span></div>
@@ -3307,6 +3404,18 @@ function App(){
       setDataLoading(false);
     });
   }
+  // Handle browser back button
+  useEffect(function(){
+    function onPopState(){
+      if(view==='editor'){app&&app.setView&&app.setView('cards');app&&app.setDraftId&&app.setDraftId(null);}
+      else if(view!=='dashboard'){setView('dashboard');}
+      else{window.history.pushState(null,'',window.location.href);}
+    }
+    window.history.pushState(null,'',window.location.href);
+    window.addEventListener('popstate',onPopState);
+    return function(){window.removeEventListener('popstate',onPopState);};
+  },[view]);
+
   useEffect(function(){
     // Check existing auth session
     supabase.auth.getSession().then(function(r){
@@ -3391,6 +3500,26 @@ function App(){
 
   function updateDraft(pid,did,changes){setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).map(function(d){return d.id!==did?d:Object.assign({},d,changes);});next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});}
   function addDraft(pid,nd){setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).concat([nd]);next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});}
+  function duplicateDraft(pid,did){
+    setAllDrafts(function(prev){
+      var next=Object.assign({},prev);
+      var ds=next[pid]||[];
+      var orig=ds.find(function(d){return d.id===did;});
+      if(!orig)return prev;
+      var newId=genId();
+      var copy=Object.assign({},orig,{
+        id:newId,
+        title:(orig.title||'Untitled')+' (copy)',
+        parentId:orig.id, // nested under original
+        order:Date.now(),
+        createdAt:new Date().toISOString(),
+        updatedAt:new Date().toISOString()
+      });
+      next[pid]=ds.concat([copy]);
+      saveDB('woven:drafts:'+pid,next[pid]);
+      return next;
+    });
+  }
   function reorderDraft(pid,fromId,toOrder){
     setAllDrafts(function(prev){
       var next=Object.assign({},prev);var ds=(next[pid]||[]).slice();
@@ -3481,7 +3610,7 @@ function App(){
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession};
 
   function signOut(){supabase.auth.signOut().then(function(){window.__wovenUserId=null;setCurrentUser(null);setView('dashboard');setProjects([]);setAllDrafts({});});}
 
