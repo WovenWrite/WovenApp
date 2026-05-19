@@ -2751,7 +2751,7 @@ function AvatarEditModal({strand,onSave,onClose}){
 function StrandSortFilter({sort,setSort,strandFilter,setStrandFilter,fields}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
   var sp=useState({top:0,left:0});var pos=sp[0];var setPos=sp[1];
-  var ref=React.useRef(null);
+  var ref=useRef(null);
   useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
   var hasActive=strandFilter||sort!=='name';
   return(
