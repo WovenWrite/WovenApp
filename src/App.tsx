@@ -1323,7 +1323,6 @@ function SharedDraftView({shareId}){
   var projectName=data.project_name||'';
   var authorName=data.author_name||'';
   var byline=authorName||'Your friendly neighbourhood novelist';
-  useEffect(function(){if(data&&data.title)document.title=data.title+' — Woven';return function(){document.title='Woven';};},[data]);
   return(
 <div style={{minHeight:'100vh',background:'var(--bg0)',display:'flex',flexDirection:'column',overflowY:'auto'}}>
   <style>{'::selection{background:rgba(240,192,80,0.4);color:inherit;}'}</style>
