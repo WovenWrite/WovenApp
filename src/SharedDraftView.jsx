@@ -144,4 +144,4 @@ function SharedDraftView({shareId}){
   );
 }
 
-window.SharedDraftView=SharedDraftView;
+export default SharedDraftView;
