@@ -1146,7 +1146,7 @@ function cleanBodyForExport(html){
     .trim();
 }
 
-function doExport(format,drafts,project,isSingleDraft,authorName){
+window.doExport=function doExport(format,drafts,project,isSingleDraft,authorName){
   var isSingle=isSingleDraft||(drafts&&drafts.length===1);
   var projectTitle=(project&&project.title)||'Manuscript';
   var displayTitle=isSingle&&drafts&&drafts[0]?(drafts[0].title||'Untitled'):projectTitle;
@@ -1183,9 +1183,11 @@ function doExport(format,drafts,project,isSingleDraft,authorName){
       doc.setDrawColor(200,200,200);doc.line(margin,y,210-margin,y);y+=10;
       doc.setFontSize(12);doc.setFont('times','normal');
       var bodyParas=stripHtmlForExport(sorted[0].body||'');
-      if(bodyText){
-        bodyParas.forEach(function(para){var lines=doc.splitTextToSize(para,pageW);lines.forEach(function(line){if(y>275){doc.addPage();y=margin;}doc.text(line,margin,y);y+=lineH;});y+=lineH*0.7;});
-      }
+      bodyParas.forEach(function(para){
+        var lines=doc.splitTextToSize(para,pageW);
+        lines.forEach(function(line){if(y>275){doc.addPage();y=margin;}doc.text(line,margin,y);y+=lineH;});
+        y+=lineH*0.5;
+      });
     } else {
       // ── Bind: cover page + index + draft pages ──
       doc.setFontSize(11);doc.setFont('times','normal');
@@ -1217,13 +1219,11 @@ function doExport(format,drafts,project,isSingleDraft,authorName){
         doc.text(dTitle,margin,y);y+=dTitle.length*9+10;
         doc.setFontSize(12);doc.setFont('times','normal');
         var bodyParas=stripHtmlForExport(draft.body||'');
-        if(bodyText){
-          var lines=doc.splitTextToSize(bodyText,pageW);
-          lines.forEach(function(line){
-            if(y>275){doc.addPage();y=margin;}
-            doc.text(line,margin,y);y+=lineH;
-          });
-        }
+        bodyParas.forEach(function(para){
+          var lines=doc.splitTextToSize(para,pageW);
+          lines.forEach(function(line){if(y>275){doc.addPage();y=margin;}doc.text(line,margin,y);y+=lineH;});
+          y+=lineH*0.5;
+        });
       });
     }
     doc.save(displayTitle.replace(/\s+/g,'_')+'.pdf');
