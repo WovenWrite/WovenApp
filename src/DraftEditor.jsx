@@ -107,7 +107,7 @@ function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}
   useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
   var hasBranches=branches&&branches.length>1;
   var activeBranch=branches&&branches.find(function(b){return b.id===activeBranchId;})||branches&&branches[0];
-  var btnLabel=hasBranches?(branches.length+' branches'):'Create strand';
+  var btnLabel=hasBranches?(branches.length+' strands'):'Create strand';
   function handleCreate(){setCreating(true);var num=branches?branches.length+1:2;var draft=activeBranch&&activeBranch.draftTitle||'Draft';setNewName(draft+'_Strand_'+num);}
   function confirmCreate(){if(newName.trim())onCreate(newName.trim());setCreating(false);setNewName('');setOpen(false);}
   var sorted=branches?[].concat(branches.filter(function(b){return b.id===activeBranchId;}),branches.filter(function(b){return b.id!==activeBranchId;})):[];
@@ -272,8 +272,15 @@ function DraftEditor({app}){
   var st=useState(draft.title||'Untitled draft');var title=st[0];var setTitle=st[1];
   var sw=useState(draft.wordCount||0);var wordCount=sw[0];var setWordCount=sw[1];
   var ss=useState('saved');var saveState=ss[0];var setSaveState=ss[1];
-  var sb=useState([{id:'main',name:'Main',isPrimary:true,draftTitle:draft.title||'Untitled draft'}]);var branches=sb[0];var setBranches=sb[1];
-  var sab=useState('main');var activeBranchId=sab[0];var setActiveBranchId=sab[1];
+  // Build branch list from actual nested drafts (children of this draft)
+  function buildBranches(){
+    var children=(app&&app.allDrafts&&app.allDrafts[pid]||[]).filter(function(d){return d.parentId===did&&!d.archived;});
+    var main=[{id:did,name:'Main',isPrimary:true,draftTitle:draft.title||'Untitled draft'}];
+    var rest=children.map(function(d){return{id:d.id,name:d.title||'Strand',isPrimary:false,draftTitle:d.title||'Strand'};});
+    return main.concat(rest);
+  }
+  var sb=useState(buildBranches);var branches=sb[0];var setBranches=sb[1];
+  var sab=useState(did);var activeBranchId=sab[0];var setActiveBranchId=sab[1];
   var slink=useState(null);var shareLink=slink[0];var setShareLink=slink[1];
   var ssid=useState(null);var shareId=ssid[0];var setShareId=ssid[1];
   var spv=useState(false);var showVersions=spv[0];var setShowVersions=spv[1];
@@ -351,6 +358,17 @@ function DraftEditor({app}){
         var html=q.root.innerHTML;
         if(app&&app.updateDraft)app.updateDraft(pid,did,{body:html,wordCount:wc,updatedAt:new Date().toISOString()});
         setSaveState('saved');
+      // Snapshot every hour (mirrors App.jsx saveSnapshot logic)
+      var snKey='woven:versions:'+did;
+      try{
+        var snaps=JSON.parse(localStorage.getItem(snKey)||'[]');
+        var now2=Date.now();
+        if(!snaps.length||(now2-snaps[0].ts)>60*60*1000){
+          var snap={id:genId(),ts:now2,label:'auto',body:html,wordCount:wc};
+          snaps=[snap].concat(snaps).slice(0,20);
+          localStorage.setItem(snKey,JSON.stringify(snaps));
+        }
+      }catch(e){}
       // If a share link is live, keep it in sync
       if(shareId){
         var sc=window.supabase&&window.supabase.createClient?window.supabase.createClient('https://mxsdiqrbxlvcwexfdtrj.supabase.co','sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u'):null;
@@ -394,8 +412,30 @@ function DraftEditor({app}){
   function fmt(type,value){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,cur[type]===value?false:value);}}
   function toggleFmt(type){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,!cur[type]);}}
 
-  function handleSwitchBranch(id){setActiveBranchId(id);}
-  function handleCreateBranch(name){var nb={id:genId(),name:name,isPrimary:false,draftTitle:title};setBranches(function(p){return p.concat([nb]);});setActiveBranchId(nb.id);}
+  function handleSwitchBranch(branchDraftId){
+    // A strand is a real draft — navigate to it
+    if(app&&app.openDraft)app.openDraft(branchDraftId);
+  }
+  function handleCreateBranch(name){
+    // Create a real nested draft as a strand of the current draft
+    if(!app||!pid||!did)return;
+    var body=quillRef.current?quillRef.current.root.innerHTML:(draft.body||'');
+    var now=new Date().toISOString();
+    var newId=genId();
+    var nb={
+      id:newId,projectId:pid,title:name||title+'_Strand_2',
+      synopsis:draft.synopsis||'',status:draft.status||'first_draft',
+      order:draft.order,parentId:did,
+      nestExpanded:true,body:body,wordCount:draft.wordCount||0,
+      strandTags:draft.strandTags||[],pov:draft.pov||'',
+      customFields:draft.customFields||{},createdAt:now,updatedAt:now
+    };
+    if(app.addDraft)app.addDraft(pid,nb);
+    // Update local branches list for the dropdown
+    setBranches(function(p){return p.concat([{id:newId,name:name,isPrimary:false,draftTitle:title}]);});
+    // Navigate to the new strand
+    if(app.openDraft)app.openDraft(newId);
+  }
   function handleSetPrimary(id){setBranches(function(p){return p.map(function(b){return Object.assign({},b,{isPrimary:b.id===id});});});}
   async function handleGenerateLink(){
     if(!app||!app.currentUser)return;
@@ -425,21 +465,27 @@ function DraftEditor({app}){
     setShareLink(null);
     setShareId(null);
   }
+  function getExportDraft(){
+    // Use live Quill content, not stale state
+    var liveBody=quillRef.current?quillRef.current.root.innerHTML:(draft.body||'');
+    var liveWc=quillRef.current?countWords(quillRef.current.getText()):draft.wordCount||0;
+    return Object.assign({},draft,{body:liveBody,wordCount:liveWc,title:title});
+  }
   function handleExportPDF(){
     if(!draft||!pid)return;
     var profile=app&&app.profile||{};
     var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
     var project=app&&app.currentProject;
-    if(window.doExport){window.doExport('PDF',[draft],project,true,authorName);}
-    else if(app&&app.doExport){app.doExport('PDF',[draft],project,true,authorName);}
+    var exportDraft=getExportDraft();
+    if(window.doExport)window.doExport('PDF',[exportDraft],project,true,authorName);
   }
   function handleExportDocx(){
     if(!draft||!pid)return;
     var profile=app&&app.profile||{};
     var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
     var project=app&&app.currentProject;
-    if(window.doExport){window.doExport('Word (.docx)',[draft],project,true,authorName);}
-    else if(app&&app.doExport){app.doExport('Word (.docx)',[draft],project,true,authorName);}
+    var exportDraft=getExportDraft();
+    if(window.doExport)window.doExport('Word (.docx)',[exportDraft],project,true,authorName);
   }
 
   var styleOpts=[{value:'',label:'Normal text'},{value:'1',label:'Heading 1'},{value:'2',label:'Heading 2'},{value:'3',label:'Heading 3'},{value:'quote',label:'Quote'}];
@@ -527,10 +573,8 @@ function DraftEditor({app}){
 
       /* ── Mobile responsive ── */
       @media (max-width: 960px) {
-        .wc-full { display: none; }
+        .wc-full { display: none !important; }
         .wc-short { display: inline !important; }
-        .wc-label::after { content: attr(data-short); }
-        .wc-label { font-size: 10px; }
         .font-select { display: none !important; }
         .toolbar-secondary { display: none !important; }
       }
@@ -615,7 +659,7 @@ function DraftEditor({app}){
   <div style={{display:'flex',flex:1,overflow:'hidden',marginTop:flowMode?'48px':'0',transition:'margin-top .3s'}}>
 
     {/* Editor scroll area */}
-    <div style={{flex:1,overflowY:'scroll',WebkitOverflowScrolling:'touch',padding:'48px 40px 20px 40px',background:T.bodyBg,scrollbarGutter:'stable'}} className="editor-scroll-area">
+    <div style={{flex:1,overflowY:'scroll',WebkitOverflowScrolling:'touch',paddingTop:48,paddingBottom:20,paddingLeft:40,paddingRight:56,background:T.bodyBg}} className="editor-scroll-area">
       <div style={{maxWidth:maxWidth+'px',margin:'0 auto',transition:'max-width .2s'}}>
         <div ref={editorContainerRef} style={editorBodyStyle}/>
       </div>
