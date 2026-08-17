@@ -1,3 +1,4 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 // ── DraftEditor.jsx ──
 // Quill-based draft editor.
 // Requires in index.html:
@@ -7,7 +8,6 @@
 // Google Fonts (add to index.html):
 //   <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400;1,600&family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=Merriweather:ital,wght@0,300;0,400;1,300&family=EB+Garamond:ital,wght@0,400;1,400&family=Libre+Baskerville:ital@0;1&display=swap" rel="stylesheet"/>
 
-var {useState,useEffect,useRef,useCallback}=React;
 
 var T={
   navBg:'#E2D0B8',
