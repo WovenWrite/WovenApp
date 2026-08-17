@@ -63,7 +63,7 @@ function IconBtn({icon,title,onClick,active,color}){
 <button onClick={onClick} title={title} style={{display:'flex',alignItems:'center',justifyContent:'center',padding:10,background:active?'rgba(196,94,40,.12)':'transparent',border:'none',borderRadius:8,cursor:'pointer',color:color||(active?T.amber:T.text),transition:'background .15s,color .15s',flexShrink:0}}
   onMouseOver={function(e){if(!active){e.currentTarget.style.background='rgba(42,31,16,.06)';}}}
   onMouseOut={function(e){if(!active){e.currentTarget.style.background='transparent';}}}>
-  <span className="material-symbols-outlined" style={{fontSize:22}}>{icon}</span>
+  <span className="mi" style={{fontSize:22}}>{icon}</span>
 </button>);
 }
 
@@ -84,16 +84,16 @@ function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}
   useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
   var hasBranches=branches&&branches.length>1;
   var activeBranch=branches&&branches.find(function(b){return b.id===activeBranchId;})||branches&&branches[0];
-  var btnLabel=hasBranches?(branches.length+' branches'):'Create branch';
+  var btnLabel=hasBranches?(branches.length+' branches'):'Create strand';
   function handleCreate(){setCreating(true);var num=branches?branches.length+1:2;var draft=activeBranch&&activeBranch.draftTitle||'Draft';setNewName(draft+'_Branch '+num);}
   function confirmCreate(){if(newName.trim())onCreate(newName.trim());setCreating(false);setNewName('');setOpen(false);}
   var sorted=branches?[].concat(branches.filter(function(b){return b.id===activeBranchId;}),branches.filter(function(b){return b.id!==activeBranchId;})):[];
   return(
 <div ref={ref} style={{position:'relative'}}>
   <button onClick={function(){if(!hasBranches){handleCreate();setOpen(true);}else setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background:'transparent',border:'1px solid '+T.border,borderRadius:6,cursor:'pointer',fontSize:13,color:hasBranches?T.text:'#b8a090',fontFamily:'DM Sans, sans-serif',flexShrink:0}}>
-    <span className="material-symbols-outlined" style={{fontSize:16}}>{hasBranches?'account_tree':'add'}</span>
+    <span className="mi" style={{fontSize:16}}>{hasBranches?'account_tree':'add'}</span>
     {btnLabel}
-    {hasBranches&&<span className="material-symbols-outlined" style={{fontSize:14,transform:open?'rotate(180deg)':'rotate(0)',transition:'transform .15s'}}>expand_more</span>}
+    {hasBranches&&<span className="mi" style={{fontSize:14,transform:open?'rotate(180deg)':'rotate(0)',transition:'transform .15s'}}>expand_more</span>}
   </button>
   {open&&(
 <div style={{position:'absolute',top:'calc(100% + 6px)',left:0,zIndex:600,background:T.toolBg,border:'1px solid '+T.border,borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.14)',minWidth:220,overflow:'hidden'}}>
@@ -117,13 +117,13 @@ function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}
   <button onClick={function(e){e.stopPropagation();onSetPrimary(b.id);}} style={{background:'none',border:'none',cursor:'pointer',padding:2,display:'flex',alignItems:'center',color:b.isPrimary?T.amber:T.border,transition:'color .15s'}}
     onMouseOver={function(e){e.currentTarget.style.color=T.amber;}}
     onMouseOut={function(e){e.currentTarget.style.color=b.isPrimary?T.amber:T.border;}}>
-    <span className="material-symbols-outlined" style={{fontSize:18,fontVariationSettings:b.isPrimary?"'FILL' 1":"'FILL' 0"}}>star</span>
+    <span className="mi" style={{fontSize:18,fontVariationSettings:b.isPrimary?"'FILL' 1":"'FILL' 0"}}>star</span>
   </button>
 </div>
   );})}
   <div style={{padding:'8px 14px',borderTop:'1px solid '+T.border}}>
     <button onClick={handleCreate} style={{width:'100%',padding:'7px 0',background:'transparent',border:'1px dashed '+T.border,borderRadius:6,fontSize:12,color:T.text,cursor:'pointer',fontFamily:'DM Sans, sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-      <span className="material-symbols-outlined" style={{fontSize:14}}>add</span>New branch
+      <span className="mi" style={{fontSize:14}}>add</span>New strand
     </button>
   </div>
 </div>
@@ -144,10 +144,11 @@ function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepu
   async function handleGenerate(){setLoading(true);await onGenerateLink();setLoading(false);}
   return(
 <div ref={ref} style={{position:'relative'}}>
-  <button onClick={function(){setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',background:T.primary,color:T.white,border:'none',borderRadius:7,cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'DM Sans, sans-serif'}}
+  <button onClick={function(){setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',background:T.primary,color:T.white,border:'none',borderRadius:7,cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'DM Sans, sans-serif',whiteSpace:'nowrap'}}
     onMouseOver={function(e){e.currentTarget.style.opacity='.88';}}
     onMouseOut={function(e){e.currentTarget.style.opacity='1';}}>
-    Share<span className="material-symbols-outlined" style={{fontSize:15,transform:open?'rotate(180deg)':'rotate(0)',transition:'transform .15s'}}>expand_more</span>
+    <span>Share</span>
+    <span className="mi" style={{fontSize:18,lineHeight:1,display:'flex',alignItems:'center',transform:open?'rotate(180deg)':'rotate(0deg)',transition:'transform .15s'}}>expand_more</span>
   </button>
   {open&&(
 <div style={{position:'absolute',top:'calc(100% + 6px)',right:0,zIndex:600,background:T.toolBg,border:'1px solid '+T.border,borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.14)',minWidth:280,overflow:'hidden'}}>
@@ -155,13 +156,13 @@ function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepu
 <button key={item.icon} onClick={item.action} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:'transparent',border:'none',borderBottom:'1px solid '+T.border,cursor:'pointer',textAlign:'left',fontFamily:'DM Sans, sans-serif'}}
   onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.04)';}}
   onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
-  <span className="material-symbols-outlined" style={{fontSize:20,color:T.text}}>{item.icon}</span>
+  <span className="mi" style={{fontSize:20,color:T.text}}>{item.icon}</span>
   <div><div style={{fontSize:13,fontWeight:600,color:T.textDark}}>{item.label}</div><div style={{fontSize:11,color:T.text}}>{item.sub}</div></div>
 </button>
   );})}
   <div style={{padding:'12px 16px'}}>
     <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:shareLink?10:0}}>
-      <span className="material-symbols-outlined" style={{fontSize:20,color:T.text}}>link</span>
+      <span className="mi" style={{fontSize:20,color:T.text}}>link</span>
       <div style={{flex:1}}>
         <div style={{fontSize:13,fontWeight:600,color:T.textDark}}>Read-only link</div>
         <div style={{fontSize:11,color:T.text}}>{shareLink?'Live — anyone with the link can read':'Generate a shareable web link'}</div>
@@ -173,7 +174,7 @@ function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepu
   <div style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',background:T.bg1,borderRadius:7,marginBottom:10,border:'1px solid '+T.border}}>
     <span style={{flex:1,fontSize:11,color:T.text,fontFamily:'monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{shareLink}</span>
     <button onClick={handleCopy} style={{flexShrink:0,padding:'3px 8px',background:T.bg2,border:'none',borderRadius:5,fontSize:11,cursor:'pointer',color:T.textDark,fontFamily:'DM Sans, sans-serif',display:'flex',alignItems:'center',gap:4}}>
-      <span className="material-symbols-outlined" style={{fontSize:13}}>{copied?'check':'content_copy'}</span>{copied?'Copied':'Copy'}
+      <span className="mi" style={{fontSize:13}}>{copied?'check':'content_copy'}</span>{copied?'Copied':'Copy'}
     </button>
   </div>
   <IOSToggle on={true} onChange={function(v){if(!v)onDepublish();}} label="Link active"/>
@@ -188,7 +189,7 @@ function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepu
 // ── Main DraftEditor ──
 function DraftEditor({app}){
   var pid=app&&app.projId;
-  var did=app&&app.currentDraftId;
+  var did=app&&app.draftId;
   var draft=(app&&app.allDrafts&&app.allDrafts[pid]&&app.allDrafts[pid].find(function(d){return d.id===did;}))||{};
 
   var st=useState(draft.title||'Untitled draft');var title=st[0];var setTitle=st[1];
@@ -197,6 +198,7 @@ function DraftEditor({app}){
   var sb=useState([{id:'main',name:'Main',isPrimary:true,draftTitle:draft.title||'Untitled draft'}]);var branches=sb[0];var setBranches=sb[1];
   var sab=useState('main');var activeBranchId=sab[0];var setActiveBranchId=sab[1];
   var slink=useState(null);var shareLink=slink[0];var setShareLink=slink[1];
+  var ssid=useState(null);var shareId=ssid[0];var setShareId=ssid[1];
   var spv=useState(false);var showVersions=spv[0];var setShowVersions=spv[1];
   var spp=useState(false);var showProperties=spp[0];var setShowProperties=spp[1];
   var sps=useState(false);var showSpool=sps[0];var setShowSpool=sps[1];
@@ -225,7 +227,9 @@ function DraftEditor({app}){
       modules:{toolbar:false},
       placeholder:'Start writing…',
     });
-    if(draft.body)q.clipboard.dangerouslyPasteHTML(draft.body);
+    if(draft&&draft.body)q.clipboard.dangerouslyPasteHTML(draft.body);
+    // Set initial word count
+    if(draft&&draft.wordCount)setWordCount(draft.wordCount);
     q.on('text-change',function(){
       var txt=q.getText();
       var wc=countWords(txt);
@@ -277,8 +281,34 @@ function DraftEditor({app}){
   function handleSwitchBranch(id){setActiveBranchId(id);}
   function handleCreateBranch(name){var nb={id:genId(),name:name,isPrimary:false,draftTitle:title};setBranches(function(p){return p.concat([nb]);});setActiveBranchId(nb.id);}
   function handleSetPrimary(id){setBranches(function(p){return p.map(function(b){return Object.assign({},b,{isPrimary:b.id===id});});});}
-  async function handleGenerateLink(){var link=window.location.origin+'/?share='+genId();setShareLink(link);}
-  function handleDepublish(){setShareLink(null);}
+  async function handleGenerateLink(){
+    if(!app||!app.currentUser)return;
+    var shareId=genId();
+    var profile=app.profile||{};
+    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim()||'Unknown';
+    var projName=(app.currentProject&&app.currentProject.title)||'';
+    var body=quillRef.current?quillRef.current.root.innerHTML:'';
+    var client=window.supabase&&window.supabase.createClient?window.supabase.createClient(
+      'https://mxsdiqrbxlvcwexfdtrj.supabase.co',
+      'sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u'
+    ):null;
+    if(!client)return;
+    var res=await client.from('shared_drafts').insert({id:shareId,title:title,body:body,project_name:projName,author_name:authorName});
+    if(res.error){console.error('Share error:',res.error);return;}
+    var link=window.location.origin+'/?share='+shareId;
+    setShareLink(link);
+    setShareId(shareId);
+  }
+  async function handleDepublish(){
+    if(!shareId)return;
+    var client=window.supabase&&window.supabase.createClient?window.supabase.createClient(
+      'https://mxsdiqrbxlvcwexfdtrj.supabase.co',
+      'sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u'
+    ):null;
+    if(client)await client.from('shared_drafts').delete().eq('id',shareId);
+    setShareLink(null);
+    setShareId(null);
+  }
   function handleExportPDF(){if(app&&app.exportDraftPDF)app.exportDraftPDF(did);}
   function handleExportDocx(){if(app&&app.exportDraftDocx)app.exportDraftDocx(did);}
 
@@ -378,10 +408,7 @@ function DraftEditor({app}){
         <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
         <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowSpool(false);}} active={showProperties}/>
         <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowProperties(false);}} active={showSpool}/>
-        <div style={{display:'flex',alignItems:'center',gap:5,opacity:.7}}>
-          <div style={{width:6,height:6,borderRadius:'50%',background:saveState==='saving'?T.amber:saveState==='error'?'#b83220':'#2f9966',transition:'background .3s'}}/>
-          <span style={{fontSize:11,color:T.text,fontFamily:'DM Sans, sans-serif'}}>{saveState==='saving'?'Saving…':'Saved'}</span>
-        </div>
+
         <ShareDropdown onExportPDF={handleExportPDF} onExportDocx={handleExportDocx} shareLink={shareLink} onGenerateLink={handleGenerateLink} onDepublish={handleDepublish}/>
       </div>
     </nav>
@@ -403,7 +430,7 @@ function DraftEditor({app}){
 <button key={b.icon} onClick={b.action} title={b.title} style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,transition:'background .12s'}}
   onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.08)';}}
   onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
-  <span className="material-symbols-outlined" style={{fontSize:18}}>{b.icon}</span>
+  <span className="mi" style={{fontSize:18}}>{b.icon}</span>
 </button>
           );
         })}
@@ -414,7 +441,7 @@ function DraftEditor({app}){
       <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:12}}>
         <StyledSelect value={String(zoom)} onChange={function(v){setZoom(parseInt(v));}} options={zoomOpts} style={{minWidth:70}}/>
         <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 10px',border:'1px solid '+T.stroke,borderRadius:6,cursor:'pointer'}} onClick={function(){setFlowMode(true);}}>
-          <span className="material-symbols-outlined" style={{fontSize:16,color:T.text}}>self_improvement</span>
+          <span className="mi" style={{fontSize:16,color:T.text}}>self_improvement</span>
           <span style={{fontSize:13,color:T.text,fontFamily:'DM Sans, sans-serif'}}>Flow</span>
         </div>
       </div>
@@ -439,7 +466,7 @@ function DraftEditor({app}){
     {/* Drawer placeholder */}
     {!flowMode&&(showVersions||showProperties||showSpool)&&(
 <div style={{width:320,borderLeft:'1px solid '+T.border,background:T.bg1,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:12,overflowY:'auto'}}>
-  <span className="material-symbols-outlined" style={{fontSize:36,color:T.border}}>{showVersions?'history':showProperties?'settings':'gesture'}</span>
+  <span className="mi" style={{fontSize:36,color:T.border}}>{showVersions?'history':showProperties?'settings':'gesture'}</span>
   <span style={{fontSize:13,color:T.text,fontFamily:'DM Sans, sans-serif'}}>{showVersions?'Versions':showProperties?'Properties':'Spools'} drawer</span>
   <span style={{fontSize:11,color:T.border,fontFamily:'DM Sans, sans-serif'}}>Separate component — coming next</span>
 </div>
