@@ -1,6 +1,8 @@
 // @ts-nocheck
 import ExploreCanvas from './ExploreCanvas'
 import { useState, useEffect, useRef } from "react";
+import DraftEditor from './DraftEditor'
+import SharedDraftView from './SharedDraftView'
 
 // ── Version snapshots ──
 var MAX_SNAPSHOTS=20;
@@ -1406,7 +1408,7 @@ function BindPanel({app,open,onClose,activeFilter}){
     var sid=genId();
     var res=await supabase.from('shared_drafts').insert({id:sid,title:linkTitle,body:combinedBody,project_name:projName,author_name:authorName});
     if(res.error){setLinkLoading(false);return;}
-    var link=window.location.origin+window.location.pathname+'?share='+sid;
+    if(shareId) return(<div className="woven-root"><SharedDraftView shareId={shareId}/></div>);
     var shareData={id:sid,link:link,enabled:true,created:new Date().toISOString()};
     setBindShare(shareData);
     try{localStorage.setItem(bindShareKey,JSON.stringify(shareData));}catch(e){}
@@ -3406,7 +3408,7 @@ function App(){
   // Handle browser back button
   useEffect(function(){
     function onPopState(){
-      if(view==='editor'){app&&app.setView&&app.setView('cards');app&&app.setDraftId&&app.setDraftId(null);}
+      if(view==='editor') vc=<DraftEditor app={app}/>;
       else if(view!=='dashboard'){setView('dashboard');}
       else{window.history.pushState(null,'',window.location.href);}
     }
