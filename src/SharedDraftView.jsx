@@ -17,6 +17,22 @@ var T={
   mid:'#7A5A38',
 };
 
+// ── Woven symbol (simplified geometric mark) ──
+function WovenSymbol(){
+  return(
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="4" y="3" width="2.5" height="18" rx="1" fill="#c45e28"/>
+  <rect x="17.5" y="3" width="2.5" height="18" rx="1" fill="#c45e28"/>
+  <rect x="0" y="8" width="8.5" height="2" rx="1" fill="#c45e28"/>
+  <rect x="0" y="14" width="8.5" height="2" rx="1" fill="#c45e28"/>
+  <rect x="15.5" y="8" width="8.5" height="2" rx="1" fill="#c45e28"/>
+  <rect x="15.5" y="14" width="8.5" height="2" rx="1" fill="#c45e28"/>
+  <path d="M9 4 L12 8 L15 4" stroke="#c45e28" strokeWidth="2" fill="none" strokeLinecap="round"/>
+  <path d="M9 20 L12 16 L15 20" stroke="#c45e28" strokeWidth="2" fill="none" strokeLinecap="round"/>
+</svg>
+  );
+}
+
 // ── Woven wordmark (text only, same height as footer text) ──
 function WovenWordmark(){
   return(
@@ -86,7 +102,7 @@ function SharedDraftView({shareId}){
     <div style={{maxWidth:900,margin:'0 auto'}}>
 
       {/* Section 1: Written & Shared with Woven */}
-      <div style={{paddingBottom:30,marginBottom:30,borderBottom:'1px solid '+T.stroke}}>
+      <div style={{paddingBottom:40,marginBottom:30,borderBottom:'1px solid '+T.stroke,textAlign:'center'}}>
         <span style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:T.text,letterSpacing:'.01em',textTransform:'uppercase',fontWeight:400}}>
           WRITTEN &amp; SHARED WITH{' '}
           <a href="https://www.wovenwrite.com" target="_blank" rel="noopener noreferrer" style={{color:T.amber,textDecoration:'none',fontWeight:600}} onMouseOver={function(e){e.currentTarget.style.textDecoration='underline';}} onMouseOut={function(e){e.currentTarget.style.textDecoration='none';}}>WOVEN</a>
@@ -94,7 +110,7 @@ function SharedDraftView({shareId}){
       </div>
 
       {/* Section 2: Header */}
-      <div style={{marginBottom:30}}>
+      <div style={{marginBottom:30,paddingTop:10,paddingBottom:30}}>
         {/* Project name */}
         {projectName&&(
 <div style={{fontFamily:'DM Sans, sans-serif',fontSize:18,color:T.text,letterSpacing:'.11em',fontWeight:400,marginBottom:15,textTransform:'uppercase'}}>
@@ -112,9 +128,9 @@ function SharedDraftView({shareId}){
       </div>
 
       {/* Section 3: Body */}
-      <div style={{paddingTop:30,borderTop:'1px solid '+T.stroke}}>
+      <div style={{paddingTop:30}}>
         <div
-          style={{fontFamily:'Crimson Text, serif',fontSize:19,lineHeight:'160%',color:T.bodyText}}
+          style={{fontFamily:'Crimson Text, serif',fontSize:20,lineHeight:'165%',color:T.bodyText}}
           dangerouslySetInnerHTML={{__html:data.body||''}}
         />
       </div>
@@ -126,7 +142,7 @@ function SharedDraftView({shareId}){
   <footer style={{background:T.footerBg,borderTop:'1px solid '+T.border,padding:'16px 40px'}}>
     <div style={{maxWidth:900,margin:'0 auto',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
       {/* Left: Woven logo */}
-      <WovenWordmark/>
+      <div style={{display:'flex',alignItems:'center',gap:6}}><WovenSymbol/><WovenWordmark/></div>
       {/* Middle: copyright */}
       <span style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:T.text}}>
         © {year} {authorName}
