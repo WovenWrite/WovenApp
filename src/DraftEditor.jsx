@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 //   <link href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.bubble.css" rel="stylesheet"/>
 //   <script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
 // Google Fonts (add to index.html):
-//   <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400;1,600&family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=Merriweather:ital,wght@0,300;0,400;1,300&family=EB+Garamond:ital,wght@0,400;1,400&family=Libre+Baskerville:ital@0;1&display=swap" rel="stylesheet"/>
+//   <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=Merriweather:ital,wght@0,300;0,400;1,300&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Inter:wght@300;400;500&family=Roboto:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Open+Sans:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Nunito:wght@300;400;500;600&family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet"/>
 
 
 var T={
@@ -25,8 +25,8 @@ var T={
   white:'#ffffff',
 };
 
-var FONTS=['Crimson Text','DM Sans','Lora','Merriweather','Inter','Playfair Display','Source Serif 4','IBM Plex Mono'];
-var FONT_LABELS={'Crimson Text':'Crimson Text (Serif)','DM Sans':'DM Sans (Sans)','Lora':'Lora (Serif)','Merriweather':'Merriweather (Serif)','Inter':'Inter (Sans)','Playfair Display':'Playfair (Display)','Source Serif 4':'Source Serif (Serif)','IBM Plex Mono':'IBM Plex (Mono)'};
+var FONTS=['Crimson Text','Times New Roman','Lora','Merriweather','Playfair Display','Source Serif 4','DM Sans','Inter','Roboto','Open Sans','Nunito','IBM Plex Mono'];
+var FONT_LABELS={'Crimson Text':'Crimson Text','Times New Roman':'Times New Roman','Lora':'Lora','Merriweather':'Merriweather','Playfair Display':'Playfair Display','Source Serif 4':'Source Serif 4','DM Sans':'DM Sans','Inter':'Inter','Roboto':'Roboto','Open Sans':'Open Sans','Nunito':'Nunito','IBM Plex Mono':'IBM Plex Mono'};
 var ZOOM_OPTS=[50,75,100,125,150,175,200];
 var DEFAULT_FONT_SIZE=19;
 
@@ -50,13 +50,34 @@ function EditableTitle({value,onChange,color}){
   var se=useState(false);var editing=se[0];var setEditing=se[1];
   var sv=useState(value);var val=sv[0];var setVal=sv[1];
   var ref=useRef(null);
+  var measureRef=useRef(null);
   useEffect(function(){setVal(value);},[value]);
-  useEffect(function(){if(editing&&ref.current)ref.current.focus();},[editing]);
+  useEffect(function(){if(editing&&ref.current){ref.current.focus();ref.current.select();}},[editing]);
   function commit(){setEditing(false);if(val.trim()&&val.trim()!==value)onChange(val.trim());else setVal(value);}
-  if(editing)return(<input ref={ref} value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commit} onKeyDown={function(e){if(e.key==='Enter')commit();if(e.key==='Escape'){setVal(value);setEditing(false);}}} size={Math.max(4,val.length||1)} style={{fontFamily:'Crimson Text, serif',fontSize:16,fontWeight:600,color:color||T.textDark,background:'transparent',border:'1px solid '+T.amber,outline:'none',padding:'2px 8px',borderRadius:6,minWidth:0}}/>);
-  return(<span onClick={function(){setEditing(true);}} title="Click to edit" style={{fontFamily:'Crimson Text, serif',fontSize:16,fontWeight:600,color:color||T.textDark,cursor:'text',padding:'2px 8px',border:'1px solid transparent',borderRadius:6,whiteSpace:'nowrap',maxWidth:'40ch',overflow:'hidden',textOverflow:'ellipsis',display:'inline-block',transition:'border-color .15s'}}
+  // Shared text style so span and input look identical
+  var textStyle={fontFamily:'Crimson Text, serif',fontSize:16,fontWeight:600,color:color||T.textDark,padding:'2px 8px',borderRadius:6,whiteSpace:'nowrap'};
+  return(
+<div style={{position:'relative',display:'inline-flex',maxWidth:'40ch',minWidth:'4ch'}}>
+  {/* Hidden measuring span — always rendered, sizes the container */}
+  <span ref={measureRef} aria-hidden="true" style={Object.assign({},textStyle,{visibility:'hidden',position:'absolute',pointerEvents:'none',maxWidth:'40ch',overflow:'hidden'})}>
+    {(editing?val:value)||'Untitled draft'}
+  </span>
+  {editing?(
+<input ref={ref} value={val}
+  onChange={function(e){setVal(e.target.value);}}
+  onBlur={commit}
+  onKeyDown={function(e){if(e.key==='Enter')commit();if(e.key==='Escape'){setVal(value);setEditing(false);}}}
+  style={Object.assign({},textStyle,{background:'transparent',border:'1px solid '+T.amber,outline:'none',width:'100%',boxSizing:'border-box',color:color||T.textDark})}/>
+  ):(
+<span onClick={function(){setEditing(true);}} title="Click to edit"
+  style={Object.assign({},textStyle,{border:'1px solid transparent',cursor:'text',overflow:'hidden',textOverflow:'ellipsis',display:'block',width:'100%',transition:'border-color .15s'})}
   onMouseOver={function(e){e.currentTarget.style.borderColor=T.stroke;}}
-  onMouseOut={function(e){e.currentTarget.style.borderColor='transparent';}}>{val||'Untitled draft'}</span>);
+  onMouseOut={function(e){e.currentTarget.style.borderColor='transparent';}}>
+  {value||'Untitled draft'}
+</span>
+  )}
+</div>
+  );
 }
 
 // ── Icon Button ──
@@ -209,6 +230,39 @@ function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepu
 </div>);
 }
 
+
+// ── NavCollapseMenu (mobile ≤720px) ──
+function NavCollapseMenu({branches,activeBranchId,onSwitch,onCreate,onSetPrimary,onVersions,onProperties,onSpool}){
+  var so=useState(false);var open=so[0];var setOpen=so[1];
+  var ref=useRef(null);
+  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
+  var hasBranches=branches&&branches.length>1;
+  var items=[
+    {icon:'account_tree',label:hasBranches?(branches.length+' strands'):'Create strand',action:function(){onCreate&&onCreate('Strand '+(branches?branches.length+1:2));setOpen(false);}},
+    {icon:'history',label:'Versions',action:function(){onVersions();setOpen(false);}},
+    {icon:'settings',label:'Properties',action:function(){onProperties();setOpen(false);}},
+    {icon:'gesture',label:'Spools',action:function(){onSpool();setOpen(false);}},
+  ];
+  return(
+<div ref={ref} className="nav-collapse" style={{display:'none',position:'relative'}}>
+  <button onClick={function(){setOpen(!open);}} style={{display:'flex',alignItems:'center',justifyContent:'center',padding:10,background:'transparent',border:'none',cursor:'pointer',color:T.text,borderRadius:8}}>
+    <span className="mi" style={{fontSize:22}}>more_vert</span>
+  </button>
+  {open&&(
+<div style={{position:'absolute',top:'calc(100% + 4px)',right:0,zIndex:600,background:T.toolBg,border:'1px solid '+T.border,borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.14)',minWidth:180,overflow:'hidden'}}>
+  {items.map(function(item){return(
+<button key={item.icon} onClick={item.action} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'11px 16px',background:'transparent',border:'none',borderBottom:'1px solid '+T.border,cursor:'pointer',fontFamily:'DM Sans, sans-serif',fontSize:13,color:T.textDark,textAlign:'left'}}
+  onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.04)';}}
+  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  <span className="mi" style={{fontSize:18,color:T.text}}>{item.icon}</span>{item.label}
+</button>
+  );})}
+</div>
+  )}
+</div>
+  );
+}
+
 // ── Main DraftEditor ──
 function DraftEditor({app}){
   var pid=app&&app.projId;
@@ -225,7 +279,13 @@ function DraftEditor({app}){
   var spv=useState(false);var showVersions=spv[0];var setShowVersions=spv[1];
   var spp=useState(false);var showProperties=spp[0];var setShowProperties=spp[1];
   var sps=useState(false);var showSpool=sps[0];var setShowSpool=sps[1];
-  var sf=useState(false);var flowMode=sf[0];var setFlowMode=sf[1];
+  var sf=useState(window.innerWidth<720);var flowMode=sf[0];var setFlowMode=sf[1];
+  // Auto flow on resize
+  useEffect(function(){
+    function onResize(){if(window.innerWidth<720)setFlowMode(true);}
+    window.addEventListener('resize',onResize);
+    return function(){window.removeEventListener('resize',onResize);};
+  },[]);
   var szoom=useState(100);var zoom=szoom[0];var setZoom=szoom[1];
   var sfont=useState('Crimson Text');var font=sfont[0];var setFont=sfont[1];
   var sheader=useState('');var headerStyle=sheader[0];var setHeaderStyle=sheader[1];
@@ -246,13 +306,17 @@ function DraftEditor({app}){
   useEffect(function(){
     if(initialised.current)return;
     if(!editorContainerRef.current||!window.Quill)return;
+    var isMobile=window.innerWidth<720;
     var q=new window.Quill(editorContainerRef.current,{
-      theme:'snow',
+      theme:isMobile?'bubble':'snow',
       modules:{toolbar:false},
       placeholder:'Start writing…',
     });
-    if(draft&&draft.body)q.clipboard.dangerouslyPasteHTML(draft.body);
-    // Set initial word count
+    if(draft&&draft.body){
+      q.clipboard.dangerouslyPasteHTML(draft.body);
+      // Clear history so Ctrl+Z can't undo back to blank state
+      if(q.history)q.history.clear();
+    }
     if(draft&&draft.wordCount)setWordCount(draft.wordCount);
     q.on('selection-change',function(range){
       if(!range||range.length===0){
@@ -382,22 +446,26 @@ function DraftEditor({app}){
   var fontOpts=FONTS.map(function(f){return{value:f,label:FONT_LABELS[f]};});
   var zoomOpts=ZOOM_OPTS.map(function(z){return{value:String(z),label:z+'%'};});
 
+  // cls: collapses at breakpoint — secondary@960px, tertiary@720px
   var fmtBtns=[
     {icon:'format_bold',title:'Bold',action:function(){toggleFmt('bold');}},
     {icon:'format_italic',title:'Italic',action:function(){toggleFmt('italic');}},
     {icon:'format_underlined',title:'Underline',action:function(){toggleFmt('underline');}},
     {sep:true},
-    {icon:'format_align_left',title:'Align left',action:function(){fmt('align','');}},
-    {icon:'format_align_center',title:'Align center',action:function(){fmt('align','center');}},
-    {icon:'format_align_right',title:'Align right',action:function(){fmt('align','right');}},
-    {sep:true},
-    {icon:'format_indent_increase',title:'Indent',action:function(){if(quillRef.current){var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('indent',(cur.indent||0)+1);}}}},
-    {icon:'format_indent_decrease',title:'Outdent',action:function(){if(quillRef.current){var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('indent',Math.max(0,(cur.indent||1)-1));}}}},
-    {sep:true},
-    {icon:'format_list_bulleted',title:'Bullet list',action:function(){fmt('list','bullet');}},
-    {icon:'format_list_numbered',title:'Numbered list',action:function(){fmt('list','ordered');}},
-    {sep:true},
-    {icon:'link',title:'Insert link',action:function(){var url=prompt('URL:');if(url&&quillRef.current){var r=quillRef.current.getSelection();if(r)quillRef.current.format('link',url);}}}
+    {icon:'title',title:'Heading 1',cls:'toolbar-secondary',action:function(){var r=quillRef.current&&quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('header',cur.header===1?false:1);}}},
+    {icon:'format_h2',title:'Heading 2',cls:'toolbar-secondary',action:function(){var r=quillRef.current&&quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('header',cur.header===2?false:2);}}},
+    {sep:true,sepClass:'toolbar-secondary'},
+    {icon:'format_align_left',title:'Align left',cls:'toolbar-tertiary',action:function(){fmt('align','');}},
+    {icon:'format_align_center',title:'Align center',cls:'toolbar-tertiary',action:function(){fmt('align','center');}},
+    {icon:'format_align_right',title:'Align right',cls:'toolbar-tertiary',action:function(){fmt('align','right');}},
+    {sep:true,sepClass:'toolbar-tertiary'},
+    {icon:'format_indent_increase',title:'Indent',cls:'toolbar-tertiary',action:function(){if(quillRef.current){var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('indent',(cur.indent||0)+1);}}}},
+    {icon:'format_indent_decrease',title:'Outdent',cls:'toolbar-tertiary',action:function(){if(quillRef.current){var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('indent',Math.max(0,(cur.indent||1)-1));}}}},
+    {sep:true,sepClass:'toolbar-secondary'},
+    {icon:'format_list_bulleted',title:'Bullets',cls:'toolbar-secondary',action:function(){fmt('list','bullet');}},
+    {icon:'format_list_numbered',title:'Numbered',cls:'toolbar-secondary',action:function(){fmt('list','ordered');}},
+    {sep:true,sepClass:'toolbar-tertiary'},
+    {icon:'link',title:'Insert link',cls:'toolbar-tertiary',action:function(){var url=prompt('URL:');if(url&&quillRef.current){var r=quillRef.current.getSelection();if(r)quillRef.current.format('link',url);}}}
   ];
 
   function handleStyleChange(val){
@@ -450,11 +518,29 @@ function DraftEditor({app}){
       .ql-editor.ql-blank::before { color: #b8a090; font-style: italic; font-family: 'Crimson Text', serif; }
       .ql-bubble .ql-toolbar { border-radius: 8px; background: #2a1f10; }
       .ql-container::-webkit-scrollbar { width: 6px; }
-      ::-webkit-scrollbar { width: 6px; }
-      ::-webkit-scrollbar-track { background: transparent; margin: 8px; }
-      ::-webkit-scrollbar-thumb { background: #E2D0B8; border-radius: 3px; }
+      .editor-scroll-area { padding-right: 56px; }
+      ::-webkit-scrollbar { width: 5px; }
+      ::-webkit-scrollbar-track { background: transparent; margin-top: 8px; margin-bottom: 8px; margin-right: 8px; }
+      ::-webkit-scrollbar-thumb { background: #D4B896; border-radius: 10px; }
       ::-webkit-scrollbar-thumb:hover { background: #A88060; }
       .ql-bubble .ql-stroke { stroke: #fdf8f0; }
+
+      /* ── Mobile responsive ── */
+      @media (max-width: 960px) {
+        .wc-full { display: none; }
+        .wc-short { display: inline !important; }
+        .wc-label::after { content: attr(data-short); }
+        .wc-label { font-size: 10px; }
+        .font-select { display: none !important; }
+        .toolbar-secondary { display: none !important; }
+      }
+      @media (max-width: 720px) {
+        .font-select { display: none !important; }
+        .toolbar-secondary { display: none !important; }
+        .toolbar-tertiary { display: none !important; }
+        .nav-drawers { display: none !important; }
+        .nav-collapse { display: flex !important; }
+      }
       .ql-bubble .ql-fill { fill: #fdf8f0; }
     `;
     document.head.appendChild(style);
@@ -469,16 +555,22 @@ function DraftEditor({app}){
     {/* Nav */}
     <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:T.navBg,padding:'10px 20px',gap:10,borderBottom:'1px solid rgba(42,31,16,.1)'}}>
       <div style={{display:'flex',alignItems:'center',gap:10,flex:1,minWidth:0}}>
-        <IconBtn icon="arrow_back" title="Back to sequence" onClick={function(){if(app&&app.setView)app.setView('cards');if(app&&app.setDraftId)app.setDraftId(null);}}/>
+        <IconBtn icon="arrow_back" title="Back to sequence" onClick={function(){if(app&&app.setView)app.setView('cards');if(app&&app.setDraftId)app.setDraftId(null);}} style={{flexShrink:0}}/>
         <EditableTitle value={title} onChange={function(v){setTitle(v);if(app&&app.updateDraft)app.updateDraft(pid,did,{title:v});}}/>
-        <span style={{fontSize:11,color:T.text,whiteSpace:'nowrap',flexShrink:0,fontFamily:'DM Sans, sans-serif',opacity:.6}}>{wordCount.toLocaleString()} words</span>
+        <span className="wc-label" data-short={wordCount.toLocaleString()+'w'} style={{fontSize:11,color:T.text,whiteSpace:'nowrap',flexShrink:0,fontFamily:'DM Sans, sans-serif',opacity:.6}}>
+          <span className="wc-full">{wordCount.toLocaleString()} words</span>
+          <span className="wc-short" style={{display:'none'}}>{wordCount.toLocaleString()}w</span>
+        </span>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-        <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary}/>
-        <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
-        <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowSpool(false);}} active={showProperties}/>
-        <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowProperties(false);}} active={showSpool}/>
-
+        <div className="nav-drawers" style={{display:'flex',alignItems:'center',gap:10}}>
+          <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary}/>
+          <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
+          <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowSpool(false);}} active={showProperties}/>
+          <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowProperties(false);}} active={showSpool}/>
+        </div>
+        {/* Mobile collapsed menu */}
+        <NavCollapseMenu branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onVersions={function(){setShowVersions(!showVersions);}} onProperties={function(){setShowProperties(!showProperties);}} onSpool={function(){setShowSpool(!showSpool);}}/>
         <ShareDropdown onExportPDF={handleExportPDF} onExportDocx={handleExportDocx} shareLink={shareLink} onGenerateLink={handleGenerateLink} onDepublish={handleDepublish}/>
       </div>
     </nav>
@@ -488,14 +580,17 @@ function DraftEditor({app}){
       {/* Left: style, font, size */}
       <div style={{display:'flex',alignItems:'center',gap:8,marginRight:12}}>
         <StyledSelect value={activeFormat} onChange={handleStyleChange} options={styleOpts} style={{minWidth:110}}/>
-        <StyledSelect value={font} onChange={function(v){setFont(v);}} options={fontOpts} style={{minWidth:120,fontFamily:font+', serif'}}/>
+        <select value={font} onChange={function(e){setFont(e.target.value);}} className="font-select" style={{padding:'4px 8px',background:T.toolBg,border:'1px solid '+T.stroke,borderRadius:6,fontSize:13,color:T.text,cursor:'pointer',outline:'none',minWidth:130,fontFamily:font+', sans-serif'}}>
+          {FONTS.map(function(f){return(<option key={f} value={f} style={{fontFamily:f+', sans-serif'}}>{f}</option>);})}
+        </select>
       </div>
       {/* Middle: format buttons */}
       <div style={{display:'flex',alignItems:'center',gap:0,flex:1,justifyContent:'center'}}>
         {fmtBtns.map(function(b,i){
-          if(b.sep)return(<div key={'s'+i} style={{width:1,height:20,background:T.stroke,margin:'0 4px',flexShrink:0}}/>);
+          if(b.sep)return(<div key={'s'+i} className={b.sepClass||''} style={{width:1,height:20,background:T.stroke,margin:'0 4px',flexShrink:0}}/>);
+          var cls=b.cls||'';
           return(
-<button key={b.icon} onClick={b.action} title={b.title} style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,transition:'background .12s'}}
+<button key={b.icon} onClick={b.action} title={b.title} className={cls} style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,transition:'background .12s'}}
   onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.08)';}}
   onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
   <span className="mi" style={{fontSize:18}}>{b.icon}</span>
@@ -520,7 +615,7 @@ function DraftEditor({app}){
   <div style={{display:'flex',flex:1,overflow:'hidden',marginTop:flowMode?'48px':'0',transition:'margin-top .3s'}}>
 
     {/* Editor scroll area */}
-    <div style={{flex:1,overflowY:'scroll',WebkitOverflowScrolling:'touch',padding:'48px 40px 20px 40px',background:T.bodyBg,scrollbarGutter:'stable',paddingRight:'calc(40px + 8px)'}}>
+    <div style={{flex:1,overflowY:'scroll',WebkitOverflowScrolling:'touch',padding:'48px 40px 20px 40px',background:T.bodyBg,scrollbarGutter:'stable'}} className="editor-scroll-area">
       <div style={{maxWidth:maxWidth+'px',margin:'0 auto',transition:'max-width .2s'}}>
         <div ref={editorContainerRef} style={editorBodyStyle}/>
       </div>
