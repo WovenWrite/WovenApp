@@ -25,8 +25,8 @@ var T={
   white:'#ffffff',
 };
 
-var FONTS=['Crimson Text','DM Sans','Lora','Merriweather','EB Garamond','Libre Baskerville'];
-var FONT_LABELS={'Crimson Text':'Crimson Text','DM Sans':'DM Sans','Lora':'Lora','Merriweather':'Merriweather','EB Garamond':'EB Garamond','Libre Baskerville':'Baskerville'};
+var FONTS=['Crimson Text','DM Sans','Lora','Merriweather','Inter','Playfair Display','Source Serif 4','IBM Plex Mono'];
+var FONT_LABELS={'Crimson Text':'Crimson Text (Serif)','DM Sans':'DM Sans (Sans)','Lora':'Lora (Serif)','Merriweather':'Merriweather (Serif)','Inter':'Inter (Sans)','Playfair Display':'Playfair (Display)','Source Serif 4':'Source Serif (Serif)','IBM Plex Mono':'IBM Plex (Mono)'};
 var ZOOM_OPTS=[50,75,100,125,150,175,200];
 var DEFAULT_FONT_SIZE=19;
 
@@ -53,10 +53,10 @@ function EditableTitle({value,onChange,color}){
   useEffect(function(){setVal(value);},[value]);
   useEffect(function(){if(editing&&ref.current)ref.current.focus();},[editing]);
   function commit(){setEditing(false);if(val.trim()&&val.trim()!==value)onChange(val.trim());else setVal(value);}
-  if(editing)return(<input ref={ref} value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commit} onKeyDown={function(e){if(e.key==='Enter')commit();if(e.key==='Escape'){setVal(value);setEditing(false);}}} style={{fontFamily:'Crimson Text, serif',fontSize:20,fontWeight:600,color:color||T.textDark,background:'transparent',border:'none',borderBottom:'2px solid '+T.amber,outline:'none',padding:'0 2px',width:(val.length||1)+'ch',minWidth:'4ch',maxWidth:'40ch',borderRadius:0}}/>);
-  return(<span onClick={function(){setEditing(true);}} title="Click to edit" style={{fontFamily:'Crimson Text, serif',fontSize:20,fontWeight:600,color:color||T.textDark,cursor:'text',padding:'0 2px',borderBottom:'2px solid transparent',whiteSpace:'nowrap',maxWidth:'40ch',overflow:'hidden',textOverflow:'ellipsis',display:'inline-block'}}
-  onMouseOver={function(e){e.currentTarget.style.borderBottomColor=T.stroke;}}
-  onMouseOut={function(e){e.currentTarget.style.borderBottomColor='transparent';}}>{val||'Untitled draft'}</span>);
+  if(editing)return(<input ref={ref} value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commit} onKeyDown={function(e){if(e.key==='Enter')commit();if(e.key==='Escape'){setVal(value);setEditing(false);}}} size={Math.max(4,val.length||1)} style={{fontFamily:'Crimson Text, serif',fontSize:16,fontWeight:600,color:color||T.textDark,background:'transparent',border:'1px solid '+T.amber,outline:'none',padding:'2px 8px',borderRadius:6,minWidth:0}}/>);
+  return(<span onClick={function(){setEditing(true);}} title="Click to edit" style={{fontFamily:'Crimson Text, serif',fontSize:16,fontWeight:600,color:color||T.textDark,cursor:'text',padding:'2px 8px',border:'1px solid transparent',borderRadius:6,whiteSpace:'nowrap',maxWidth:'40ch',overflow:'hidden',textOverflow:'ellipsis',display:'inline-block',transition:'border-color .15s'}}
+  onMouseOver={function(e){e.currentTarget.style.borderColor=T.stroke;}}
+  onMouseOut={function(e){e.currentTarget.style.borderColor='transparent';}}>{val||'Untitled draft'}</span>);
 }
 
 // ── Icon Button ──
@@ -135,6 +135,33 @@ function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}
 </div>);
 }
 
+
+// ── ExportButton with loading state ──
+function ExportButton({icon,label,onExport,onDone}){
+  var sl=useState(false);var loading=sl[0];var setLoading=sl[1];
+  var sd=useState(false);var done=sd[0];var setDone=sd[1];
+  function handle(){
+    setLoading(true);
+    setTimeout(function(){
+      onExport();
+      setLoading(false);setDone(true);
+      setTimeout(function(){setDone(false);if(onDone)onDone();},1200);
+    },200);
+  }
+  return(
+<button onClick={handle} disabled={loading} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:done?'rgba(47,153,102,.08)':'transparent',border:'none',borderBottom:'1px solid '+T.border,cursor:'pointer',textAlign:'left',fontFamily:'DM Sans, sans-serif',transition:'background .15s'}}
+  onMouseOver={function(e){if(!loading&&!done)e.currentTarget.style.background='rgba(42,31,16,.04)';}}
+  onMouseOut={function(e){if(!done)e.currentTarget.style.background='transparent';}}>
+  <span className="mi" style={{fontSize:20,color:done?'#2f9966':T.text}}>
+    {loading?'hourglass_top':done?'check_circle':icon}
+  </span>
+  <span style={{fontSize:13,fontWeight:600,color:done?'#2f9966':T.textDark}}>
+    {loading?'Preparing…':done?'Downloaded!':label}
+  </span>
+</button>
+  );
+}
+
 // ── Share Dropdown ──
 function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepublish}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
@@ -154,14 +181,8 @@ function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepu
   </button>
   {open&&(
 <div style={{position:'absolute',top:'calc(100% + 6px)',right:0,zIndex:600,background:T.toolBg,border:'1px solid '+T.border,borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.14)',width:280,overflow:'hidden'}}>
-  {[{icon:'picture_as_pdf',label:'Export as PDF',sub:'Downloads immediately',action:function(){onExportPDF();setOpen(false);}},{icon:'description',label:'Export as Word Doc',sub:'Downloads immediately',action:function(){onExportDocx();setOpen(false);}}].map(function(item){return(
-<button key={item.icon} onClick={item.action} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:'transparent',border:'none',borderBottom:'1px solid '+T.border,cursor:'pointer',textAlign:'left',fontFamily:'DM Sans, sans-serif'}}
-  onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.04)';}}
-  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
-  <span className="mi" style={{fontSize:20,color:T.text}}>{item.icon}</span>
-  <div><div style={{fontSize:13,fontWeight:600,color:T.textDark}}>{item.label}</div><div style={{fontSize:11,color:T.text}}>{item.sub}</div></div>
-</button>
-  );})}
+  <ExportButton icon="picture_as_pdf" label="Export PDF" onExport={onExportPDF} onDone={function(){setOpen(false);}}/>
+  <ExportButton icon="description" label="Export Docx" onExport={onExportDocx} onDone={function(){setOpen(false);}}/>
   <div style={{padding:'12px 16px'}}>
     <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:shareLink?10:0}}>
       <span className="mi" style={{fontSize:20,color:T.text}}>link</span>
@@ -234,6 +255,22 @@ function DraftEditor({app}){
     // Set initial word count
     if(draft&&draft.wordCount)setWordCount(draft.wordCount);
     q.on('selection-change',function(range){
+      if(!range||range.length===0){
+        // cursor position — get format at cursor
+        var fmt=q.getFormat(range||0);
+        if(fmt.blockquote)setActiveFormat('quote');
+        else if(fmt.header)setActiveFormat(String(fmt.header));
+        else setActiveFormat('');
+        return;
+      }
+      var fmt=q.getFormat(range);
+      if(fmt.blockquote)setActiveFormat('quote');
+      else if(fmt.header)setActiveFormat(String(fmt.header));
+      else setActiveFormat('');
+    });
+    // Also update on text-change (when typing changes format context)
+    q.on('editor-change',function(){
+      var range=q.getSelection();
       if(!range)return;
       var fmt=q.getFormat(range);
       if(fmt.blockquote)setActiveFormat('quote');
@@ -250,6 +287,11 @@ function DraftEditor({app}){
         var html=q.root.innerHTML;
         if(app&&app.updateDraft)app.updateDraft(pid,did,{body:html,wordCount:wc,updatedAt:new Date().toISOString()});
         setSaveState('saved');
+      // If a share link is live, keep it in sync
+      if(shareId){
+        var sc=window.supabase&&window.supabase.createClient?window.supabase.createClient('https://mxsdiqrbxlvcwexfdtrj.supabase.co','sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u'):null;
+        if(sc)sc.from('shared_drafts').update({body:html,title:title}).eq('id',shareId).then(function(){});
+      }
       },800);
     });
     quillRef.current=q;
@@ -319,8 +361,22 @@ function DraftEditor({app}){
     setShareLink(null);
     setShareId(null);
   }
-  function handleExportPDF(){if(app&&app.exportDraftPDF)app.exportDraftPDF(did);}
-  function handleExportDocx(){if(app&&app.exportDraftDocx)app.exportDraftDocx(did);}
+  function handleExportPDF(){
+    if(!draft||!pid)return;
+    var profile=app&&app.profile||{};
+    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
+    var project=app&&app.currentProject;
+    if(window.doExport){window.doExport('PDF',[draft],project,true,authorName);}
+    else if(app&&app.doExport){app.doExport('PDF',[draft],project,true,authorName);}
+  }
+  function handleExportDocx(){
+    if(!draft||!pid)return;
+    var profile=app&&app.profile||{};
+    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
+    var project=app&&app.currentProject;
+    if(window.doExport){window.doExport('Word (.docx)',[draft],project,true,authorName);}
+    else if(app&&app.doExport){app.doExport('Word (.docx)',[draft],project,true,authorName);}
+  }
 
   var styleOpts=[{value:'',label:'Normal text'},{value:'1',label:'Heading 1'},{value:'2',label:'Heading 2'},{value:'3',label:'Heading 3'},{value:'quote',label:'Quote'}];
   var fontOpts=FONTS.map(function(f){return{value:f,label:FONT_LABELS[f]};});
@@ -358,8 +414,8 @@ function DraftEditor({app}){
   var FlowBar=(
 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 20px',background:'transparent',position:'relative',zIndex:10}}>
   <div style={{display:'flex',alignItems:'center',gap:10}}>
-    <IconBtn icon="arrow_back" title="Back" onClick={function(){setFlowMode(false);if(app&&app.setView)app.setView('cards');if(app&&app.setDraftId)app.setDraftId(null);}} color="rgba(42,31,16,.4)"/>
-    <span style={{fontFamily:'Crimson Text, serif',fontSize:18,fontWeight:600,color:'rgba(42,31,16,.4)'}}>{title}</span>
+    <IconBtn icon="arrow_back" title="Back" onClick={function(){setFlowMode(false);if(app&&app.setView)app.setView('cards');if(app&&app.setDraftId)app.setDraftId(null);}} color={T.text}/>
+    <span style={{fontFamily:'Crimson Text, serif',fontSize:18,fontWeight:600,color:T.text,opacity:.7}}>{title}</span>
   </div>
   <IOSToggle on={true} onChange={function(v){if(!v)setFlowMode(false);}} label="Flow"/>
 </div>
@@ -369,7 +425,7 @@ function DraftEditor({app}){
   var editorBodyStyle={
     fontSize:fontSize+'px',
     fontFamily:font+', serif',
-    lineHeight:'130%',
+    lineHeight:'160%',
     color:T.bodyText,
     minHeight:'calc(100vh - 260px)',
     paddingBottom:20,
@@ -393,6 +449,11 @@ function DraftEditor({app}){
       .ql-container { border: none !important; }
       .ql-editor.ql-blank::before { color: #b8a090; font-style: italic; font-family: 'Crimson Text', serif; }
       .ql-bubble .ql-toolbar { border-radius: 8px; background: #2a1f10; }
+      .ql-container::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; margin: 8px; }
+      ::-webkit-scrollbar-thumb { background: #E2D0B8; border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: #A88060; }
       .ql-bubble .ql-stroke { stroke: #fdf8f0; }
       .ql-bubble .ql-fill { fill: #fdf8f0; }
     `;
@@ -410,7 +471,7 @@ function DraftEditor({app}){
       <div style={{display:'flex',alignItems:'center',gap:10,flex:1,minWidth:0}}>
         <IconBtn icon="arrow_back" title="Back to sequence" onClick={function(){if(app&&app.setView)app.setView('cards');if(app&&app.setDraftId)app.setDraftId(null);}}/>
         <EditableTitle value={title} onChange={function(v){setTitle(v);if(app&&app.updateDraft)app.updateDraft(pid,did,{title:v});}}/>
-        <span style={{fontSize:14,color:T.text,whiteSpace:'nowrap',flexShrink:0,fontFamily:'DM Sans, sans-serif'}}>{wordCount} words</span>
+        <span style={{fontSize:11,color:T.text,whiteSpace:'nowrap',flexShrink:0,fontFamily:'DM Sans, sans-serif',opacity:.6}}>{wordCount.toLocaleString()} words</span>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
         <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary}/>
@@ -459,7 +520,7 @@ function DraftEditor({app}){
   <div style={{display:'flex',flex:1,overflow:'hidden',marginTop:flowMode?'48px':'0',transition:'margin-top .3s'}}>
 
     {/* Editor scroll area */}
-    <div style={{flex:1,overflowY:'scroll',WebkitOverflowScrolling:'touch',padding:'48px 40px 20px',background:T.bodyBg}}>
+    <div style={{flex:1,overflowY:'scroll',WebkitOverflowScrolling:'touch',padding:'48px 40px 20px 40px',background:T.bodyBg,scrollbarGutter:'stable',paddingRight:'calc(40px + 8px)'}}>
       <div style={{maxWidth:maxWidth+'px',margin:'0 auto',transition:'max-width .2s'}}>
         <div ref={editorContainerRef} style={editorBodyStyle}/>
       </div>
