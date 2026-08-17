@@ -53,8 +53,10 @@ function EditableTitle({value,onChange,color}){
   useEffect(function(){setVal(value);},[value]);
   useEffect(function(){if(editing&&ref.current)ref.current.focus();},[editing]);
   function commit(){setEditing(false);if(val.trim()&&val.trim()!==value)onChange(val.trim());else setVal(value);}
-  if(editing)return(<input ref={ref} value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commit} onKeyDown={function(e){if(e.key==='Enter')commit();if(e.key==='Escape'){setVal(value);setEditing(false);}}} style={{fontFamily:'Crimson Text, serif',fontSize:20,fontWeight:600,color:color||T.textDark,background:'transparent',border:'none',borderBottom:'2px solid '+T.amber,outline:'none',padding:'0 2px',minWidth:80,maxWidth:320}}/>);
-  return(<span onClick={function(){setEditing(true);}} title="Click to edit" style={{fontFamily:'Crimson Text, serif',fontSize:20,fontWeight:600,color:color||T.textDark,cursor:'text',padding:'0 2px',borderBottom:'2px solid transparent',transition:'border-color .15s',whiteSpace:'nowrap',maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',display:'inline-block'}}>{val||'Untitled draft'}</span>);
+  if(editing)return(<input ref={ref} value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commit} onKeyDown={function(e){if(e.key==='Enter')commit();if(e.key==='Escape'){setVal(value);setEditing(false);}}} style={{fontFamily:'Crimson Text, serif',fontSize:20,fontWeight:600,color:color||T.textDark,background:'transparent',border:'none',borderBottom:'2px solid '+T.amber,outline:'none',padding:'0 2px',width:(val.length||1)+'ch',minWidth:'4ch',maxWidth:'40ch',borderRadius:0}}/>);
+  return(<span onClick={function(){setEditing(true);}} title="Click to edit" style={{fontFamily:'Crimson Text, serif',fontSize:20,fontWeight:600,color:color||T.textDark,cursor:'text',padding:'0 2px',borderBottom:'2px solid transparent',whiteSpace:'nowrap',maxWidth:'40ch',overflow:'hidden',textOverflow:'ellipsis',display:'inline-block'}}
+  onMouseOver={function(e){e.currentTarget.style.borderBottomColor=T.stroke;}}
+  onMouseOut={function(e){e.currentTarget.style.borderBottomColor='transparent';}}>{val||'Untitled draft'}</span>);
 }
 
 // ── Icon Button ──
@@ -85,12 +87,12 @@ function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}
   var hasBranches=branches&&branches.length>1;
   var activeBranch=branches&&branches.find(function(b){return b.id===activeBranchId;})||branches&&branches[0];
   var btnLabel=hasBranches?(branches.length+' branches'):'Create strand';
-  function handleCreate(){setCreating(true);var num=branches?branches.length+1:2;var draft=activeBranch&&activeBranch.draftTitle||'Draft';setNewName(draft+'_Branch '+num);}
+  function handleCreate(){setCreating(true);var num=branches?branches.length+1:2;var draft=activeBranch&&activeBranch.draftTitle||'Draft';setNewName(draft+'_Strand_'+num);}
   function confirmCreate(){if(newName.trim())onCreate(newName.trim());setCreating(false);setNewName('');setOpen(false);}
   var sorted=branches?[].concat(branches.filter(function(b){return b.id===activeBranchId;}),branches.filter(function(b){return b.id!==activeBranchId;})):[];
   return(
 <div ref={ref} style={{position:'relative'}}>
-  <button onClick={function(){if(!hasBranches){handleCreate();setOpen(true);}else setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background:'transparent',border:'1px solid '+T.border,borderRadius:6,cursor:'pointer',fontSize:13,color:hasBranches?T.text:'#b8a090',fontFamily:'DM Sans, sans-serif',flexShrink:0}}>
+  <button onClick={function(){if(!hasBranches){handleCreate();setOpen(true);}else setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background:'transparent',border:'1px solid '+T.border,borderRadius:6,cursor:'pointer',fontSize:13,color:hasBranches?T.text:T.text,fontFamily:'DM Sans, sans-serif',flexShrink:0,opacity:hasBranches?1:.55}}>
     <span className="mi" style={{fontSize:16}}>{hasBranches?'account_tree':'add'}</span>
     {btnLabel}
     {hasBranches&&<span className="mi" style={{fontSize:14,transform:open?'rotate(180deg)':'rotate(0)',transition:'transform .15s'}}>expand_more</span>}
@@ -99,7 +101,7 @@ function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}
 <div style={{position:'absolute',top:'calc(100% + 6px)',left:0,zIndex:600,background:T.toolBg,border:'1px solid '+T.border,borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.14)',minWidth:220,overflow:'hidden'}}>
   {creating?(
 <div style={{padding:'10px 12px'}}>
-  <div style={{fontSize:11,color:T.text,fontWeight:600,marginBottom:6,textTransform:'uppercase',letterSpacing:'.06em',fontFamily:'DM Sans, sans-serif'}}>Branch name</div>
+  <div style={{fontSize:11,color:T.text,fontWeight:600,marginBottom:6,textTransform:'uppercase',letterSpacing:'.06em',fontFamily:'DM Sans, sans-serif'}}>Strand name</div>
   <input autoFocus value={newName} onChange={function(e){setNewName(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')confirmCreate();if(e.key==='Escape'){setCreating(false);setOpen(false);}}} style={{width:'100%',padding:'7px 10px',fontSize:13,border:'1px solid '+T.border,borderRadius:6,background:T.bg1,color:T.textDark,fontFamily:'DM Sans, sans-serif',boxSizing:'border-box',marginBottom:8}}/>
   <div style={{display:'flex',gap:6}}>
     <button onClick={confirmCreate} style={{flex:1,padding:'6px 0',background:T.primary,color:T.white,border:'none',borderRadius:6,fontSize:12,cursor:'pointer',fontFamily:'DM Sans, sans-serif',fontWeight:600}}>Create</button>
@@ -151,7 +153,7 @@ function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepu
     <span className="mi" style={{fontSize:18,lineHeight:1,display:'flex',alignItems:'center',transform:open?'rotate(180deg)':'rotate(0deg)',transition:'transform .15s'}}>expand_more</span>
   </button>
   {open&&(
-<div style={{position:'absolute',top:'calc(100% + 6px)',right:0,zIndex:600,background:T.toolBg,border:'1px solid '+T.border,borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.14)',minWidth:280,overflow:'hidden'}}>
+<div style={{position:'absolute',top:'calc(100% + 6px)',right:0,zIndex:600,background:T.toolBg,border:'1px solid '+T.border,borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.14)',width:280,overflow:'hidden'}}>
   {[{icon:'picture_as_pdf',label:'Export as PDF',sub:'Downloads immediately',action:function(){onExportPDF();setOpen(false);}},{icon:'description',label:'Export as Word Doc',sub:'Downloads immediately',action:function(){onExportDocx();setOpen(false);}}].map(function(item){return(
 <button key={item.icon} onClick={item.action} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:'transparent',border:'none',borderBottom:'1px solid '+T.border,cursor:'pointer',textAlign:'left',fontFamily:'DM Sans, sans-serif'}}
   onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.04)';}}
@@ -171,10 +173,10 @@ function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepu
     </div>
     {shareLink&&(
 <div>
-  <div style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',background:T.bg1,borderRadius:7,marginBottom:10,border:'1px solid '+T.border}}>
-    <span style={{flex:1,fontSize:11,color:T.text,fontFamily:'monospace',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{shareLink}</span>
-    <button onClick={handleCopy} style={{flexShrink:0,padding:'3px 8px',background:T.bg2,border:'none',borderRadius:5,fontSize:11,cursor:'pointer',color:T.textDark,fontFamily:'DM Sans, sans-serif',display:'flex',alignItems:'center',gap:4}}>
-      <span className="mi" style={{fontSize:13}}>{copied?'check':'content_copy'}</span>{copied?'Copied':'Copy'}
+  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+    <button onClick={handleCopy} style={{flex:1,padding:'7px 12px',background:T.bg1,border:'1px solid '+T.border,borderRadius:7,fontSize:13,cursor:'pointer',color:T.textDark,fontFamily:'DM Sans, sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+      <span className="mi" style={{fontSize:16}}>{copied?'check':'content_copy'}</span>
+      {copied?'Link copied!':'Copy link'}
     </button>
   </div>
   <IOSToggle on={true} onChange={function(v){if(!v)onDepublish();}} label="Link active"/>
@@ -206,6 +208,7 @@ function DraftEditor({app}){
   var szoom=useState(100);var zoom=szoom[0];var setZoom=szoom[1];
   var sfont=useState('Crimson Text');var font=sfont[0];var setFont=sfont[1];
   var sheader=useState('');var headerStyle=sheader[0];var setHeaderStyle=sheader[1];
+  var saf=useState('');var activeFormat=saf[0];var setActiveFormat=saf[1];
 
   var quillRef=useRef(null);
   var editorContainerRef=useRef(null);
@@ -230,6 +233,13 @@ function DraftEditor({app}){
     if(draft&&draft.body)q.clipboard.dangerouslyPasteHTML(draft.body);
     // Set initial word count
     if(draft&&draft.wordCount)setWordCount(draft.wordCount);
+    q.on('selection-change',function(range){
+      if(!range)return;
+      var fmt=q.getFormat(range);
+      if(fmt.blockquote)setActiveFormat('quote');
+      else if(fmt.header)setActiveFormat(String(fmt.header));
+      else setActiveFormat('');
+    });
     q.on('text-change',function(){
       var txt=q.getText();
       var wc=countWords(txt);
@@ -320,7 +330,6 @@ function DraftEditor({app}){
     {icon:'format_bold',title:'Bold',action:function(){toggleFmt('bold');}},
     {icon:'format_italic',title:'Italic',action:function(){toggleFmt('italic');}},
     {icon:'format_underlined',title:'Underline',action:function(){toggleFmt('underline');}},
-    {icon:'highlight',title:'Highlight',action:function(){toggleFmt('background');}},
     {sep:true},
     {icon:'format_align_left',title:'Align left',action:function(){fmt('align','');}},
     {icon:'format_align_center',title:'Align center',action:function(){fmt('align','center');}},
@@ -373,13 +382,13 @@ function DraftEditor({app}){
     var style=document.createElement('style');
     style.id=id;
     style.textContent=`
-      .ql-editor { padding: 0 !important; outline: none !important; }
+      .ql-editor { padding: 0 !important; outline: none !important; } .ql-editor ::selection { background: rgba(196,94,40,.22); } ::selection { background: rgba(196,94,40,.22); }
       .ql-editor p { margin-bottom: 15px; margin-top: 0; }
       .ql-editor h1 { font-family: 'Crimson Text', serif; font-size: 2em; font-weight: 600; margin-bottom: 12px; color: #2a1f10; }
       .ql-editor h2 { font-family: 'Crimson Text', serif; font-size: 1.5em; font-weight: 600; margin-bottom: 10px; color: #2a1f10; }
       .ql-editor h3 { font-family: 'Crimson Text', serif; font-size: 1.2em; font-weight: 600; margin-bottom: 8px; color: #2a1f10; }
       .ql-editor blockquote { border-left: 3px solid #A88060; padding: 4px 0 4px 16px; margin: 0 0 15px 0; color: #7A5A38; font-style: italic; }
-      .ql-editor ol, .ql-editor ul { padding-left: 1.5em; margin-bottom: 15px; }
+      .ql-editor ol, .ql-editor ul { padding-left: 1.5em; margin-bottom: 15px; font-size: inherit; font-weight: 400; } .ql-editor li { line-height: 130%; margin-bottom: 6px; font-weight: 400; }
       .ql-editor a { color: #c45e28; }
       .ql-container { border: none !important; }
       .ql-editor.ql-blank::before { color: #b8a090; font-style: italic; font-family: 'Crimson Text', serif; }
@@ -417,11 +426,9 @@ function DraftEditor({app}){
     <div style={{display:'flex',alignItems:'center',padding:'6px 20px',background:T.toolBg,borderBottom:'1px solid '+T.stroke,gap:4}}>
       {/* Left: style, font, size */}
       <div style={{display:'flex',alignItems:'center',gap:8,marginRight:12}}>
-        <StyledSelect value={headerStyle} onChange={handleStyleChange} options={styleOpts} style={{minWidth:110}}/>
+        <StyledSelect value={activeFormat} onChange={handleStyleChange} options={styleOpts} style={{minWidth:110}}/>
         <StyledSelect value={font} onChange={function(v){setFont(v);}} options={fontOpts} style={{minWidth:120,fontFamily:font+', serif'}}/>
       </div>
-      <div style={{width:1,height:20,background:T.stroke,flexShrink:0}}/>
-
       {/* Middle: format buttons */}
       <div style={{display:'flex',alignItems:'center',gap:0,flex:1,justifyContent:'center'}}>
         {fmtBtns.map(function(b,i){
@@ -435,15 +442,10 @@ function DraftEditor({app}){
           );
         })}
       </div>
-      <div style={{width:1,height:20,background:T.stroke,flexShrink:0}}/>
-
       {/* Right: zoom + flow */}
-      <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:12}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto'}}>
         <StyledSelect value={String(zoom)} onChange={function(v){setZoom(parseInt(v));}} options={zoomOpts} style={{minWidth:70}}/>
-        <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 10px',border:'1px solid '+T.stroke,borderRadius:6,cursor:'pointer'}} onClick={function(){setFlowMode(true);}}>
-          <span className="mi" style={{fontSize:16,color:T.text}}>self_improvement</span>
-          <span style={{fontSize:13,color:T.text,fontFamily:'DM Sans, sans-serif'}}>Flow</span>
-        </div>
+        <IOSToggle on={false} onChange={function(v){if(v)setFlowMode(true);}} label="Flow"/>
       </div>
     </div>
   </div>
