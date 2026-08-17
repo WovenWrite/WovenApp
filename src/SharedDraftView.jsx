@@ -92,10 +92,22 @@ function SharedDraftView({shareId}){
   var year=new Date().getFullYear();
 
   return(
-<div style={{minHeight:'100vh',background:T.bg,display:'flex',flexDirection:'column',overflowY:'scroll'}}>
+<div style={{minHeight:'100vh',background:T.bg,display:'flex',flexDirection:'column',overflowY:'scroll',scrollbarGutter:'stable',paddingRight:8}}>
 
   {/* Selection colour */}
-  <style>{'::selection{background:rgba(196,94,40,.25);color:inherit;} @keyframes spin{to{transform:rotate(360deg)}}'}</style>
+  <style>{`
+    ::selection { background: rgba(196,94,40,.25); color: inherit; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .ro-body p { margin-bottom: 20px; margin-top: 0; line-height: 178%; }
+    .ro-body h1, .ro-body h2, .ro-body h3 { margin-bottom: 12px; margin-top: 28px; line-height: 130%; }
+    .ro-body blockquote { border-left: 3px solid #A88060; padding: 4px 0 4px 20px; margin: 20px 0; color: #7A5A38; font-style: italic; }
+    .ro-body ul, .ro-body ol { margin-bottom: 20px; padding-left: 1.6em; }
+    .ro-body li { margin-bottom: 8px; line-height: 170%; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; margin-right: 8px; }
+    ::-webkit-scrollbar-thumb { background: #E2D0B8; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #A88060; }
+  `}</style>
 
   {/* ── Content area ── */}
   <div style={{flex:1,padding:'50px 40px'}}>
@@ -110,7 +122,7 @@ function SharedDraftView({shareId}){
       </div>
 
       {/* Section 2: Header */}
-      <div style={{marginBottom:30,paddingTop:10,paddingBottom:30}}>
+      <div style={{marginBottom:0,paddingTop:20,paddingBottom:30,borderBottom:'1px solid '+T.stroke}}>
         {/* Project name */}
         {projectName&&(
 <div style={{fontFamily:'DM Sans, sans-serif',fontSize:18,color:T.text,letterSpacing:'.11em',fontWeight:400,marginBottom:15,textTransform:'uppercase'}}>
@@ -128,9 +140,9 @@ function SharedDraftView({shareId}){
       </div>
 
       {/* Section 3: Body */}
-      <div style={{paddingTop:30}}>
+      <div style={{paddingTop:30,paddingBottom:50}}>
         <div
-          style={{fontFamily:'Crimson Text, serif',fontSize:20,lineHeight:'165%',color:T.bodyText}}
+          className="ro-body" style={{fontFamily:'Crimson Text, serif',fontSize:21,lineHeight:'178%',color:T.bodyText,letterSpacing:'.01em'}}
           dangerouslySetInnerHTML={{__html:data.body||''}}
         />
       </div>
