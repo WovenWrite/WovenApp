@@ -450,4 +450,4 @@ function DraftEditor({app}){
   );
 }
 
-window.DraftEditor=DraftEditor;
+export default DraftEditor;
