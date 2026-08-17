@@ -1292,67 +1292,6 @@ function doExport(format,drafts,project,isSingleDraft,authorName){
   }
 }
 
-// ── SharedDraftView ──
-function SharedDraftView({shareId}){
-  var sd=useState(null);var data=sd[0];var setData=sd[1];
-  var se=useState(true);var loading=se[0];var setLoading=se[1];
-  var sErr=useState('');var err=sErr[0];var setErr=sErr[1];
-  function fetchShare(){
-    var client=getSupabase();
-    if(!client){
-      // CDN not ready yet — retry after a short delay
-      setTimeout(fetchShare,300);
-      return;
-    }
-    client.from('shared_drafts').select('*').eq('id',shareId).maybeSingle().then(function(r){
-      if(r.data)setData(r.data);
-      else setErr('This link has expired or cannot be found.');
-      setLoading(false);
-    });
-  }
-  useEffect(function(){
-    if(!shareId)return;
-    fetchShare();
-  },[shareId]);
-  // Must be before any conditional returns — React hooks rules
-  useEffect(function(){
-    if(data&&data.title)document.title=data.title+' — Woven';
-    return function(){document.title='Woven';};
-  },[data]);
-  if(loading)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'var(--serif)',fontSize:20,color:'var(--mid)'}}>Loading...</div>);
-  if(err)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'var(--serif)',fontSize:20,color:'var(--mid)'}}>{err}</div>);
-  if(!data)return null;
-  var projectName=data.project_name||'';
-  var authorName=data.author_name||'';
-  var byline=authorName||'Your friendly neighbourhood novelist';
-  return(
-<div style={{minHeight:'100vh',background:'var(--bg0)',display:'flex',flexDirection:'column',overflowY:'auto'}}>
-  <style>{'::selection{background:rgba(240,192,80,0.4);color:inherit;}'}</style>
-  <div style={{flex:1,maxWidth:680,margin:'0 auto',width:'100%',padding:'48px 24px 80px'}}>
-    {/* Header */}
-    <div style={{marginBottom:40}}>
-      <div style={{fontSize:11,fontWeight:800,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.15em',fontFamily:'var(--ui)',marginBottom:40,textAlign:'center'}}>
-        WRITTEN & SHARED WITH{' '}
-        <a href="https://www.wovenwrite.com" target="_blank" rel="noopener noreferrer" style={{color:'var(--indigo)',textDecoration:'underline',fontWeight:800}}>WOVEN</a>
-      </div>
-      {projectName&&<div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.1em',fontFamily:'var(--ui)',marginBottom:16}}>{projectName}</div>}
-      <h1 style={{fontFamily:'var(--serif)',fontSize:42,fontWeight:600,color:'var(--text)',lineHeight:1.2,marginBottom:12,marginTop:8}}>{data.title||'Untitled'}</h1>
-      <h3 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:400,color:'var(--indigo)',fontStyle:'italic',marginBottom:24}}>By {byline}</h3>
-      <div style={{height:1,background:'var(--border)',width:'100%'}}/>
-    </div>
-    {/* Body */}
-    <div style={{fontFamily:'var(--serif)',fontSize:19,lineHeight:1.9,color:'var(--body-text)'}} dangerouslySetInnerHTML={{__html:data.body||''}}/>
-  </div>
-  {/* Footer */}
-  <div style={{borderTop:'1px solid var(--border)',padding:'20px 24px',display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--bg1)',flexShrink:0}}>
-    <WovenLogo size={22}/>
-    <div style={{fontSize:11,color:'var(--mid)',fontFamily:'var(--ui)',textAlign:'center',lineHeight:1.5}}>© {new Date().getFullYear()} Woven &nbsp;·&nbsp; All writing belongs to {data&&data.author_name?data.author_name:'the author'}.</div>
-    <a href="https://app.writewoven.com" style={{fontSize:12,color:'var(--indigo)',fontFamily:'var(--ui)',textDecoration:'none',fontWeight:500}}>Start writing free →</a>
-  </div>
-</div>
-  );
-}
-
 // ── BindPanel ──
 function BindPanel({app,open,onClose,activeFilter}){
   var s=useState('PDF');var format=s[0];var setFormat=s[1];
