@@ -3564,7 +3564,7 @@ function App(){
 
   var inner=null;
   if(view==='dashboard'){inner=<Dashboard app={app} onOpenProfile={openProfile} onNewProject={function(){setShowNewProject(true);}}/>;
-  }else if(view==='editor'){inner=<EditorView app={app}/>;
+  }else if(view==='editor'){inner=<DraftEditor app={app}/>;
   }else{
     var vc=null;
    if(view==='canvas')vc=<ExploreCanvas app={app}/>;
