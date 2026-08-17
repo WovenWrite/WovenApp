@@ -92,7 +92,7 @@ function SharedDraftView({shareId}){
   var year=new Date().getFullYear();
 
   return(
-<div style={{minHeight:'100vh',background:T.bg,display:'flex',flexDirection:'column',overflowY:'scroll',scrollbarGutter:'stable',paddingRight:8}}>
+<div style={{minHeight:'100vh',background:T.bg,display:'flex',flexDirection:'column',overflowY:'scroll',paddingRight:16}}>
 
   {/* Selection colour */}
   <style>{`
@@ -114,7 +114,7 @@ function SharedDraftView({shareId}){
     <div style={{maxWidth:900,margin:'0 auto'}}>
 
       {/* Section 1: Written & Shared with Woven */}
-      <div style={{paddingBottom:40,marginBottom:30,borderBottom:'1px solid '+T.stroke,textAlign:'center'}}>
+      <div style={{paddingBottom:40,marginBottom:0,borderBottom:'1px solid '+T.stroke,textAlign:'center'}}>
         <span style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:T.text,letterSpacing:'.01em',textTransform:'uppercase',fontWeight:400}}>
           WRITTEN &amp; SHARED WITH{' '}
           <a href="https://www.wovenwrite.com" target="_blank" rel="noopener noreferrer" style={{color:T.amber,textDecoration:'none',fontWeight:600}} onMouseOver={function(e){e.currentTarget.style.textDecoration='underline';}} onMouseOut={function(e){e.currentTarget.style.textDecoration='none';}}>WOVEN</a>
@@ -122,7 +122,7 @@ function SharedDraftView({shareId}){
       </div>
 
       {/* Section 2: Header */}
-      <div style={{marginBottom:0,paddingTop:20,paddingBottom:30,borderBottom:'1px solid '+T.stroke}}>
+      <div style={{marginBottom:0,paddingTop:30,paddingBottom:30,borderBottom:'1px solid '+T.stroke}}>
         {/* Project name */}
         {projectName&&(
 <div style={{fontFamily:'DM Sans, sans-serif',fontSize:18,color:T.text,letterSpacing:'.11em',fontWeight:400,marginBottom:15,textTransform:'uppercase'}}>
