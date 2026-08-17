@@ -1,9 +1,9 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 // ── SharedDraftView.jsx ──
 // Read-only published draft page.
 // Rendered when ?share=ID is in the URL.
 // Requires the same Google Fonts and Supabase CDN as the main app.
 
-var {useState,useEffect}=React;
 
 var T={
   bg:'#FDF8F0',
