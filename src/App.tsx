@@ -249,7 +249,7 @@ input,textarea,select{font-family:var(--ui);font-size:14px;color:var(--text);bac
 input::placeholder,textarea::placeholder{color:var(--placeholder);opacity:1;}
 input:focus,textarea:focus,select:focus{outline:2px solid var(--indigo);outline-offset:-1px;background:var(--bg0);}
 textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
-::-webkit-scrollbar{width:4px;height:4px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px;}
+::-webkit-scrollbar{width:5px;height:5px;}::-webkit-scrollbar-track{background:transparent;margin:6px 10px 6px 0;}::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:10px;}::-webkit-scrollbar-thumb:hover{background:var(--bg4);}
 .mi{font-family:'Material Icons';font-style:normal;font-size:20px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}
 .material-symbols-outlined{font-family:'Material Symbols Outlined';font-style:normal;font-size:20px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;direction:ltr;-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--r);font-size:14px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:all .15s;white-space:nowrap;}
@@ -318,8 +318,8 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .filter-coll-lbl{font-size:10px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;padding:8px 8px 4px;display:block;}
 .chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;border:1px solid transparent;}
 .view-layout{display:flex;flex-direction:column;flex:1;overflow:hidden;position:relative;}
-.view-area{flex:1;overflow-y:auto;padding:0 0 80px;}
-.cards-grid{display:flex;flex-wrap:wrap;gap:16px;padding:16px;align-content:flex-start;}
+.view-area{flex:1;overflow-y:auto;padding:0;display:flex;flex-direction:column;}
+.cards-grid{display:flex;flex-wrap:wrap;gap:16px;padding:20px;align-content:flex-start;flex:1;}
 .draft-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s,box-shadow .15s;height:226px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
 .draft-card:hover{box-shadow:0 4px 12px rgba(42,31,16,.08);}
 .draft-card.drag-over{border-color:var(--indigo);background:rgba(196,94,40,.03);}
@@ -345,7 +345,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .arrow-btn:hover{background:var(--bg2);color:var(--text);}
 .nest-indent{margin-left:24px;position:relative;}
 .nest-indent::before{content:'';position:absolute;left:-12px;top:0;bottom:0;width:1px;background:var(--border);}
-.lt-section{margin-top:24px;border-top:1px solid var(--border);padding-top:18px;}
+.lt-section{}
 .lt-hdr{display:flex;align-items:center;gap:7px;padding:0 0 10px;cursor:pointer;}
 .lt-tilde{color:var(--teal);font-size:20px;font-weight:600;line-height:1;font-family:var(--scribble);}
 .lt-label{font-size:13px;font-weight:600;color:var(--mid);flex:1;}
@@ -1568,7 +1568,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
 
   return(
 <div
-  style={{width:270,height:400,borderRadius:15,overflow:'hidden',background:'var(--bg1)',border:'1px solid var(--border)',display:'flex',flexDirection:'column',cursor:structureMode?'grab':'pointer',boxShadow:'0 2px 8px rgba(42,31,16,.06)',transition:'box-shadow .15s,transform .1s',flexShrink:0}}
+  style={{width:270,height:400,borderRadius:15,overflow:'visible',background:'var(--bg1)',border:'1px solid var(--border)',display:'flex',flexDirection:'column',cursor:structureMode?'grab':'pointer',boxShadow:'0 2px 8px rgba(42,31,16,.06)',transition:'box-shadow .15s',flexShrink:0,position:'relative'}}
   draggable={structureMode}
   onDragStart={structureMode?function(e){e.dataTransfer.setData('draftId',draft.id);}:undefined}
   onDragOver={structureMode?function(e){e.preventDefault();setDragOver(true);}:undefined}
@@ -1577,19 +1577,19 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   onMouseDown={handleMouseDown}
   onMouseMove={handleMouseMove}
   onMouseUp={handleMouseUp}
-  onMouseOver={function(e){e.currentTarget.style.boxShadow='0 6px 20px rgba(42,31,16,.12)';if(!structureMode)e.currentTarget.style.transform='translateY(-2px)';}}
-  onMouseOut={function(e){e.currentTarget.style.boxShadow='0 2px 8px rgba(42,31,16,.06)';e.currentTarget.style.transform='translateY(0)';}}
+  onMouseOver={function(e){e.currentTarget.style.boxShadow='0 6px 20px rgba(42,31,16,.12)';}}
+  onMouseOut={function(e){e.currentTarget.style.boxShadow='0 2px 8px rgba(42,31,16,.06)';}}
 >
   {/* Thumbnail */}
-  <div style={{height:150,background:'linear-gradient(135deg,var(--bg3),var(--bg4))',flexShrink:0,backgroundImage:draft.thumbnail?'url('+draft.thumbnail+')':undefined,backgroundSize:'cover',backgroundPosition:'center',position:'relative'}}>
+  <div style={{height:150,background:'#E2D0B8',flexShrink:0,backgroundImage:draft.thumbnail?'url('+draft.thumbnail+')':undefined,backgroundSize:'cover',backgroundPosition:'center',position:'relative',borderRadius:'15px 15px 0 0',overflow:'hidden'}}>
     {dragOver&&<div style={{position:'absolute',inset:0,background:'rgba(196,94,40,.15)',borderRadius:'15px 15px 0 0'}}/>}
   </div>
 
   {/* Content */}
-  <div style={{flex:1,background:'#F5EDE0',padding:'10px 15px',display:'flex',flexDirection:'column',gap:13,minHeight:0}}>
+  <div style={{flex:1,background:'#F5EDE0',padding:'10px 15px',display:'flex',flexDirection:'column',gap:13,minHeight:0,borderRadius:'0 0 15px 15px',overflow:'hidden'}}>
     {/* Title */}
     <div style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',flexShrink:0}}>
-      {label}— {draft.title||'Untitled'}
+      {label}- {draft.title||'Untitled'}
     </div>
 
     {/* Synopsis / body preview */}
@@ -1612,13 +1612,13 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
     </div>
 
     {/* Bottom row */}
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,marginTop:'auto'}}>
       {/* Left: strand circles */}
       <div style={{display:'flex',alignItems:'center'}}>
         {visibleStrands.map(function(st,i){return(
 <div key={st.id} style={{width:25,height:25,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-8:0,boxSizing:'border-box',position:'relative',zIndex:visibleStrands.length-i,cursor:'default'}} className="has-tooltip">
   {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:11}}>{st.emoji}</span>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
-  <span className="tooltip-text" style={{whiteSpace:'nowrap'}}>{st.name}</span>
+  <span className="tooltip-text" style={{whiteSpace:'nowrap',transform:'translateX(-50%) translateY(8px)',top:'100%',bottom:'auto',marginTop:0}}>{st.name}</span>
 </div>
         );})}
         {overflow>0&&(
@@ -1669,74 +1669,69 @@ function SynopsisPreview({draft,onUpdate}){
 
 // ── LooseThreadsSection ──
 function LooseThreadsSection({threads,app,view}){
-  var s=useState(true);var open=s[0];var setOpen=s[1];
-  // threads prop already comes in; sort newest first
   var sortedThreads=threads.slice().sort(function(a,b){return (b.createdAt||'').localeCompare(a.createdAt||'');});
   function addLT(){app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
-  var isTile=view==='tiles';var isTable=view==='table';
-  return(
-<div className="lt-section"
-  onDragOver={function(e){e.preventDefault();}}
-  onDrop={function(e){
-    e.preventDefault();
-    var fromId=e.dataTransfer.getData('draftId');
-    if(!fromId) return;
-    var allDr=app.allDrafts[app.projId]||[];
-    var fromDraft=allDr.find(function(d){return d.id===fromId;});
-    if(!fromDraft) return;
-    // If seq draft dropped on LT section → demote to loose thread
-    if(fromDraft.status!=='loose_thread'){
-      app.updateDraft(app.projId,fromId,{status:'loose_thread',order:null,parentId:null});
-    }
-  }}>
-  <div className="lt-hdr" onClick={function(){setOpen(!open);}}>
-    <span className="lt-tilde">~</span>
-    <span className="lt-label">Loose Threads</span>
-    {threads.length>0&&<span style={{fontSize:13,color:'var(--mid)'}}>{threads.length}</span>}
-    <span className={'lt-chevron mi'+(open?' open':'')}>chevron_right</span>
+
+  if(view==='table'){return(
+<div style={{padding:'0 0 12px'}}>
+  <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderTop:'1px solid var(--border)'}}>
+    <span style={{color:'var(--teal)',fontFamily:'var(--scribble)',fontSize:16,fontWeight:600}}>~</span>
+    <span style={{fontSize:13,fontWeight:600,color:'var(--mid)'}}>Loose Threads</span>
+    {threads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:18,height:18,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{threads.length}</span>}
   </div>
-  {open&&(
-<div>
-  {isTable?(
-<div>
   {sortedThreads.map(function(d){return(
-<div key={d.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderBottom:'1px solid var(--bg2)'}}
-  draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',d.id);}}>
-  <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab'}}>drag_indicator</span>
-  <span style={{color:'var(--teal)',fontSize:16,fontWeight:600,width:24}}>~</span>
+<div key={d.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderBottom:'1px solid var(--bg2)'}}>
   <input className="tbl-inp" defaultValue={d.title} placeholder="Untitled loose thread" onBlur={function(e){app.updateDraft(app.projId,d.id,{title:e.target.value});}} style={{maxWidth:180}}/>
   <input className="tbl-inp syn" defaultValue={d.synopsis} placeholder="Note..." onBlur={function(e){app.updateDraft(app.projId,d.id,{synopsis:e.target.value});}} style={{flex:1}}/>
   <button className="card-open" onClick={function(){app.openDraft(d.id);}}>Draft</button>
 </div>
   );})}
 </div>
-  ):isTile?(
-<div className="tiles-grid">
-  {threads.map(function(d){return(
-<div key={d.id} className="tile" draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',d.id);}}
-  onDragOver={function(e){e.preventDefault();}} onClick={function(){app.openDraft(d.id);}}>
-  <div className="tile-top"><span style={{color:'var(--teal)',fontWeight:700,fontSize:14}}>~</span></div>
-  <div className="tile-title">{d.title||'Untitled'}</div>
-  <div className="tile-syn">{d.synopsis||''}</div>
-</div>
-  );})}
-</div>
-  ):(
-<div className="cards-grid">
-  <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:8,display:'flex',flexDirection:'column',boxShadow:'none'}} onClick={addLT}>
-    <span className="mi" style={{fontSize:22,color:'var(--placeholder)'}}>add_circle_outline</span>
-    <span style={{fontSize:12,color:'var(--placeholder)'}}>New loose thread</span>
-  </div>
-  {sortedThreads.map(function(d){return <DraftCard key={d.id} draft={d} label="~" app={app}/>;} )}
-</div>
-  )}
+  );}
 
+  // Cards view — new tile layout
+  return(
+<div
+  style={{background:'#F5EDE0',padding:'16px 16px 24px',marginTop:0}}
+  onDragOver={function(e){e.preventDefault();}}
+  onDrop={function(e){
+    e.preventDefault();var fromId=e.dataTransfer.getData('draftId');if(!fromId)return;
+    var allDr=app.allDrafts[app.projId]||[];var fromDraft=allDr.find(function(d){return d.id===fromId;});
+    if(fromDraft&&fromDraft.status!=='loose_thread')app.updateDraft(app.projId,fromId,{status:'loose_thread',order:null,parentId:null});
+  }}>
+  {/* Section header */}
+  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
+    <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'var(--text)'}}>Loose Threads</span>
+    {threads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:22,height:22,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{threads.length}</span>}
+    <button style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:5,background:'transparent',border:'none',cursor:'pointer',fontSize:13,color:'var(--teal)',fontFamily:'DM Sans, sans-serif'}} onClick={addLT}>
+      <span className="mi" style={{fontSize:16}}>add</span>Add
+    </button>
+  </div>
+  {/* Tile grid */}
+  <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
+    {sortedThreads.map(function(d){
+      var bodyPreview=d.body?stripHtml(d.body).slice(0,200):'';
+      return(
+<div key={d.id} style={{background:'#FDF8F0',border:'1px solid #E2D0B8',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:220,flexShrink:0}}
+  onClick={function(){app.openDraft(d.id);}}>
+  <div style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2A1F10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
+    {d.title||'Untitled loose thread'}
+  </div>
+  {bodyPreview&&(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,fontStyle:'italic',color:'#A88060',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:4,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
+  {bodyPreview}
 </div>
   )}
+</div>
+      );
+    })}
+    {sortedThreads.length===0&&(
+<div style={{fontSize:13,color:'var(--placeholder)',fontStyle:'italic',padding:'8px 0'}}>No loose threads yet. Drag a draft here to park it.</div>
+    )}
+  </div>
 </div>
   );
 }
-
 // ── Empty state ──
 
 function DraftLoadingSpinner(){
@@ -1779,13 +1774,10 @@ function CardsView({app}){
     var seqIdx=sortedSeq.findIndex(function(d){return d.id===parent.id;});
     return <DraftCard key={parent.id} draft={parent} label={''+(seqIdx>=0?seqIdx+1:'?')} app={app} onMoveUp={moveUp} onMoveDown={moveDown} structureMode={structureMode}/>;
   })}
-  <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:8,display:'flex',flexDirection:'column',boxShadow:'none'}} onClick={addDraft}>
-    <span className="mi" style={{fontSize:28,color:'var(--placeholder)'}}>add_circle_outline</span>
-    <span style={{fontSize:13,color:'var(--placeholder)'}}>New draft</span>
-  </div>
 </div>
     )}
     <LooseThreadsSection threads={ltDrafts} app={app} view="cards"/>
+    <div style={{height:50,background:'#A88060',flexShrink:0,marginTop:'auto'}}/>
   </div>
   <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
 </div>
