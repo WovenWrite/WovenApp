@@ -4,68 +4,14 @@ import { useState, useEffect, useRef } from "react";
 import DraftEditor from './DraftEditor'
 import SharedDraftView from './SharedDraftView'
 import AuthScreen from './auth/AuthScreen'
-
-// ── Version snapshots ──
-var MAX_SNAPSHOTS=20;
-var SNAPSHOT_INTERVAL_MS=60*60*1000;
-function getSnapshotKey(draftId){return 'woven:versions:'+draftId;}
-function loadSnapshots(draftId){try{var v=localStorage.getItem(getSnapshotKey(draftId));return v?JSON.parse(v):[];}catch(e){return[];}}
-function saveSnapshot(draftId,body,wordCount,label){
-  if(!body||!body.trim())return;
-  var snapshots=loadSnapshots(draftId);var now=Date.now();
-  var last=snapshots[0];
-  if(label==='auto'&&last&&(now-last.ts)<SNAPSHOT_INTERVAL_MS)return;
-  var snap={id:genId(),ts:now,label:label||'auto',body:body,wordCount:wordCount||0};
-  var updated=[snap].concat(snapshots).slice(0,MAX_SNAPSHOTS);
-  try{localStorage.setItem(getSnapshotKey(draftId),JSON.stringify(updated));}catch(e){}
-  var uid=window.__wovenUserId;
-  if(uid){supabase.from('wf_data').upsert({key:getSnapshotKey(draftId),user_id:uid,value:updated,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(){});}
-}
-function formatSnapshotTime(ts){
-  var d=new Date(ts);var now=new Date();
-  var isToday=d.toDateString()===now.toDateString();
-  var yesterday=new Date(now);yesterday.setDate(yesterday.getDate()-1);
-  var isYesterday=d.toDateString()===yesterday.toDateString();
-  var time=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  if(isToday)return 'Today '+time;
-  if(isYesterday)return 'Yesterday '+time;
-  return d.toLocaleDateString([],{month:'short',day:'numeric'})+' '+time;
-}
-
-// ── Supabase (loaded via CDN) ──
-var SB_URL='https://mxsdiqrbxlvcwexfdtrj.supabase.co';
-var SB_KEY='sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u';
-// Supabase — loaded via index.html CDN script tag
-// getSupabase() safely returns client once CDN is ready
-function getSupabase(){
-  if(!window.__sb){
-    if(window.supabase&&window.supabase.createClient){
-      window.__sb=window.supabase.createClient(SB_URL,SB_KEY);
-    }
-  }
-  return window.__sb||null;
-}
-var supabase={
-  auth:{
-    getSession:function(){return getSupabase()?getSupabase().auth.getSession():Promise.resolve({data:{session:null}});},
-    getUser:function(){return getSupabase()?getSupabase().auth.getUser():Promise.resolve({data:{user:null}});},
-    signUp:function(o){return getSupabase()?getSupabase().auth.signUp(o):Promise.resolve({error:{message:'Auth not ready'}});},
-    signInWithPassword:function(o){return getSupabase()?getSupabase().auth.signInWithPassword(o):Promise.resolve({error:{message:'Auth not ready'}});},
-    signOut:function(){return getSupabase()?getSupabase().auth.signOut():Promise.resolve({});},
-    resetPasswordForEmail:function(e){return getSupabase()?getSupabase().auth.resetPasswordForEmail(e):Promise.resolve({error:{message:'Auth not ready'}});},
-    onAuthStateChange:function(cb){if(getSupabase())return getSupabase().auth.onAuthStateChange(cb);return{data:{subscription:{unsubscribe:function(){}}}};}
-  },
-  from:function(table){
-    var client=getSupabase();
-    if(!client){
-      var noop=function(){return Promise.resolve({data:null,error:{message:'DB not ready'}});};
-      var chain={maybeSingle:noop,single:noop,then:function(cb){return Promise.resolve(cb({data:null,error:null}));}};
-      var eqChain=function(){return{eq:function(){return chain;},maybeSingle:noop};};
-      return{select:function(){return{eq:function(){return{eq:eqChain,maybeSingle:noop};},maybeSingle:noop};},upsert:noop,insert:noop};
-    }
-    return client.from(table);
-  }
-};
+import {
+  STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
+  getSupabase, supabase, genId, stripHtml, countWords, initials, todayStr,
+  compressImage, uploadImage, deleteStorageImage,
+  MAX_SNAPSHOTS, SNAPSHOT_INTERVAL_MS, getSnapshotKey,
+  loadSnapshots, saveSnapshot, formatSnapshotTime
+} from './utils'
+// Snapshot helpers, Supabase client, and env constants now live in ./utils
 
 // ── Storage ──
 function saveLS(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
@@ -85,57 +31,15 @@ function loadDB(key,def){
   });
 }
 
-// ── Utils ──
-function genId(){return '_'+Math.random().toString(36).slice(2)+Date.now().toString(36);}
+// genId, compressImage, deleteStorageImage, uploadImage, countWords, stripHtml,
+// todayStr, initials, STATUSES, PRESET_COLORS, FIELD_TYPES, COLL_FIELDS,
+// defaultFields, SYSTEM_COLORS now live in ./utils
 
-// ── Image helpers ──
-function compressImage(file){
-  return new Promise(function(resolve){
-    var img=new Image();var url=URL.createObjectURL(file);
-    img.onload=function(){
-      var MAX=1200;var w=img.width;var h=img.height;
-      if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
-      var canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
-      canvas.getContext('2d').drawImage(img,0,0,w,h);
-      URL.revokeObjectURL(url);
-      canvas.toBlob(function(blob){resolve(blob||file);},{type:'image/jpeg',quality:0.82});
-    };
-    img.onerror=function(){URL.revokeObjectURL(url);resolve(file);};
-    img.src=url;
-  });
-}
-function deleteStorageImage(url){
-  if(!url||!url.includes('supabase'))return;
-  var client=getSupabase();if(!client)return;
-  var marker='/object/public/woven-images/';var idx=url.indexOf(marker);if(idx<0)return;
-  client.storage.from('woven-images').remove([url.slice(idx+marker.length)]).then(function(){});
-}
-async function uploadImage(file){
-  var client=getSupabase();if(!client)return null;
-  var compressed=await compressImage(file);
-  var path='uploads/'+genId()+'.jpg';
-  var res=await client.storage.from('woven-images').upload(path,compressed,{upsert:true,contentType:'image/jpeg'});
-  if(res.error){console.error('Upload error:',res.error);return null;}
-  var pub=client.storage.from('woven-images').getPublicUrl(path);
-  return pub.data&&pub.data.publicUrl?pub.data.publicUrl:null;
-}
-function countWords(t){if(!t)return 0;var s=t.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();return s?s.split(' ').filter(function(w){return w.length>0;}).length:0;}
-function stripHtml(html){return html?html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim():'';}
-function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function dayLbl(offset){var days=['Su','Mo','Tu','We','Th','Fr','Sa'];var d=new Date();d.setDate(d.getDate()-offset);return days[d.getDay()];}
-function initials(name){
-  if(!name||!name.trim())return '?';
-  var p=name.trim().split(/\s+/).filter(function(w){return w.length>0;});
-  if(p.length===0)return '?';
-  if(p.length===1)return p[0].slice(0,1).toUpperCase();
-  if(p.length===2)return(p[0][0]+p[1][0]).toUpperCase();
-  return(p[0][0]+p[1][0]+p[2][0]).toUpperCase();
-}
 function getGreeting(){var h=new Date().getHours();if(h<12)return 'Good morning';if(h<17)return 'Good afternoon';return 'Good evening';}
 function useIsMobile(){var s=useState(window.innerWidth<768);var isMobile=s[0];var setIsMobile=s[1];useEffect(function(){function onResize(){setIsMobile(window.innerWidth<768);}window.addEventListener('resize',onResize);return function(){window.removeEventListener('resize',onResize);};},[]);return isMobile;}
 
 // ── Constants ──
-var STATUSES={loose_thread:{label:'Loose Thread',color:'#d4943e'},first_draft:{label:'First Draft',color:'#2f76e0'},second_draft:{label:'Second Draft',color:'#e02f79'},under_review:{label:'Under Review',color:'#ce2fe0'},complete:{label:'Complete',color:'#64e02f'}};
 // Canvas | Table | Tiles | Cards | (separator) Strands
 var VIEW_MODES=[
   {key:'canvas', icon:'lightbulb',    label:'Canvas',     group:'main'},
@@ -143,8 +47,6 @@ var VIEW_MODES=[
   {key:'cards',  icon:'book_ribbon',  label:'Storyboard', group:'main'},
   {key:'strands',icon:'gesture',      label:'Spools',     group:'strands'}
 ];
-var PRESET_COLORS=['#2f76e0','#64e02f','#ce2fe0','#2fe07f','#e02f79','#c45e28','#e8a030','#2f9966','#b83220','#f0c050'];
-var FIELD_TYPES=[{id:'short_text',label:'Short text'},{id:'long_text',label:'Long text'},{id:'number',label:'Number'},{id:'boolean',label:'Yes / No'},{id:'select',label:'Dropdown'},{id:'strand_ref',label:'Reference'}];
 var PROJ_TYPES=[
   {id:'fiction',    label:'Fiction',     icon:'auto_stories',colls:['Characters','Locations','Lore & World'],desc:'Novels, short fiction, narrative'},
   {id:'nonfiction', label:'Non-Fiction', icon:'article',     colls:['Sources','Interviews','Subjects'],      desc:'Essays, memoir, journalism'},
@@ -153,15 +55,6 @@ var PROJ_TYPES=[
   {id:'screenplay', label:'Screenplay', icon:'movie',       colls:['Characters','Locations','Scenes'],       desc:'Film, TV, stage scripts'},
   {id:'other',      label:'Other',      icon:'edit_note',   colls:['Characters','Sources'],                  desc:'Everything else'}
 ];
-var COLL_FIELDS={
-  'Characters':[{id:'aliases',label:'Aliases',type:'short_text'},{id:'role',label:'Role',type:'short_text'},{id:'personality',label:'Personality',type:'long_text'},{id:'appearance',label:'Physical Description',type:'long_text'}],
-  'Locations':[{id:'type',label:'Type',type:'short_text'},{id:'description',label:'Description',type:'long_text'}],
-  'Lore & World':[{id:'category',label:'Category',type:'short_text'},{id:'notes',label:'Notes',type:'long_text'}],
-  'Sources':[{id:'author',label:'Author',type:'short_text'},{id:'url',label:'URL',type:'short_text'},{id:'notes',label:'Notes',type:'long_text'}],
-  'Interviews':[{id:'subject',label:'Subject',type:'short_text'},{id:'date',label:'Date',type:'short_text'},{id:'notes',label:'Notes',type:'long_text'}],
-  'Scenes':[{id:'location',label:'Location',type:'short_text'},{id:'notes',label:'Notes',type:'long_text'}]
-};
-function defaultFields(c){return COLL_FIELDS[c]||[{id:'notes',label:'Notes',type:'long_text'}];}
 var DEFAULT_TABLE_COLS=['title','synopsis','status','strandTags'];
 
 // ── Seed Data ──
@@ -2901,7 +2794,7 @@ function EditorView({app}){
 
 
 // ── CustomColorPicker ──
-var SYSTEM_COLORS=['#c45e28','#e8a030','#2f9966','#2f76e0','#ce2fe0','#e02f79','#64e02f','#2fe07f'];
+// SYSTEM_COLORS now lives in ./utils
 function CustomColorPicker({color,onSelect}){
   var sc=useState(false);var showCustom=sc[0];var setShowCustom=sc[1];
   var sh=useState('');var hexVal=sh[0];var setHexVal=sh[1];
