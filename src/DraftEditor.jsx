@@ -351,8 +351,10 @@ function DraftEditor({app}){
       else if(fmt.header)setActiveFormat(String(fmt.header));
       else setActiveFormat('');
     });
+    var loadComplete=false;
+    setTimeout(function(){loadComplete=true;},100); // flag set after initial load
     q.on('text-change',function(delta,oldDelta,source){
-      if(source!=='user')return; // ignore API/paste init events
+      if(source!=='user'&&!loadComplete)return; // ignore only the initial paste-in
       var txt=q.getText();
       var wc=countWords(txt);
       setWordCount(wc);
