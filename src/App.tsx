@@ -4,12 +4,17 @@ import { useState, useEffect, useRef } from "react";
 import DraftEditor from './DraftEditor'
 import SharedDraftView from './SharedDraftView'
 import AuthScreen from './auth/AuthScreen'
+import PropertiesDrawer from './PropertiesDrawer'
+import StrandsDrawer from './StrandsDrawer'
+import VersionsDrawer from './VersionsDrawer'
+import LooseThreadDrawer from './LooseThreadDrawer'
+import BindDrawer from './BindDrawer'
+import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, CustomColorPicker, EmojiPicker, AddFieldInline } from './SharedUI'
 import {
   STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
-  getSupabase, supabase, genId, stripHtml, countWords, initials, todayStr,
+  supabase, genId, stripHtml, countWords, initials, todayStr,
   compressImage, uploadImage, deleteStorageImage,
-  MAX_SNAPSHOTS, SNAPSHOT_INTERVAL_MS, getSnapshotKey,
-  loadSnapshots, saveSnapshot, formatSnapshotTime
+  saveSnapshot
 } from './utils'
 // Snapshot helpers, Supabase client, and env constants now live in ./utils
 
@@ -423,38 +428,7 @@ function GlobalSaveIndicator(){
   return(<div style={{display:'flex',alignItems:'center',gap:4,opacity:.5}}><span style={{width:6,height:6,borderRadius:'50%',background:'var(--teal)',flexShrink:0}}/><span style={{fontSize:11,color:'var(--mid)'}}>Saved</span></div>);
 }
 
-// ── ArchiveConfirmModal ──
-function ArchiveConfirmModal({draft,allDrafts,onConfirm,onCancel}){
-  var children=(allDrafts||[]).filter(function(d){return d.parentId===draft.id&&!d.archived;});
-  var hasChildren=children.length>0;
-  return(
-<div className="modal-overlay">
-  <div className="modal-backdrop" onClick={onCancel}/>
-  <div className="modal-box" style={{maxWidth:420}}>
-    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
-      <span className="mi" style={{fontSize:28,color:'var(--indigo)'}}>inventory_2</span>
-      <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,color:'var(--text)'}}>Archive this draft?</div>
-    </div>
-    <div style={{fontSize:14,color:'var(--body-text)',lineHeight:1.6,marginBottom:12}}>
-      <strong style={{color:'var(--text)'}}>{draft.title||'Untitled'}</strong> will be hidden from all views and moved to your Archive.
-    </div>
-    {hasChildren&&(
-<div style={{background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:'var(--r)',padding:'10px 14px',fontSize:13,color:'var(--mid)',marginBottom:12}}>
-  <span className="mi" style={{fontSize:16,verticalAlign:'middle',marginRight:6}}>info</span>
-  This draft has {children.length} nested {children.length===1?'draft':'drafts'} — {children.length===1?'it':'they'} will also be archived.
-</div>
-    )}
-    <div style={{fontSize:13,color:'var(--mid)',marginBottom:20}}>You can restore it any time from <strong>Your Archive</strong> on the dashboard.</div>
-    <div style={{display:'flex',gap:8}}>
-      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onCancel}>Cancel</button>
-      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={onConfirm}>
-        <span className="mi" style={{fontSize:16}}>inventory_2</span>Archive
-      </button>
-    </div>
-  </div>
-</div>
-  );
-}
+// ArchiveConfirmModal now lives in ./SharedUI
 
 // ── ArchiveProjectConfirmModal ──
 function ArchiveProjectConfirmModal({proj,onConfirm,onCancel}){
@@ -501,34 +475,7 @@ function OverflowTooltip({label,names}){
   );
 }
 
-// ── StatusDot ──
-function StatusDot({status,onChange,size}){
-  var s=useState(false);var open=s[0];var setOpen=s[1];
-  var p=useState({top:0,left:0});var pos=p[0];var setPos=p[1];
-  var ref=useRef(null);
-  var info=STATUSES[status]||STATUSES.first_draft;
-  var sz=size||10;
-  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
-  function handleClick(e){e.stopPropagation();var r=e.currentTarget.getBoundingClientRect();setPos({top:r.bottom+5,left:r.left});setOpen(!open);}
-  return(
-<div ref={ref} style={{display:'inline-flex',alignItems:'center'}}>
-  <div style={{width:sz,height:sz,borderRadius:'50%',background:info.color,cursor:'pointer',flexShrink:0}} onClick={handleClick} title={info.label}/>
-  {open&&<div style={{position:'fixed',top:pos.top,left:pos.left,zIndex:9999,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:8,overflow:'hidden',boxShadow:'0 8px 22px rgba(0,0,0,.5)',minWidth:170}}>
-    {Object.keys(STATUSES).map(function(k){var si=STATUSES[k];return(
-<div key={k} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',cursor:'pointer',background:k===status?'var(--bg3)':'transparent',fontSize:14}} onClick={function(){onChange(k);setOpen(false);}}>
-  <div style={{width:8,height:8,borderRadius:'50%',background:si.color,flexShrink:0}}/>
-  <span>{si.label}</span>
-</div>
-    );})}
-    <div style={{height:1,background:'var(--border)',margin:'3px 0'}}/>
-    <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',cursor:'pointer',fontSize:14,color:'var(--mid)'}} onClick={function(){onChange('archive');setOpen(false);}}>
-      <span className="mi" style={{fontSize:15,color:'var(--mid)'}}>inventory_2</span>
-      <span>Archive</span>
-    </div>
-  </div>}
-</div>
-  );
-}
+// StatusDot now lives in ./SharedUI
 
 // ── Panel (full overlay, doesn't cover nav) ──
 function Panel({open,onClose,title,children,footer}){
@@ -740,7 +687,7 @@ function GlobalLooseThreads({app}){
 </div>
   )}
   {openLTId&&(
-<LTDrawer lt={app.globalLT[openLTId]} activeProjects={activeProjects} onUpdate={function(changes){updateLT(openLTId,changes);}} onMove={function(pid){moveToProject(openLTId,pid);setOpenLTId(null);}} onClose={function(){setOpenLTId(null);}} onDelete={function(){updateLT(openLTId,{archived:true});setOpenLTId(null);}}/>
+<LooseThreadDrawer lt={app.globalLT[openLTId]} activeProjects={activeProjects} open={true} variant="overlay" onUpdate={function(changes){updateLT(openLTId,changes);}} onMove={function(pid){moveToProject(openLTId,pid);setOpenLTId(null);}} onClose={function(){setOpenLTId(null);}} onDelete={function(){updateLT(openLTId,{archived:true});setOpenLTId(null);}}/>
   )}
 </div>
   );
@@ -748,45 +695,7 @@ function GlobalLooseThreads({app}){
 
 
 // ── LTDrawer ──
-function LTDrawer({lt,activeProjects,onUpdate,onMove,onClose,onDelete}){
-  if(!lt)return null;
-  return(
-<div className="panel-overlay">
-  <div className="panel-backdrop" onClick={onClose}/>
-  <div className="panel-box">
-    <div className="panel-hdr">
-      <span className="panel-title" style={{fontFamily:'var(--serif)'}}>Loose Thread</span>
-      <div style={{display:'flex',gap:4}}>
-        <button className="btn-icon btn-danger" onClick={onDelete} title="Archive this thread"><span className="mi" style={{fontSize:18}}>delete</span></button>
-        <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-      </div>
-    </div>
-    <div className="panel-body" style={{display:'flex',flexDirection:'column',gap:14}}>
-      <div>
-        <span className="sect-lbl">Title</span>
-        <input key={lt.id+'-t'} defaultValue={lt.title||''} placeholder="Give this thread a name..." onBlur={function(e){onUpdate({title:e.target.value});}}/>
-      </div>
-      <div style={{flex:1,display:'flex',flexDirection:'column'}}>
-        <span className="sect-lbl">Notes</span>
-        <textarea key={lt.id+'-s'} defaultValue={lt.synopsis||''} placeholder="Write freely — capture the idea, explore it, let it breathe..." rows={12} style={{resize:'vertical',flex:1}} onBlur={function(e){onUpdate({synopsis:e.target.value});}}/>
-      </div>
-      {activeProjects.length>0&&(
-<div style={{paddingTop:14,borderTop:'1px solid var(--border)'}}>
-  <span className="sect-lbl">Move to a project</span>
-  <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
-    {activeProjects.map(function(p){return(
-<button key={p.id} className="btn btn-ghost" style={{justifyContent:'flex-start'}} onClick={function(){onMove(p.id);}}>
-  <span className="mi" style={{fontSize:16}}>arrow_forward</span>{p.title}
-</button>
-    );})}
-  </div>
-</div>
-      )}
-    </div>
-  </div>
-</div>
-  );
-}
+// LTDrawer now lives as LooseThreadDrawer in ./LooseThreadDrawer
 
 // ── Dashboard ──
 function Dashboard({app,onOpenProfile,onNewProject}){
@@ -1047,36 +956,7 @@ function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind,structu
   );
 }
 // ── StatusDotWithArchive ──
-function StatusDotWithArchive({draft,app,showLabel,dotSize}){
-  var sac=useState(false);var showConfirm=sac[0];var setShowConfirm=sac[1];
-  var info=STATUSES[draft.status]||STATUSES.first_draft;
-  function handleChange(s){
-    if(s==='archive'){setShowConfirm(true);return;}
-    var ch={status:s};
-    if(s==='loose_thread'){ch.order=null;ch.parentId=null;}
-    else if(draft.status==='loose_thread'){
-      var seqCount=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).length;
-      ch.order=seqCount+1;
-    }
-    app.updateDraft(app.projId,draft.id,ch);
-  }
-  function doArchive(){
-    var allDr=app.allDrafts[app.projId]||[];
-    var children=allDr.filter(function(d){return d.parentId===draft.id&&!d.archived;});
-    app.updateDraft(app.projId,draft.id,{archived:true});
-    children.forEach(function(c){app.updateDraft(app.projId,c.id,{archived:true});});
-    setShowConfirm(false);
-  }
-  var dotRef=useRef(null);
-  return(
-<div style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}} onClick={function(e){if(dotRef.current)dotRef.current.querySelector('[title]').click();}}>
-  <div ref={dotRef}><StatusDot status={draft.status} onChange={handleChange} size={dotSize}/></div>
-  {showLabel&&<span style={{fontSize:13,color:info.color,pointerEvents:'none'}}>{info.label}</span>}
-  {showConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[app.projId]||[]} onConfirm={doArchive} onCancel={function(){setShowConfirm(false);}}/>}
-</div>
-  );
-}
-
+// StatusDotWithArchive now lives in ./SharedUI
 
 // ── Export helpers ──
 function stripHtmlForExport(html){
@@ -1257,155 +1137,8 @@ window.doExport=function doExport(format,drafts,project,isSingleDraft,authorName
 }
 
 // ── BindPanel ──
-function BindPanel({app,open,onClose,activeFilter}){
-  var s=useState('PDF');var format=s[0];var setFormat=s[1];
-  var si=useState(false);var inclNested=si[0];var setInclNested=si[1];
-  var sex=useState({});var excluded=sex[0];var setExcluded=sex[1];
-  var sel=useState(false);var exporting=sel[0];var setExporting=sel[1];
-  // Share link state — one link per project stored in app state
-  var bindShareKey='woven:bind_share:'+app.projId;
-  var ssl=useState(function(){try{var v=localStorage.getItem(bindShareKey);return v?JSON.parse(v):null;}catch(e){return null;}});
-  var bindShare=ssl[0];var setBindShare=ssl[1];
-  var scp=useState(false);var linkCopied=scp[0];var setLinkCopied=scp[1];
-  var sll=useState(false);var linkLoading=sll[0];var setLinkLoading=sll[1];
-  // Get strand info for active filter label
-  var projStrands=app.allStrands[app.projId]||{};
-  var activeStrand=null;
-  if(activeFilter){Object.values(projStrands).flat().forEach(function(st){if(st.id===activeFilter)activeStrand=st;});}
-  var allDraftsList=app.allDrafts[app.projId]||[];
-  // Apply strand filter first, then nested/parent filter
-  var strandFiltered=activeFilter
-    ?allDraftsList.filter(function(d){return (d.strandTags||[]).includes(activeFilter);})
-    :allDraftsList;
-  var parents=strandFiltered.filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
-  var allSeq=inclNested
-    ?strandFiltered.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);})
-    :strandFiltered.filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
-  var filtered=allSeq.filter(function(d){return !excluded[d.id];});
-  var totalWords=filtered.reduce(function(s,d){return s+(d.wordCount||0);},0);
-  function toggleExclude(id){setExcluded(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;});}
-  function handleExport(){
-    if(format==='link'){handlePublishLink();return;}
-    setExporting(true);
-    var profile=app.profile||{};
-    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
-    setTimeout(function(){
-      doExport(format,filtered,app.currentProject,false,authorName);
-      setExporting(false);
-    },100);
-  }
-  async function handlePublishLink(){
-    if(filtered.length===0)return;
-    setLinkLoading(true);
-    var profile=app.profile||{};
-    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
-    var projName=(app.currentProject&&app.currentProject.title)||'';
-    var combinedBody=filtered.map(function(d){
-      return '<h2 style="margin-top:32px;margin-bottom:8px;font-family:serif;">'+(d.title||'Untitled')+'</h2>'+(d.body||'');
-    }).join('');
-    var linkTitle=activeStrand?activeStrand.name+' — '+projName:projName;
-    // Delete old link if exists
-    if(bindShare&&bindShare.id){
-      await supabase.from('shared_drafts').delete().eq('id',bindShare.id);
-    }
-    var sid=genId();
-    var res=await supabase.from('shared_drafts').insert({id:sid,title:linkTitle,body:combinedBody,project_name:projName,author_name:authorName});
-    if(res.error){setLinkLoading(false);return;}
-    if(shareId) return(<div className="woven-root"><SharedDraftView shareId={shareId}/></div>);
-    var shareData={id:sid,link:link,enabled:true,created:new Date().toISOString()};
-    setBindShare(shareData);
-    try{localStorage.setItem(bindShareKey,JSON.stringify(shareData));}catch(e){}
-    setLinkLoading(false);
-  }
-  async function handleUnpublishLink(){
-    if(!bindShare)return;
-    await supabase.from('shared_drafts').delete().eq('id',bindShare.id);
-    setBindShare(null);
-    try{localStorage.removeItem(bindShareKey);}catch(e){}
-  }
-  function copyLink(){
-    if(!bindShare||!bindShare.link)return;
-    navigator.clipboard&&navigator.clipboard.writeText(bindShare.link);
-    setLinkCopied(true);setTimeout(function(){setLinkCopied(false);},2500);
-  }
-  return(
-<Panel open={open} onClose={onClose} title="Bind your drafts"
-  footer={<div style={{display:'flex',flexDirection:'column',gap:0,width:'100%'}}>
-    {/* Share link UI */}
-    {bindShare&&(
-<div style={{marginBottom:10,padding:10,background:'var(--bg2)',borderRadius:'var(--r)',border:'1px solid var(--border)'}}>
-  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-    <span style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.06em'}}>Read-only link</span>
-    <button style={{fontSize:11,color:'var(--danger)',background:'none',border:'none',cursor:'pointer',padding:0}} onClick={handleUnpublishLink}>Unpublish</button>
-  </div>
-  <div style={{fontSize:11,color:'var(--mid)',wordBreak:'break-all',marginBottom:6,fontFamily:'var(--mono)',lineHeight:1.4}}>{bindShare.link}</div>
-  <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={copyLink}>
-    {linkCopied?<><span className="mi" style={{fontSize:14}}>check_circle</span>Copied!</>:<><span className="mi" style={{fontSize:14}}>content_copy</span>Copy link</>}
-  </button>
-</div>
-    )}
-    {/* Format dropdown */}
-    <div style={{marginBottom:8}}>
-      <select style={{width:'100%',padding:'9px 12px',fontSize:13,color:'var(--text)',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--r)'}} value={format} onChange={function(e){setFormat(e.target.value);}}>
-        <option value="PDF">PDF — best for sharing & printing</option>
-        <option value="Word (.docx)">Word Document — edit in Word or Google Docs</option>
-        <option value="link">Read-only link — share in browser</option>
-      </select>
-    </div>
-    <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={handleExport} disabled={exporting||linkLoading||filtered.length===0}>
-      {(exporting||linkLoading)?<span style={{display:'flex',alignItems:'center',gap:8}}><span style={{width:14,height:14,borderRadius:'50%',border:'2px solid rgba(255,255,255,.3)',borderTopColor:'#fff',animation:'spin .7s linear infinite',display:'inline-block'}}/>{format==='link'?'Publishing...':'Preparing...'}</span>:format==='link'?'Publish link':'Export'}
-    </button>
-  </div>}>
-  {activeStrand&&(
-<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,padding:'8px 12px',background:'var(--bg2)',borderRadius:'var(--r)',border:'1px solid var(--border)'}}>
-  <div style={{width:8,height:8,borderRadius:'50%',background:activeStrand.color,flexShrink:0}}/>
-  <span style={{fontSize:13,color:'var(--text)',flex:1}}>Filtered to <strong>{activeStrand.name}</strong></span>
-  <span style={{fontSize:11,color:'var(--mid)'}}>Arc filter active</span>
-</div>
-  )}
-  <div style={{marginBottom:16}}>
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-      <span className="sect-lbl" style={{margin:0}}>Sequence</span>
-      <span style={{fontSize:12,color:'var(--mid)'}}>{filtered.length}{' draft'+(filtered.length!==1?'s':'')}{' · '}{totalWords}{' words'}</span>
-    </div>
-    <div className="bind-draft-list">
-      {parents.map(function(d,i){var info=STATUSES[d.status]||STATUSES.first_draft;var children=(app.allDrafts[app.projId]||[]).filter(function(c){return c.parentId===d.id;});return(
-<div key={d.id}>
-  <div className="bind-draft-row" style={{opacity:excluded[d.id]?.45:1,cursor:'pointer'}} onClick={function(){toggleExclude(d.id);}}>
-    <span style={{width:16,height:16,borderRadius:4,border:'1px solid '+(excluded[d.id]?'var(--border)':'var(--indigo)'),background:excluded[d.id]?'transparent':'var(--indigo)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
-      {!excluded[d.id]&&<span className="mi" style={{fontSize:12,color:'#fff'}}>check</span>}
-    </span>
-    <span style={{fontSize:11,color:'var(--mid)',width:24}}>{i+1}</span>
-    <div style={{width:9,height:9,borderRadius:'50%',background:info.color,flexShrink:0}}/>
-    <span style={{flex:1,textDecoration:excluded[d.id]?'line-through':'none',color:excluded[d.id]?'var(--mid)':'var(--text)'}}>{d.title||'Untitled'}</span>
-  </div>
-  {inclNested&&children.filter(function(c){return !c.archived;}).map(function(c,ci){var ci2=STATUSES[c.status]||STATUSES.first_draft;return(
-<div key={c.id} className="bind-draft-row" style={{paddingLeft:24,background:'rgba(42,31,16,.02)',opacity:excluded[c.id]?.45:1,cursor:'pointer'}} onClick={function(){toggleExclude(c.id);}}>
-  <span style={{width:16,height:16,borderRadius:4,border:'1px solid '+(excluded[c.id]?'var(--border)':'var(--indigo)'),background:excluded[c.id]?'transparent':'var(--indigo)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
-    {!excluded[c.id]&&<span className="mi" style={{fontSize:12,color:'#fff'}}>check</span>}
-  </span>
-  <span style={{fontSize:11,color:'var(--mid)',width:28}}>{(i+1)+'.'+(ci+1)}</span>
-  <div style={{width:9,height:9,borderRadius:'50%',background:ci2.color,flexShrink:0}}/>
-  <span style={{flex:1,fontSize:12,color:excluded[c.id]?'var(--mid)':'var(--body-text)',textDecoration:excluded[c.id]?'line-through':'none'}}>{c.title||'Untitled'}</span>
-</div>
-  );})}
-</div>
-      );})}
-      {parents.length===0&&<div style={{padding:'12px',fontSize:13,color:'var(--mid)'}}>No drafts to bind.</div>}
-    </div>
-    <div style={{fontSize:12,color:'var(--mid)',marginTop:6}}>Loose Threads are always excluded.</div>
-  </div>
-  <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderTop:'1px solid var(--border)',borderBottom:'1px solid var(--border)',marginBottom:14,cursor:'pointer'}} onClick={function(){setInclNested(!inclNested);}}>
-    <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(inclNested?'var(--indigo)':'var(--border)'),background:inclNested?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
-      {inclNested&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
-    </span>
-    <span style={{fontSize:13,color:'var(--text)'}}>Include nested drafts</span>
-  </div>
-
-</Panel>
-  );
-}
-// ── applyFS ──
+// BindPanel now lives as BindDrawer in ./BindDrawer
+// ── applyFS ──// ── applyFS ──
 function applyFS(drafts,filter,sort){
   // drafts here are tree nodes (with .children). Filter matches parent or any child.
   var d=filter?drafts.filter(function(x){
@@ -1882,7 +1615,7 @@ function CardsView({app}){
     <LooseThreadsSection threads={ltDrafts} app={app} view="cards"/>
     <div style={{height:50,background:'#A88060',flexShrink:0,marginTop:'auto'}}/>
   </div>
-  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
+  <BindDrawer app={app} open={bindOpen} variant="overlay" onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
 </div>
   );
 }
@@ -1936,7 +1669,7 @@ function TilesView({app}){
 </div>
     )}
   </div>
-  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
+  <BindDrawer app={app} open={bindOpen} variant="overlay" onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
 </div>
   );
 }
@@ -2104,195 +1837,16 @@ function TableView({app}){
   );})}
 </div>
   )}
-  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
+  <BindDrawer app={app} open={bindOpen} variant="overlay" onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
 </div>
   );
 }
 
 
-// ── AddFieldInline ──
-function AddFieldInline({onAdd}){
-  var ss=useState(false);var show=ss[0];var setShow=ss[1];
-  var sv=useState('');var val=sv[0];var setVal=sv[1];
-  var st=useState('short_text');var fieldType=st[0];var setFieldType=st[1];
-  if(!show)return(
-<button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={function(){setShow(true);}}>
-  <span className="mi" style={{fontSize:14}}>add</span> Add field
-</button>
-  );
-  return(
-<div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
-  <div style={{display:'flex',gap:6}}>
-    <input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} placeholder="Field name" style={{flex:1,fontSize:13}} onKeyDown={function(e){if(e.key==='Enter'&&val.trim()){onAdd(val,fieldType);setVal('');setShow(false);}if(e.key==='Escape'){setShow(false);setVal('');}}}/>
-    <select value={fieldType} onChange={function(e){setFieldType(e.target.value);}} style={{fontSize:12,width:110}}>
-      {FIELD_TYPES.map(function(ft){return <option key={ft.id} value={ft.id}>{ft.label}</option>;})}
-    </select>
-  </div>
-  <div style={{display:'flex',gap:6}}>
-    <button className="btn btn-primary btn-sm" style={{flex:1,justifyContent:'center'}} onClick={function(){if(val.trim()){onAdd(val,fieldType);setVal('');setShow(false);}}}>Add field</button>
-    <button className="btn btn-ghost btn-sm" onClick={function(){setShow(false);setVal('');}}>Cancel</button>
-  </div>
-</div>
-  );
-}
+// AddFieldInline, PropertiesDrawer, EditorStrandsPanel, StrandDetailDrawer, and
+// VersionHistoryPanel now live in ./SharedUI, ./PropertiesDrawer, ./StrandsDrawer, ./VersionsDrawer
 
-// ── Editor ──
-function PropertiesDrawer({draft,app,onClose,onOpenStrandDetail}){
-  var s1=useState(false);var advOpen=s1[0];var setAdvOpen=s1[1];
-  var s2=useState(false);var addChipOpen=s2[0];var setAddChipOpen=s2[1];
-  if(!draft)return null;
-  var projStrands=app.allStrands[app.projId]||{};
-  var allStrandsList=[];
-  Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){allStrandsList.push(Object.assign({},st,{collectionName:c}));});});
-  var taggedStrands=allStrandsList.filter(function(st){return (draft.strandTags||[]).includes(st.id);});
-  var untaggedStrands=allStrandsList.filter(function(st){return !(draft.strandTags||[]).includes(st.id);});
-  function update(changes){app.updateDraft(app.projId,draft.id,changes);}
-  function removeStrand(sid){update({strandTags:(draft.strandTags||[]).filter(function(t){return t!==sid;})});}
-  function addStrand(sid){update({strandTags:(draft.strandTags||[]).concat([sid])});setAddChipOpen(false);}
-  var allDrafts=app.allDrafts[app.projId]||[];
-  var parentOptions=allDrafts.filter(function(d){return d.status!=='loose_thread'&&d.id!==draft.id&&!d.parentId;});
-  var project=app.currentProject||{};
-  var draftFieldDefs=project.draftFieldDefs||[];
-  return(
-<div className="editor-drawer">
-  <div className="edrawer-hdr">
-    <span className="edrawer-title">Properties</span>
-    <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-  </div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">Title</span>
-    <input key={draft.id+'-pt'} defaultValue={draft.title||''} placeholder="Untitled draft" onBlur={function(e){update({title:e.target.value});app.updateDraft(app.projId,draft.id,{title:e.target.value,updatedAt:new Date().toISOString()});}}/>
-  </div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">Synopsis</span>
-    <textarea key={draft.id+'-ps'} defaultValue={draft.synopsis} placeholder="Brief synopsis..." rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
-  </div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">Thumbnail</span>
-    <div style={{display:'flex',alignItems:'center',gap:10}}>
-      {draft.thumbnail&&<img src={draft.thumbnail} alt="" style={{width:56,height:40,objectFit:'cover',borderRadius:6,flexShrink:0}}/>}
-      <label style={{cursor:'pointer'}}>
-        <span className="btn btn-ghost btn-sm">{draft.thumbnail?'Change image':'Upload image'}</span>
-        <input type="file" accept="image/*" style={{display:'none'}} onChange={function(e){
-          var file=e.target.files&&e.target.files[0];
-          if(!file)return;
-          if(file.size>2*1024*1024){alert('Image must be under 2 MB.');return;}
-          uploadImage(file).then(function(url){if(url)update({thumbnail:url});});
-        }}/>
-      </label>
-      {draft.thumbnail&&<button className="btn-icon" onClick={function(){update({thumbnail:null});}}><span className="mi" style={{fontSize:16}}>delete</span></button>}
-    </div>
-  </div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">Status</span>
-    <div style={{display:'flex',alignItems:'center',gap:10}}>
-      <StatusDotWithArchive draft={draft} app={app} showLabel={true}/>
-    </div>
-  </div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">Nested under</span>
-    <select value={draft.parentId||''} onChange={function(e){update({parentId:e.target.value||null});}}>
-      <option value="">None (top level)</option>
-      {parentOptions.map(function(d){return <option key={d.id} value={d.id}>{d.title||'Untitled'}</option>;})}
-    </select>
-  </div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">Tagged Strands</span>
-    <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:8}}>
-      {taggedStrands.map(function(st){var bg=st.color+'26';return(
-<span key={st.id} className="chip" style={{background:bg,color:st.color,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid',cursor:'pointer'}} onClick={function(){onOpenStrandDetail&&onOpenStrandDetail(st.id);}}>
-  {st.name}
-  <span style={{marginLeft:3,opacity:.6,fontSize:11}} onClick={function(e){e.stopPropagation();removeStrand(st.id);}}>×</span>
-</span>
-      );})}
-      <div style={{position:'relative'}}>
-        <span className="chip" style={{background:'var(--bg3)',color:'var(--mid)',borderColor:'var(--border)',borderWidth:1,borderStyle:'solid',cursor:'pointer'}} onClick={function(){setAddChipOpen(!addChipOpen);}}>
-          <span className="mi" style={{fontSize:14}}>add</span>
-        </span>
-        {addChipOpen&&untaggedStrands.length>0&&(
-<div style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:50,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:'var(--r)',boxShadow:'0 4px 16px rgba(0,0,0,.4)',minWidth:180,maxHeight:200,overflowY:'auto'}}>
-  {untaggedStrands.map(function(st){return(
-<div key={st.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',cursor:'pointer',fontSize:13}} onClick={function(){addStrand(st.id);}} onMouseOver={function(e){e.currentTarget.style.background='var(--bg3)';}} onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
-  <div style={{width:8,height:8,borderRadius:'50%',background:st.color}}/>
-  <span>{st.name}</span>
-  <span style={{fontSize:11,color:'var(--mid)',marginLeft:'auto'}}>{st.collectionName}</span>
-</div>
-  );})}
-  {untaggedStrands.length===0&&<div style={{padding:'8px 10px',fontSize:13,color:'var(--mid)'}}>All strands tagged.</div>}
-</div>
-        )}
-        {addChipOpen&&untaggedStrands.length===0&&<div/>}
-      </div>
-    </div>
-    {allStrandsList.length===0&&<span style={{fontSize:12,color:'var(--mid)'}}>No strands yet. Go to the Strands view.</span>}
-  </div>
-  <div className="adv-toggle" onClick={function(){setAdvOpen(!advOpen);}}>
-    <span className="mi" style={{fontSize:16}}>{advOpen?'expand_less':'expand_more'}</span>
-    <span>Advanced</span>
-  </div>
-  {advOpen&&(
-<div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">POV</span>
-    <select value={draft.pov||''} onChange={function(e){update({pov:e.target.value});}}>
-      <option value="">None</option>
-      {taggedStrands.map(function(st){return <option key={st.id} value={st.id}>{st.name}</option>;})}
-    </select>
-    {taggedStrands.length===0&&<div style={{fontSize:12,color:'var(--mid)',marginTop:4}}>Tag strands above to set POV.</div>}
-  </div>
-  {draftFieldDefs.map(function(f){var val=draft.customFields&&draft.customFields[f.id]?draft.customFields[f.id]:'';return(
-<div key={f.id} className="edrawer-section">
-  <span className="edrawer-lbl">{f.label}</span>
-  <input defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} onBlur={function(e){var cf=Object.assign({},draft.customFields||{});cf[f.id]=e.target.value;update({customFields:cf});}}/>
-</div>
-  );})}
-  <div className="edrawer-section">
-    <span className="edrawer-lbl" style={{marginBottom:8}}>Custom draft fields</span>
-    <AddFieldInline onAdd={function(name,type){app.addDraftFieldDef(app.projId,{id:genId(),label:name.trim(),type:type||'short_text'});}}/>
-  </div>
-</div>
-  )}
-</div>
-  );
-}
-
-function StrandDetailDrawer({strandId,app,onClose}){
-  var pid=app.projId;
-  var projStrands=app.allStrands[pid]||{};
-  var strand=null;var collName='';
-  Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){if(st.id===strandId){strand=st;collName=c;}});});
-  if(!strand)return null;
-  var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.id===strand.templateId;})||null;
-  var fields=tpl?tpl.fields:[];
-  function updateField(fieldId,val){
-    var nf=Object.assign({},strand.fields||{});nf[fieldId]=val;
-    app.updateStrand(pid,collName,strandId,{fields:nf});
-  }
-  return(
-<div className="editor-drawer">
-  <div className="edrawer-hdr">
-    <div style={{display:'flex',alignItems:'center',gap:8}}>
-      <div style={{width:24,height:24,borderRadius:'50%',background:strand.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600,color:'#fff',flexShrink:0}}>{initials(strand.name)}</div>
-      <input style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,background:'transparent',border:'none',flex:1,padding:0,outline:'none',color:'var(--text)'}} defaultValue={strand.name} placeholder="Strand name" onBlur={function(e){if(e.target.value.trim())app.updateStrand(pid,collName,selectedStrandId,{name:e.target.value.trim()});}} onFocus={function(e){e.target.style.borderBottom='1px solid var(--indigo)';}} onBlurCapture={function(e){e.target.style.borderBottom='none';}}/>
-    </div>
-    <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-  </div>
-  <div style={{padding:'12px 14px',flex:1,overflowY:'auto'}}>
-    <div style={{fontSize:11,color:'var(--mid)',marginBottom:12,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}>{collName}</div>
-    {fields.map(function(f){var val=(strand.fields&&strand.fields[f.id])||'';return(
-<div key={f.id} style={{marginBottom:12}}>
-  <span className="edrawer-lbl">{f.label}</span>
-  {f.type==='long_text'
-    ?<textarea defaultValue={val} rows={3} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
-    :<input defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
-  }
-</div>
-    );})}
-  </div>
-</div>
-  );
-}
-
+// ── StrandsDropdown ──
 function StrandsDropdown({allStrandsList,onSelect,onCreateNew}){
   return(
 <div className="float-strand-drop" style={{display:'flex',flexDirection:'column'}}>
@@ -2310,127 +1864,6 @@ function StrandsDropdown({allStrandsList,onSelect,onCreateNew}){
     <span className="mi" style={{fontSize:16}}>add</span>New strand...
   </div>
 </div>
-  );
-}
-
-function EditorStrandsPanel({draft,app,onClose,onOpenStrand}){
-  var projStrands=app.allStrands[app.projId]||{};
-  var taggedIds=draft.strandTags||[];
-  var tagged=[];var untagged=[];
-  Object.keys(projStrands).forEach(function(c){
-    (projStrands[c]||[]).forEach(function(st){
-      if(taggedIds.includes(st.id)) tagged.push(Object.assign({},st,{collectionName:c}));
-      else untagged.push(Object.assign({},st,{collectionName:c}));
-    });
-  });
-  var ssi=useState(null);var selectedStrandId=ssi[0];var setSelectedStrandId=ssi[1];
-  var ssa=useState(false);var showAvatarEdit=ssa[0];var setShowAvatarEdit=ssa[1];
-  // If a strand is selected, show its detail inline
-  if(selectedStrandId){
-    var pid=app.projId;
-    var projS=app.allStrands[pid]||{};
-    var strand=null;var collName='';
-    Object.keys(projS).forEach(function(c){(projS[c]||[]).forEach(function(st){if(st.id===selectedStrandId){strand=st;collName=c;}});});
-    if(!strand){setSelectedStrandId(null);return null;}
-    var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.id===strand.templateId;})||(app.allTemplates[pid]||[]).find(function(t){return t.name===collName;})||null;
-    var fields=tpl&&tpl.fields&&tpl.fields.length>0?tpl.fields:defaultFields(collName);
-    function updateField(fid,val){var nf=Object.assign({},strand.fields||{});nf[fid]=val;app.updateStrand(pid,collName,selectedStrandId,{fields:nf});}
-    return(
-<div className="editor-drawer">
-  <div className="edrawer-hdr">
-    <div style={{display:'flex',alignItems:'center',gap:6}}>
-      <button className="btn-icon" onClick={function(){setSelectedStrandId(null);setShowAvatarEdit(false);}}><span className="mi" style={{fontSize:18}}>arrow_back</span></button>
-      <div style={{width:24,height:24,borderRadius:'50%',background:strand.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600,color:'#fff',flexShrink:0,cursor:'pointer',overflow:'hidden'}} onClick={function(){setShowAvatarEdit(true);}}>
-        {strand.image?<img src={strand.image} alt={strand.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:strand.emoji?<span style={{fontSize:14}}>{strand.emoji}</span>:initials(strand.name)}
-      </div>
-      <span className="edrawer-title" spellCheck={false}>{strand.name}</span>
-    </div>
-    <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-  </div>
-  <div style={{padding:'12px 14px',flex:1,overflowY:'auto'}}>
-    <div style={{fontSize:11,color:'var(--mid)',marginBottom:12,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}>{collName}</div>
-    {fields.map(function(f){var val=(strand.fields&&strand.fields[f.id])||'';return(
-<div key={f.id} style={{marginBottom:12}}>
-  <span className="edrawer-lbl">{f.label}</span>
-  {f.type==='long_text'
-    ?<textarea defaultValue={val} rows={3} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
-    :<input defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
-  }
-</div>
-    );})}
-  </div>
-  {showAvatarEdit&&<AvatarEditModal strand={strand} onClose={function(){setShowAvatarEdit(false);}} onSave={function(updates){app.updateStrand(pid,collName,selectedStrandId,updates);setShowAvatarEdit(false);}}/>}
-</div>
-    );
-  }
-  return(
-<div className="editor-drawer">
-  <div className="edrawer-hdr">
-    <span className="edrawer-title">Strands</span>
-    <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-  </div>
-  {tagged.length===0&&(
-<div style={{padding:'12px 14px',fontSize:13,color:'var(--mid)'}}>
-  No strands tagged yet. Tap a strand below to add it to this draft.
-</div>
-  )}
-  {tagged.map(function(st){return(
-<div key={st.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--border)',cursor:'pointer'}} onClick={function(){setSelectedStrandId(st.id);}}>
-  <div style={{width:28,height:28,borderRadius:'50%',background:st.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#fff',flexShrink:0,overflow:'hidden'}}>
-    {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:16}}>{st.emoji}</span>:initials(st.name)}
-  </div>
-  <div style={{flex:1,minWidth:0}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>{st.name}</div>
-    <div style={{fontSize:11,color:'var(--mid)'}}>{st.collectionName}</div>
-  </div>
-  <span className="mi" style={{fontSize:16,color:'var(--border)'}}>chevron_right</span>
-</div>
-  );})}
-  {untagged.length>0&&(
-<div>
-  <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.06em',borderTop:'1px solid var(--border)'}}>Add strands</div>
-  {untagged.map(function(st){return(
-<div key={st.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderBottom:'1px solid var(--border)',cursor:'pointer'}} onClick={function(){var tags=draft.strandTags||[];if(!tags.includes(st.id))app.updateDraft(app.projId,draft.id,{strandTags:tags.concat([st.id])});}}>
-  <div style={{width:28,height:28,borderRadius:'50%',background:st.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#fff',flexShrink:0,overflow:'hidden'}}>
-    {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:16}}>{st.emoji}</span>:initials(st.name)}
-  </div>
-  <div style={{flex:1,minWidth:0}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:14,color:'var(--mid)'}}>{st.name}</div>
-    <div style={{fontSize:11,color:'var(--placeholder)'}}>{st.collectionName}</div>
-  </div>
-  <span className="mi" style={{fontSize:16,color:'var(--teal)'}}>add_circle_outline</span>
-</div>
-  );})}
-</div>
-  )}
-</div>
-  );
-}
-
-
-
-// ── VersionHistoryPanel ──
-function VersionHistoryPanel({draftId,onRestore,onClose}){
-  var snapshots=loadSnapshots(draftId);
-  var sp=useState(null);var preview=sp[0];var setPreview=sp[1];
-  return(
-<Panel open={true} onClose={onClose} title="Version History">
-  <div>
-    {snapshots.length===0&&<div style={{padding:16,fontSize:13,color:'var(--mid)',textAlign:'center'}}>No history yet — saves hourly while you write.</div>}
-    {snapshots.map(function(snap){var labelMap={'session-end':'Session end','auto':'Autosave'};var isStatus=snap.label&&snap.label.startsWith('status:');var labelText=isStatus?'Status change':labelMap[snap.label]||snap.label;var isActive=preview&&preview.id===snap.id;return(
-<div key={snap.id} style={{borderBottom:'1px solid var(--border)'}}>
-  <div onClick={function(){setPreview(isActive?null:snap);}} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 0',cursor:'pointer'}}>
-    <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{formatSnapshotTime(snap.ts)}</div><div style={{fontSize:11,color:'var(--mid)'}}>{labelText} · {snap.wordCount||0}w</div></div>
-    <span className="mi" style={{fontSize:16,color:isActive?'var(--indigo)':'var(--mid)',transform:isActive?'rotate(90deg)':'none',transition:'transform .15s'}}>chevron_right</span>
-  </div>
-  {isActive&&(<div style={{paddingBottom:12}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:15,lineHeight:1.8,color:'var(--body-text)',maxHeight:200,overflowY:'auto',padding:'8px 0',borderTop:'1px solid var(--border)',marginBottom:8,borderBottom:'2px solid var(--bg3)',WebkitMaskImage:'linear-gradient(to bottom, black 80%, transparent 100%)',maskImage:'linear-gradient(to bottom, black 80%, transparent 100%)'}} dangerouslySetInnerHTML={{__html:snap.body}}/>
-    <button className="btn btn-primary btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={function(){if(window.confirm('Restore this version?'))onRestore(snap.body);}}>Restore this version</button>
-  </div>)}
-</div>
-    );})}
-  </div>
-</Panel>
   );
 }
 
@@ -2726,9 +2159,8 @@ function EditorView({app}){
 <textarea className="editor-md" defaultValue={stripHtml(draft.body||'')} onChange={handleMDChange} placeholder="Write in Markdown..."/>
       )}
     </div>
-    {showProps&&!strandDetailId&&<PropertiesDrawer draft={draft} app={app} onClose={function(){setShowProps(false);}} onOpenStrandDetail={function(sid){setStrandDetailId(sid);}}/>}
-    {strandDetailId&&<StrandDetailDrawer strandId={strandDetailId} app={app} onClose={function(){setStrandDetailId(null);}}/>}
-    {showStrands&&!strandDetailId&&<EditorStrandsPanel draft={draft} app={app} onClose={function(){setShowStrands(false);}} onOpenStrand={function(sid){setStrandDetailId(sid);}}/>}
+    {showProps&&<PropertiesDrawer app={app} draft={draft} variant="inline" onClose={function(){setShowProps(false);}} onOpenStrand={function(sid){setShowProps(false);setShowStrands(true);setStrandDetailId(sid);}}/>}
+    {showStrands&&<StrandsDrawer app={app} draft={draft} variant="inline" strandId={strandDetailId} onOpenStrand={setStrandDetailId} onClose={function(){setShowStrands(false);setStrandDetailId(null);}}/>}
   </div>
   <div className="editor-bottombar">
     <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -2766,7 +2198,7 @@ function EditorView({app}){
   </div>
 </div>
   )}
-  {showHistory&&<VersionHistoryPanel draftId={did} onClose={function(){setShowHistory(false);}} onRestore={handleRestoreVersion}/>}
+  {showHistory&&<VersionsDrawer draftId={did} variant="inline" onClose={function(){setShowHistory(false);}} onRestore={handleRestoreVersion}/>}
   {newStrandPending&&(
 <div className="modal-overlay">
   <div className="modal-backdrop" onClick={function(){setNewStrandPending(null);}}/>
@@ -2793,99 +2225,8 @@ function EditorView({app}){
 
 
 
-// ── CustomColorPicker ──
-// SYSTEM_COLORS now lives in ./utils
-function CustomColorPicker({color,onSelect}){
-  var sc=useState(false);var showCustom=sc[0];var setShowCustom=sc[1];
-  var sh=useState('');var hexVal=sh[0];var setHexVal=sh[1];
-  return(
-<div>
-  <div style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
-    {SYSTEM_COLORS.map(function(c){return(<div key={c} onClick={function(){onSelect(c);}} style={{width:28,height:28,borderRadius:'50%',background:c,cursor:'pointer',transform:color===c?'scale(1.2)':'scale(1)',boxShadow:color===c?'0 0 0 2px var(--bg1),0 0 0 4px '+c:'none',flexShrink:0,transition:'transform .15s'}}/>);})}
-    <div style={{width:28,height:28,borderRadius:'50%',background:'var(--bg2)',border:'2px dashed var(--border)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}} onClick={function(){setShowCustom(!showCustom);}}>
-      <span className="mi" style={{fontSize:14,color:'var(--mid)'}}>add</span>
-    </div>
-  </div>
-  {showCustom&&(<div style={{marginTop:10,display:'flex',gap:6,alignItems:'center'}}>
-    <input value={hexVal} onChange={function(e){setHexVal(e.target.value);}} placeholder="#3a7bd5" style={{flex:1,fontSize:13,fontFamily:'var(--mono)'}}/>
-    <div style={{width:24,height:24,borderRadius:'50%',background:hexVal.match(/^#[0-9a-f]{6}$/i)?hexVal:'var(--bg3)',border:'1px solid var(--border)'}}/>
-    <button className="btn btn-primary btn-sm" onClick={function(){if(hexVal.match(/^#[0-9a-f]{6}$/i)){onSelect(hexVal);setShowCustom(false);}}}>Apply</button>
-  </div>)}
-</div>
-  );
-}
-// ── EmojiPicker ──
-var EMOJI_ROW=['👩','👨','🧑','🧙','🦸','🐉','👑','🔮','⚔️','🌲','🔥','💀','🌙','⭐','❄️','🌊','🗡️','📖','🎭','🌹'];
-function EmojiPicker({emoji,onSelect}){
-  var ss=useState(false);var showAll=ss[0];var setShowAll=ss[1];
-  var sq=useState('');var query=sq[0];var setQuery=sq[1];
-  var ALL=['👩','👨','🧑','👧','👦','🧓','👴','👵','🧙','🧚','🧛','🧜','🧝','🦸','🦹','🧟','👮','🤴','👸','🐉','🐺','🦅','⚔️','🗡️','🏰','🌲','🔥','💀','👑','🗺️','📜','🌙','⭐','🔮','💎','🌊','🌹','🕯️','⚡','🛡️','🗝️','🎭','📖','🌿','❄️'];
-  return(
-<div>
-  <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'nowrap'}}>
-    {EMOJI_ROW.map(function(em){return(<span key={em} onClick={function(){onSelect(em===emoji?null:em);}} style={{width:30,height:30,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer',background:emoji===em?'var(--bg4)':'var(--bg2)',border:emoji===em?'1px solid var(--indigo)':'1px solid var(--border)',flexShrink:0}}>{em}</span>);})}
-    <span onClick={function(){setShowAll(!showAll);}} style={{width:30,height:30,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,cursor:'pointer',background:'var(--bg2)',border:'1px solid var(--border)',color:'var(--mid)',flexShrink:0}}>{showAll?'↑':'···'}</span>
-    {emoji&&<button className="btn-icon" style={{padding:2}} onClick={function(){onSelect(null);}}><span className="mi" style={{fontSize:14}}>close</span></button>}
-  </div>
-  {showAll&&(<div style={{marginTop:8,background:'var(--bg2)',borderRadius:'var(--r)',padding:8}}>
-    <input value={query} onChange={function(e){setQuery(e.target.value);}} placeholder="Type any emoji..." style={{marginBottom:8,fontSize:18}} autoFocus/>
-    <div style={{display:'flex',flexWrap:'wrap',gap:3,maxHeight:100,overflowY:'auto'}}>
-      {(query?[]:ALL).map(function(em){return(<span key={em} onClick={function(){onSelect(em);setShowAll(false);}} style={{width:30,height:30,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer',background:emoji===em?'var(--bg4)':'transparent'}}>{em}</span>);})}
-      {query&&<span style={{fontSize:20,cursor:'pointer',padding:4}} onClick={function(){onSelect(query);setShowAll(false);}}>{query}</span>}
-    </div>
-  </div>)}
-</div>
-  );
-}
 
-// ── AvatarEditModal ──
-var QUICK_EMOJIS=['👩','👨','🧑','👧','👦','🧓','👴','👵','🧙','🧚','🧛','🧜','🧝','🦸','🦹','🧟','👮','🕵️','💂','🧑‍⚕️','🧑‍🎓','🧑‍🏫','🧑‍🌾','🧑‍🍳','🧑‍🔧','🧑‍🎨','🧑‍✈️','🧑‍🚀','🤴','👸','🐉','🐺','🦅','⚔️','🗡️','🏰','🌲','🔥','💀','👑','🗺️','📜','🌙','⭐','🔮','💎','🌊','🌹','🕯️','⚡','🛡️','🗝️','🎭','📖','🌿','❄️'];
-
-function AvatarEditModal({strand,onSave,onClose}){
-  var sc=useState(strand.color||PRESET_COLORS[0]);var color=sc[0];var setColor=sc[1];
-  var si=useState(strand.image||null);var image=si[0];var setImage=si[1];
-  var se=useState(strand.emoji||null);var emoji=se[0];var setEmoji=se[1];
-  function handleFile(e){var file=e.target.files&&e.target.files[0];if(!file)return;if(file.size>5*1024*1024){alert('Image must be under 5 MB.');return;}uploadImage(file).then(function(url){if(url)setImage(url);});}
-  function handleSave(){onSave({color:color,image:image,emoji:emoji});}
-  function autoSaveColor(c){setColor(c);onSave({color:c,image:image,emoji:emoji});}
-  var sectionLbl={fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8,display:'block'};
-  return(
-<div className="modal-overlay">
-  <div className="modal-backdrop" onClick={onClose}/>
-  <div className="modal-box" style={{width:380}}>
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-      <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600}}>Edit appearance</div>
-      <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-    </div>
-    {/* Avatar circle with camera overlay */}
-    <div style={{position:'relative',width:72,margin:'0 auto 16px',display:'flex',justifyContent:'center'}}>
-      <div style={{width:72,height:72,borderRadius:'50%',background:color,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',boxShadow:'0 4px 12px rgba(0,0,0,.25)'}}>
-        {image?<img src={image} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:emoji?<span style={{fontSize:30}}>{emoji}</span>:<span style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,color:'#fff'}}>{initials(strand.name)}</span>}
-      </div>
-      <label style={{position:'absolute',bottom:0,right:0,cursor:'pointer'}}>
-        <div style={{width:22,height:22,borderRadius:'50%',background:'var(--bg1)',border:'2px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <span className="mi" style={{fontSize:13,color:'var(--mid)'}}>photo_camera</span>
-        </div>
-        <input type="file" accept="image/*" style={{display:'none'}} onChange={handleFile}/>
-      </label>
-    </div>
-    {image&&<div style={{textAlign:'center',marginBottom:10}}><button className="btn btn-ghost btn-sm" onClick={function(){setImage(null);}}><span className="mi" style={{fontSize:13}}>delete</span>Remove photo</button></div>}
-    <div style={{marginBottom:14}}>
-      <span style={sectionLbl}>Colour</span>
-      <CustomColorPicker color={color} onSelect={autoSaveColor}/>
-    </div>
-    <div style={{marginBottom:14,paddingTop:12,borderTop:'1px solid var(--border)'}}>
-      <span style={sectionLbl}>Emoji</span>
-      <EmojiPicker emoji={emoji} onSelect={setEmoji}/>
-    </div>
-    <div style={{display:'flex',gap:8,paddingTop:12,borderTop:'1px solid var(--border)'}}>
-      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={handleSave}>Save</button>
-      <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-    </div>
-  </div>
-</div>
-  );
-}
+// CustomColorPicker, EmojiPicker, and AvatarEditModal now live in ./SharedUI
 
 
 
