@@ -249,7 +249,7 @@ input,textarea,select{font-family:var(--ui);font-size:14px;color:var(--text);bac
 input::placeholder,textarea::placeholder{color:var(--placeholder);opacity:1;}
 input:focus,textarea:focus,select:focus{outline:2px solid var(--indigo);outline-offset:-1px;background:var(--bg0);}
 textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
-::-webkit-scrollbar{width:5px;height:5px;}::-webkit-scrollbar-track{background:transparent;margin:6px 10px 6px 0;}::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:10px;}::-webkit-scrollbar-thumb:hover{background:var(--bg4);}
+#woven-tt{position:fixed;display:none;background:#7A5A38;color:#fdf8f0;font-size:11px;padding:4px 10px;border-radius:6px;pointer-events:none;z-index:99999;transform:translateX(-50%);font-family:'DM Sans',sans-serif;white-space:nowrap;}::-webkit-scrollbar{width:5px;height:5px;}::-webkit-scrollbar-track{background:transparent;margin:6px 10px 6px 0;}::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:10px;}::-webkit-scrollbar-thumb:hover{background:var(--bg4);}
 .mi{font-family:'Material Icons';font-style:normal;font-size:20px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}
 .material-symbols-outlined{font-family:'Material Symbols Outlined';font-style:normal;font-size:20px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;direction:ltr;-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--r);font-size:14px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:all .15s;white-space:nowrap;}
@@ -829,7 +829,7 @@ function GlobalLooseThreads({app}){
       <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
     </div>
     {visibleLT.map(function(d){return(
-<div key={d.id} style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,minWidth:160,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
+<div key={d.id} style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:150,maxWidth:150,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
   onClick={function(){setOpenLTId(d.id);}}
   onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';e.currentTarget.style.boxShadow='0 4px 12px rgba(196,94,40,.12)';}}
   onMouseLeave={function(e){e.currentTarget.style.borderColor='transparent';e.currentTarget.style.boxShadow='none';}}>
@@ -1045,7 +1045,7 @@ function SortDropdown({sort,setSort}){
 }
 
 // ── ViewHeader ──
-function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind,structureMode,onStructureToggle,searchQ,onSearch}){
+function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind,structureMode,onStructureToggle,searchQ,onSearch,hideStructure}){
   var sf=useState(false);var filterOpen=sf[0];var setFilterOpen=sf[1];
   var sp=useState({top:0,left:0});var filterPos=sp[0];var setFilterPos=sp[1];
   var ss=useState(false);var searchOpen=ss[0];var setSearchOpen=ss[1];
@@ -1087,11 +1087,30 @@ function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind,structu
     var rawColl=Object.keys(projStrands);
     var orderedColl=savedOrder?savedOrder.filter(function(c){return rawColl.includes(c);}).concat(rawColl.filter(function(c){return !savedOrder.includes(c);})):rawColl;
     var projTemplates=app.allTemplates[pid]||[];
+    if(filterSearch){
+      // Flat results when searching
+      var flatResults=[];
+      orderedColl.forEach(function(coll){
+        var tpl=projTemplates.find(function(t){return t.name===coll;});
+        if(tpl&&tpl.showInFilter===false)return;
+        (projStrands[coll]||[]).forEach(function(s){
+          if((s.name||'').toLowerCase().includes(filterSearch.toLowerCase()))flatResults.push({st:s,coll:coll,tpl:tpl});
+        });
+      });
+      if(flatResults.length===0)return[<div key="no" style={{padding:'8px 12px',fontSize:12,color:'var(--mid)'}}>No matches.</div>];
+      return flatResults.map(function(r){var isActive=filter===r.st.id;return(
+<div key={r.st.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:'pointer',background:isActive?'rgba(196,94,40,.06)':'transparent'}}
+  onClick={function(){setFilter(isActive?null:r.st.id);setFilterOpen(false);}}>
+  <div style={{width:12,height:12,borderRadius:'50%',background:r.tpl&&r.tpl.color?r.tpl.color:'var(--indigo)',flexShrink:0}}/>
+  <span style={{fontSize:13,color:isActive?'var(--indigo)':'var(--text)',fontWeight:isActive?600:400}}>{r.st.name}</span>
+  <span style={{fontSize:11,color:'var(--mid)',marginLeft:'auto'}}>{r.coll}</span>
+</div>
+      );});
+    }
     return orderedColl.map(function(coll){
       var tpl=projTemplates.find(function(t){return t.name===coll;});
       if(tpl&&tpl.showInFilter===false)return null;
       var collStrands=projStrands[coll]||[];
-      if(filterSearch){collStrands=collStrands.filter(function(s){return (s.name||'').toLowerCase().includes(filterSearch.toLowerCase());});}
       if(collStrands.length===0)return null;
       return(<CollFilterGroup key={coll} coll={coll} strands={collStrands} filter={filter} setFilter={setFilter} setFilterOpen={setFilterOpen}/>);
     });
@@ -1101,12 +1120,12 @@ function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind,structu
       )}
     </div>
     {SEP}
-    <button onClick={function(){var nv=!structureOn;setStructureOn(nv);if(onStructureToggle)onStructureToggle(nv);}} style={{display:'flex',alignItems:'center',gap:8,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer'}}>
+    {!hideStructure&&<button onClick={function(){var nv=!structureOn;setStructureOn(nv);if(onStructureToggle)onStructureToggle(nv);}} style={{display:'flex',alignItems:'center',gap:8,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer'}}>
       <div style={{width:34,height:18,borderRadius:9,background:structureOn?'#7A5A38':'#A88060',position:'relative',transition:'background .2s',flexShrink:0}}>
         <div style={{position:'absolute',top:2,left:structureOn?16:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
       </div>
       <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'#7A5A38'}}>Structure</span>
-    </button>
+    </button>}
     {SEP}
     <div style={{display:'flex',alignItems:'center',padding:'0 12px',height:55}}>
       {searchOpen?(
@@ -1740,7 +1759,9 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
       {!structureMode&&(
 <div style={{display:'flex',alignItems:'center'}}>
   {visibleStrands.map(function(st,i){return(
-<div key={st.id} title={st.name} style={{width:25,height:25,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||AMBER),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-8:0,boxSizing:'border-box',position:'relative',zIndex:visibleStrands.length-i,cursor:'default'}}>
+<div key={st.id} style={{width:25,height:25,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||AMBER),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-8:0,boxSizing:'border-box',position:'relative',zIndex:visibleStrands.length-i,cursor:'default'}}
+  onMouseEnter={function(e){var tt=document.getElementById('woven-tt');if(tt){var r=e.currentTarget.getBoundingClientRect();tt.textContent=st.name;tt.style.display='block';tt.style.left=(r.left+r.width/2)+'px';tt.style.top=(r.bottom+6)+'px';}}}
+  onMouseLeave={function(){var tt=document.getElementById('woven-tt');if(tt)tt.style.display='none';}}>
   {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:11}}>{st.emoji}</span>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
 </div>
   );})}
@@ -1843,7 +1864,8 @@ function LooseThreadsSection({threads,app,view}){
   );}
 
   // How many tiles fit in one row (approx based on tile width 220+10gap)
-  var ONE_ROW=5;
+  // Approximate how many 230px tiles fit in the section (minus ~32px padding each side)
+  var ONE_ROW=Math.max(3,Math.floor((window.innerWidth-64)/(230+10)));
   var displayedThreads=expanded?sortedThreads:sortedThreads.slice(0,ONE_ROW);
 
   return(
@@ -2107,7 +2129,7 @@ function TableView({app}){
   );}
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} hideStructure={true}/>
   <div className="table-wrap dot-grid" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto'}}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>
@@ -2715,7 +2737,7 @@ function EditorView({app}){
   }
   function confirmCreateStrand(coll,name){
     var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.name===coll;})||null;
-    var ns={id:genId(),templateId:tpl?tpl.id:'',collectionName:coll,name:name||'New Strand',color:PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};
+    var ns={id:genId(),templateId:tpl?tpl.id:'',collectionName:coll,name:name||'New Strand',color:(tpl&&tpl.color)||PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};
     app.addStrand(pid,coll,ns);
     // Auto-tag the current draft
     var tags=draft.strandTags||[];
@@ -2982,7 +3004,13 @@ function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrand
     else{setVal(coll);}setEditing(false);
   }
   if(editing)return(<div className="strands-tab active" style={{padding:'0 4px'}}><input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commitRename} onKeyDown={function(e){if(e.key==='Enter')commitRename();if(e.key==='Escape'){setVal(coll);setEditing(false);}}} style={{width:90,height:24,fontSize:13,padding:'2px 6px',borderRadius:4}}/></div>);
-  return(<div className={'strands-tab'+(isActive?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){setEditing(true);}}>{coll}</div>);
+  var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.name===coll;});
+  var tabIcon=tpl&&tpl.icon?tpl.icon:null;
+  var tabColor=tpl&&tpl.color?tpl.color:'#7A5A38';
+  return(<div className={'strands-tab'+(isActive?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){setEditing(true);}} style={{display:'flex',alignItems:'center',gap:6}}>
+    {tabIcon&&<span className="material-symbols-outlined" style={{fontSize:16,color:isActive?tabColor:'rgba(122,90,56,.75)'}}>{tabIcon}</span>}
+    {coll}
+  </div>);
 }
 
 
@@ -3107,7 +3135,7 @@ function StrandsPage({app,allProjects}){
   var snfn=useState('');var newFieldName=snfn[0];var setNewFieldName=snfn[1];
   var snft=useState('short_text');var newFieldType=snft[0];var setNewFieldType=snft[1];
   var ssw=useState([]);var sharedWith=ssw[0];var setSharedWith=ssw[1];
-  function openCollSettings(){setEditingFields(activeTpl?[...activeTpl.fields]:[]);setSharedWith(activeTpl?activeTpl.sharedWith||[]:[]);setShowCollSettings(true);}
+  function openCollSettings(){setEditingFields(activeTpl?[...activeTpl.fields]:[]);setSharedWith(activeTpl?activeTpl.sharedWith||[]:[]);setEditingSpoolColor(activeTpl?activeTpl.color||null:null);setEditingSpoolIcon(activeTpl?activeTpl.icon||null:null);setShowCollSettings(true);}
   var sdc=useState(false);var deleteCollConfirm=sdc[0];var setDeleteCollConfirm=sdc[1];
   function deleteCollection(){
     if(!activeTpl)return;
@@ -3163,35 +3191,31 @@ function StrandsPage({app,allProjects}){
     </div>
   </div>
   {/* Spool colour + icon */}
-  <div style={{display:'flex',gap:24,marginBottom:20,padding:16,background:'var(--bg2)',borderRadius:10}}>
-    {/* Preview */}
-    <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
-      <div style={{width:44,height:44,borderRadius:10,background:editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-        <span className="material-symbols-outlined" style={{fontSize:24,color:'#fff'}}>{editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'}</span>
-      </div>
-      <span style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>{activeColl}</span>
+  {/* Preview */}
+  <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
+    <div style={{width:40,height:40,borderRadius:10,background:editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+      <span className="material-symbols-outlined" style={{fontSize:22,color:'#fff'}}>{editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'}</span>
     </div>
-    <div style={{flex:1}}>
-      {/* Colours */}
-      <div style={{marginBottom:10}}>
-        <span className="sect-lbl">Colour</span>
-        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:4}}>
-          {SPOOL_COLORS.map(function(c){var isActive=(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')===c;return(
+    <span style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,color:'var(--text)'}}>{activeColl}</span>
+  </div>
+  {/* Colour */}
+  <div style={{marginBottom:16}}>
+    <span className="sect-lbl">Colour</span>
+    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
+      {SPOOL_COLORS.map(function(c){var isActive=(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')===c;return(
 <div key={c} onClick={function(){setEditingSpoolColor(c);}} style={{width:22,height:22,borderRadius:'50%',background:c,cursor:'pointer',flexShrink:0,transform:isActive?'scale(1.25)':'scale(1)',boxShadow:isActive?'0 0 0 2px var(--bg1),0 0 0 3.5px '+c:'none',transition:'transform .15s'}}/>
-          );})}
-        </div>
-      </div>
-      {/* Icons */}
-      <div>
-        <span className="sect-lbl">Icon</span>
-        <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}}>
-          {SPOOL_ICONS.map(function(ic){var isActive=(editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories')===ic;return(
+      );})}
+    </div>
+  </div>
+  {/* Icon */}
+  <div style={{marginBottom:16}}>
+    <span className="sect-lbl">Icon</span>
+    <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:6}}>
+      {SPOOL_ICONS.map(function(ic){var isActive=(editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories')===ic;return(
 <button key={ic} onClick={function(){setEditingSpoolIcon(ic);}} style={{width:32,height:32,borderRadius:6,border:'1.5px solid '+(isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--border)'),background:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')+'22':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
   <span className="material-symbols-outlined" style={{fontSize:16,color:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--mid)'}}>{ic}</span>
 </button>
-          );})}
-        </div>
-      </div>
+      );})}
     </div>
   </div>
   <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:12,color:'var(--text)'}}>Fields</div>
@@ -3910,7 +3934,7 @@ function App(){
   // Check for shared draft link
   var urlParams=new URLSearchParams(window.location.search);
   var shareId=urlParams.get('share');
-  if(shareId)return(<div className="woven-root"><GlobalStyles/><SharedDraftView shareId={shareId}/></div>);
+  if(shareId)return(<div className="woven-root"><div id="woven-tt" style={{position:"fixed",display:"none",background:"#7A5A38",color:"#fdf8f0",fontSize:11,padding:"4px 10px",borderRadius:6,pointerEvents:"none",zIndex:99999,transform:"translateX(-50%)",fontFamily:"DM Sans, sans-serif",whiteSpace:"nowrap"}}/><GlobalStyles/><SharedDraftView shareId={shareId}/></div>);
 
   if(authLoading)return(
 <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg0)',gap:16}}>
@@ -3934,6 +3958,7 @@ function App(){
   }
   return(
 <div className="woven-root">
+<div id="woven-tt"/>
   <GlobalStyles/>
   {inner}
   <ProfilePanel app={app} focusField={profileFocus} open={showProfile} onClose={function(){setShowProfile(false);}}/>
