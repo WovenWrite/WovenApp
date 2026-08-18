@@ -138,10 +138,10 @@ function useIsMobile(){var s=useState(window.innerWidth<768);var isMobile=s[0];v
 var STATUSES={loose_thread:{label:'Loose Thread',color:'#d4943e'},first_draft:{label:'First Draft',color:'#2f76e0'},second_draft:{label:'Second Draft',color:'#e02f79'},under_review:{label:'Under Review',color:'#ce2fe0'},complete:{label:'Complete',color:'#64e02f'}};
 // Canvas | Table | Tiles | Cards | (separator) Strands
 var VIEW_MODES=[
-  {key:'canvas', icon:'hub',         label:'Canvas',     group:'main'},
-  {key:'table',  icon:'table_rows',  label:'Timeline',   group:'main'},
-  {key:'cards',  icon:'view_agenda', label:'Storyboard', group:'main'},
-  {key:'strands',icon:'share',       label:'Strands',    group:'strands'}
+  {key:'canvas', icon:'lightbulb',    label:'Canvas',     group:'main'},
+  {key:'table',  icon:'table_rows',   label:'Outline',    group:'main'},
+  {key:'cards',  icon:'book_ribbon',  label:'Storyboard', group:'main'},
+  {key:'strands',icon:'gesture',      label:'Spools',     group:'strands'}
 ];
 var PRESET_COLORS=['#2f76e0','#64e02f','#ce2fe0','#2fe07f','#e02f79','#c45e28','#e8a030','#2f9966','#b83220','#f0c050'];
 var FIELD_TYPES=[{id:'short_text',label:'Short text'},{id:'long_text',label:'Long text'},{id:'number',label:'Number'},{id:'boolean',label:'Yes / No'},{id:'select',label:'Dropdown'}];
@@ -255,17 +255,17 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .btn-ghost{color:var(--mid);border-color:var(--border);background:var(--bg1);}.btn-ghost:hover{color:var(--text);border-color:var(--bg4);background:var(--bg2);}
 .btn-danger{color:var(--danger);border-color:var(--danger);}.btn-danger:hover{background:rgba(184,50,32,.08);}
 .btn-sm{padding:5px 11px;font-size:13px;}.btn-icon{padding:5px;border-radius:var(--r);color:var(--mid);display:inline-flex;align-items:center;}.btn-icon:hover{background:var(--bg2);color:var(--text);}
-.nav{display:flex;align-items:center;padding:0 14px;height:54px;background:var(--bg1);border-bottom:1px solid var(--border);flex-shrink:0;gap:10px;box-shadow:0 1px 4px rgba(42,31,16,.05);}
+.nav{display:flex;align-items:center;padding:0 14px;height:54px;background:#E2D0B8;border-bottom:1px solid #A88060;flex-shrink:0;gap:10px;box-shadow:0 1px 4px rgba(42,31,16,.05);}
 .wordmark{font-family:var(--serif);font-size:22px;font-weight:600;color:var(--indigo);cursor:pointer;user-select:none;}
-.avatar{width:32px;height:32px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;cursor:pointer;}
-.view-switcher{display:flex;align-items:center;background:var(--bg2);border-radius:var(--r);padding:3px;gap:1px;border:1px solid var(--border);}
-.view-seg{height:32px;width:36px;display:flex;align-items:center;justify-content:center;border-radius:6px;cursor:pointer;transition:all .15s;color:var(--mid);position:relative;flex-shrink:0;}
-.view-seg:hover{color:var(--text);}
-.view-seg.active{background:var(--bg0);color:var(--indigo);box-shadow:0 1px 4px rgba(42,31,16,.08);}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;cursor:pointer;overflow:hidden;border:1.5px solid rgba(42,31,16,.15);}
+.view-switcher{display:flex;align-items:center;background:#F5EDE0;border-radius:50px;padding:4px;gap:2px;border:1px solid #A88060;}
+.view-seg{height:32px;width:36px;display:flex;align-items:center;justify-content:center;border-radius:50px;cursor:pointer;transition:all .15s;color:var(--mid);position:relative;flex-shrink:0;}
+.view-seg:hover{color:var(--text);background:rgba(42,31,16,.06);}
+.view-seg.active{background:var(--bg0);color:var(--indigo);box-shadow:0 1px 4px rgba(42,31,16,.10);}
 .view-seg .mi{font-size:18px;}
-.view-seg-tip{position:absolute;bottom:-30px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg0);font-size:11px;padding:3px 8px;border-radius:4px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .1s;z-index:100;}
+.view-seg-tip{position:absolute;bottom:-34px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg0);font-size:11px;padding:3px 8px;border-radius:4px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .1s;z-index:100;}
 .view-seg:hover .view-seg-tip{opacity:1;}
-.view-sep{width:1px;height:20px;background:var(--border);margin:0 3px;flex-shrink:0;}
+.view-sep{width:1px;height:18px;background:#A88060;margin:0 2px;flex-shrink:0;opacity:.4;}
 .proj-title-inp{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--text);background:transparent;border:none;padding:2px 4px;border-radius:4px;min-width:60px;max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .proj-title-inp:focus{outline:1px solid var(--indigo);background:var(--bg1);}
 .proj-title-inp::placeholder{color:var(--placeholder);}
@@ -307,7 +307,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .week-bar{width:100%;border-radius:2px 2px 0 0;background:var(--bg3);min-height:2px;}
 .week-bar.today{background:var(--indigo);}
 .week-day-lbl{font-size:9px;color:var(--mid);}
-.view-hdr{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg1);flex-wrap:wrap;}
+.view-hdr{display:flex;align-items:center;gap:8px;padding:0 16px;height:55px;border-bottom:1px solid #A88060;flex-shrink:0;background:#EDE0CC;flex-wrap:nowrap;}
 .filter-btn{display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:var(--r);border:1px solid var(--border);font-size:13px;color:var(--mid);cursor:pointer;background:var(--bg0);transition:all .15s;}
 .filter-btn:hover{border-color:var(--bg4);color:var(--text);background:var(--bg1);}
 .filter-btn.active{border-color:var(--indigo);color:var(--indigo);background:rgba(196,94,40,.06);}
@@ -417,10 +417,10 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .float-strand-item:hover{background:var(--bg2);}
 .float-strand-new{border-top:1px solid var(--border);padding:8px 10px;cursor:pointer;font-size:13px;color:var(--teal);display:flex;align-items:center;gap:6px;flex-shrink:0;}
 .float-strand-new:hover{background:var(--bg2);}
-.strands-subnav{display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--bg1);padding:0 16px;flex-shrink:0;height:44px;gap:4px;}
-.strands-tab{padding:0 14px;height:100%;font-size:13px;font-weight:500;cursor:pointer;color:var(--mid);border-bottom:2px solid transparent;white-space:nowrap;display:flex;align-items:center;transition:color .15s;}
-.strands-tab.active{color:var(--indigo);border-bottom-color:var(--indigo);}
-.strands-tab:hover:not(.active){color:var(--text);}
+.strands-subnav{display:flex;align-items:flex-end;border-bottom:1px solid #A88060;background:#EDE0CC;padding:0 16px;flex-shrink:0;height:55px;gap:0;}
+.strands-tab{padding:0 18px;height:44px;font-size:16px;font-family:'DM Sans',sans-serif;font-weight:600;cursor:pointer;color:rgba(122,90,56,.75);border:1px solid transparent;border-bottom:none;border-radius:10px 10px 0 0;white-space:nowrap;display:flex;align-items:center;transition:all .15s;margin-right:2px;position:relative;bottom:0;}
+.strands-tab.active{background:#FDF8F0;color:#6B4A26;border-color:#A88060;border-bottom:2px solid #FDF8F0;margin-bottom:-1px;}
+.strands-tab:hover:not(.active){color:#7A5A38;background:rgba(253,248,240,.4);}
 .strands-layout{display:flex;flex:1;overflow:hidden;}
 .strands-left{width:256px;border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;background:var(--bg1);}
 .strands-list{flex:1;overflow-y:auto;padding:8px;}
@@ -918,7 +918,7 @@ function Dashboard({app,onOpenProfile,onNewProject}){
     <WovenLogo size={26}/>
     <div style={{display:'flex',alignItems:'center',gap:8}}>
       <button className="btn-icon" title="Sign out" onClick={function(){app.signOut();}}><span className="mi" style={{fontSize:20}}>logout</span></button>
-      <div className="avatar" onClick={function(){onOpenProfile(null);}}>{initials(firstName+' '+(profile.lastName||''))}</div>
+      <div className="avatar" onClick={function(){onOpenProfile(null);}}>{profile.headshot?<img src={profile.headshot} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:initials(firstName+' '+(profile.lastName||''))}</div>
     </div>
   </nav>
   <div className="dash-layout">
@@ -986,7 +986,7 @@ function ProjectNav({app,onOpenProfile}){
     <ViewSwitcher view={app.view} setView={app.setView}/>
   </div>
   <GlobalSaveIndicator/>
-  <div className="avatar" onClick={function(){onOpenProfile(null);}}>{initials(((app.profile||{}).firstName||'')+' '+((app.profile||{}).lastName||''))}</div>
+  <div className="avatar" onClick={function(){onOpenProfile(null);}}>{(app.profile&&app.profile.headshot)?<img src={app.profile.headshot} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:initials(((app.profile||{}).firstName||'')+' '+((app.profile||{}).lastName||''))}</div>
 </nav>
   );
 }
@@ -2744,7 +2744,11 @@ function StrandsPage({app,allProjects}){
   var pid=app.projId;
   var projStrands=app.allStrands[pid]||{};
   var projTemplates=app.allTemplates[pid]||[];
-  var collNames=Object.keys(projStrands);if(collNames.length===0)collNames=['Characters'];
+  // Restore saved tab order if available
+  var savedOrder=null;try{var so=localStorage.getItem('woven:collOrder:'+pid);if(so)savedOrder=JSON.parse(so);}catch(e){}
+  var rawColl=Object.keys(projStrands);
+  var collNames=savedOrder?savedOrder.filter(function(c){return rawColl.includes(c);}).concat(rawColl.filter(function(c){return !savedOrder.includes(c);})):rawColl;
+  if(collNames.length===0)collNames=['Characters'];
   var sac=useState(collNames[0]);var activeColl=sac[0];var setActiveColl=sac[1];
   var sasi=useState(null);var activeStrandId=sasi[0];var setActiveStrandId=sasi[1];
   var ssc=useState('');var search=ssc[0];var setSearch=ssc[1];
@@ -2771,7 +2775,7 @@ function StrandsPage({app,allProjects}){
   function handleImageUpload(e,sid){var file=e.target.files&&e.target.files[0];if(!file)return;uploadImage(file).then(function(url){if(url)updateStrand(sid,{image:url});});}
   function getDraftAppearances(sid){return(app.allDrafts[pid]||[]).filter(function(d){return(d.strandTags||[]).includes(sid);});}
   function renderFieldInput(f,sid,val){
-    if(f.type==='long_text')return <textarea key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} rows={3} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
+    if(f.type==='long_text')return <textarea key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} rows={3} onBlur={function(e){updateField(sid,f.id,e.target.value);}} style={{resize:'vertical',minHeight:72}}/>;
     if(f.type==='boolean')return(
 <div style={{display:'flex',gap:14}}>
   {['Yes','No'].map(function(opt){return(
@@ -2813,8 +2817,16 @@ function StrandsPage({app,allProjects}){
       if(fi<0||ti<0)return prev;
       keys.splice(fi,1);keys.splice(ti,0,fromColl);
       var reordered={};keys.forEach(function(k){reordered[k]=ps[k];});
-      n[pid]=reordered;saveDB('woven:strands:'+pid,reordered);return n;
+      n[pid]=reordered;
+      // Persist the new order — saveDB writes the whole strands object
+      // which preserves key order in JS objects and JSON
+      saveDB('woven:strands:'+pid,reordered);
+      return n;
     });
+    // Save new key order explicitly so it survives page reload
+    setTimeout(function(){
+      try{localStorage.setItem('woven:collOrder:'+pid,JSON.stringify(Object.keys((app.allStrands&&app.allStrands[pid])||{})));}catch(e){}
+    },50);
   }
   var detailContent=showCollSettings&&editingFields?(
 <div style={{padding:24}}>
@@ -3130,6 +3142,7 @@ function ProfilePanel({app,focusField,open,onClose}){
   var sl=useState(profile.lastName||'');var lastName=sl[0];var setLastName=sl[1];
   var authEmail=(app.currentUser&&app.currentUser.email)||profile.email||'';
   var se=useState(authEmail);var email=se[0];var setEmail=se[1];
+  var sh=useState(profile.headshot||null);var headshot=sh[0];var setHeadshot=sh[1];
   var sg=useState(app.goal||500);var goalVal=sg[0];var setGoalVal=sg[1];
   var goalRef=useRef(null);
   useEffect(function(){if(open&&focusField==='goal'&&goalRef.current){setTimeout(function(){goalRef.current&&goalRef.current.focus();},200);};}, [open,focusField]);
@@ -3139,7 +3152,7 @@ function ProfilePanel({app,focusField,open,onClose}){
   var reminderRef=useRef(null);
   useEffect(function(){if(open&&focusField==='reminder'&&reminderRef.current){setTimeout(function(){reminderRef.current&&reminderRef.current.scrollIntoView({behavior:'smooth'});},200);};},[open,focusField]);
   function autoSave(overrides){
-    var updated=Object.assign({firstName:firstName,lastName:lastName,email:email,plan:profile.plan||'Free',editorMode:editorMode,reminderEnabled:reminderEnabled,reminderTime:reminderTime},overrides);
+    var updated=Object.assign({firstName:firstName,lastName:lastName,email:email,plan:profile.plan||'Free',editorMode:editorMode,reminderEnabled:reminderEnabled,reminderTime:reminderTime,headshot:headshot},overrides);
     app.setProfile(updated);
   }
   return(
@@ -3147,6 +3160,26 @@ function ProfilePanel({app,focusField,open,onClose}){
   footer={<button className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}} onClick={function(){app.signOut();}}>
     <span className="mi" style={{fontSize:18}}>logout</span>Sign out
   </button>}>
+  <div style={{marginBottom:20}}>
+    <span className="sect-lbl">Profile photo</span>
+    <div style={{display:'flex',alignItems:'center',gap:14,marginTop:6}}>
+      <div style={{width:64,height:64,borderRadius:'50%',background:'var(--indigo)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,border:'2px solid var(--border)'}}>
+        {headshot?<img src={headshot} alt="Profile" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600,color:'#fff'}}>{initials((firstName||'')+' '+(lastName||''))}</span>}
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        <label style={{cursor:'pointer'}}>
+          <span className="btn btn-ghost btn-sm">{headshot?'Change photo':'Upload photo'}</span>
+          <input type="file" accept="image/*" style={{display:'none'}} onChange={function(e){
+            var file=e.target.files&&e.target.files[0];
+            if(!file)return;
+            if(file.size>3*1024*1024){alert('Please use an image under 3 MB.');return;}
+            uploadImage(file).then(function(url){if(url){setHeadshot(url);autoSave({headshot:url});}});
+          }}/>
+        </label>
+        {headshot&&<button className="btn btn-ghost btn-sm" style={{color:'var(--danger)',borderColor:'var(--danger)'}} onClick={function(){setHeadshot(null);autoSave({headshot:null});}}>Remove</button>}
+      </div>
+    </div>
+  </div>
   <div style={{marginBottom:16}}><span className="sect-lbl">First name</span><input value={firstName} onChange={function(e){setFirstName(e.target.value);}} onBlur={function(e){autoSave({firstName:e.target.value});}} placeholder="First name"/></div>
   <div style={{marginBottom:16}}><span className="sect-lbl">Last name</span><input value={lastName} onChange={function(e){setLastName(e.target.value);}} onBlur={function(e){autoSave({lastName:e.target.value});}} placeholder="Last name"/></div>
   <div style={{marginBottom:16}}><span className="sect-lbl">Email</span><input value={email} onChange={function(e){setEmail(e.target.value);}} onBlur={function(e){autoSave({email:e.target.value});}} placeholder="your@email.com" type="email"/></div>
