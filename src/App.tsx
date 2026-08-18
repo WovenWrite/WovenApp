@@ -1661,8 +1661,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   {overflow>0&&(
 <div ref={overflowRef} onMouseEnter={showOverflow} onMouseLeave={hideOverflow} style={{width:25,height:25,borderRadius:'50%',background:'#E2D0B8',border:'1px solid #A88060',display:'flex',alignItems:'center',justifyContent:'center',marginLeft:-8,flexShrink:0,cursor:'default',zIndex:0}}>
   <span style={{fontFamily:'DM Sans, sans-serif',fontSize:10,color:'#7A5A38',fontWeight:600}}>+{overflow}</span>
-  <div ref={overflowTt} style={{position:'fixed',opacity:0,transition:'opacity .15s',background:'#7A5A38',color:'#fdf8f0',fontSize:11,padding:'5px 10px',borderRadius:6,pointerEvents:'none',zIndex:9999,whiteSpace:'pre',lineHeight:1.6}}>{tagged.slice(3).map(function(s){return s.name;}).join('
-')}</div>
+  <div ref={overflowTt} style={{position:'fixed',opacity:0,transition:'opacity .15s',background:'#7A5A38',color:'#fdf8f0',fontSize:11,padding:'5px 10px',borderRadius:6,pointerEvents:'none',zIndex:9999,whiteSpace:'pre',lineHeight:1.6}}>{tagged.slice(3).map(function(s){return s.name;}).join('\n')}</div>
 </div>
   )}
 </div>
