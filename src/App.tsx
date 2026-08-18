@@ -2438,7 +2438,6 @@ function EditorView({app}){
   var sst=useState('saved');var saveState=sst[0];var setSaveState=sst[1];
   var svh=useState(false);var showHistory=svh[0];var setShowHistory=svh[1];
   function handleRestoreVersion(body){if(editorRef.current)editorRef.current.innerHTML=body;setShowHistory(false);setSaveState('saving');scheduleSave(body,countWords(body));}
-  var sst=useState('saved');var saveState=sst[0];var setSaveState=sst[1];
   var isMobile=useIsMobile();
   useEffect(function(){if(!draft)return;if(lastDraftId.current===draft.id)return;lastDraftId.current=draft.id;sessionStartWc.current=draft.wordCount||0;setWc(draft.wordCount||0);if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';},[did]);
   // Only reset editor when mode changes (not on re-renders)
