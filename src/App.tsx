@@ -677,18 +677,28 @@ function StatsSection({app,onOpenProfile,greeting}){
   var todayWords=sessions.filter(function(s){return s.date===todayStr();}).reduce(function(sum,s){return sum+(s.words||0);},0);
   var pct=goal>0?Math.round(todayWords/goal*100):0;
   var weekData=[];
-  for(var i=6;i>=0;i--){var dd=new Date();dd.setDate(dd.getDate()-i);var ds=dd.toISOString().slice(0,10);var dw=sessions.filter(function(s){return s.date===ds;}).reduce(function(sum,s){return sum+(s.words||0);},0);weekData.push({date:ds,words:dw,isToday:i===0,label:dayLbl(i)});}
+  function localDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  for(var i=6;i>=0;i--){var dd=new Date();dd.setDate(dd.getDate()-i);var ds=localDateStr(dd);var dw=sessions.filter(function(s){return s.date===ds;}).reduce(function(sum,s){return sum+(s.words||0);},0);weekData.push({date:ds,words:dw,isToday:i===0,label:dayLbl(i)});}
   var maxW=weekData.reduce(function(m,d){return Math.max(m,d.words);},1);
   var streak=0;var sd=new Date();
-  function localDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
-  for(var j=0;j<60;j++){var sds=localDateStr(sd);if(sessions.filter(function(s){return s.date===sds;}).length>0){streak++;sd.setDate(sd.getDate()-1);}else if(j===0){sd.setDate(sd.getDate()-1);}else break;}
+  for(var j=0;j<60;j++){var sds=localDateStr(sd);if(sessions.filter(function(s){return s.date===sds&&(s.words||0)>0;}).length>0){streak++;sd.setDate(sd.getDate()-1);}else if(j===0){sd.setDate(sd.getDate()-1);}else break;}
   var weekStart=new Date();weekStart.setDate(weekStart.getDate()-6);weekStart.setHours(0,0,0,0);
-  var ltCount=0;Object.keys(app.allDrafts).forEach(function(pid){(app.allDrafts[pid]||[]).forEach(function(d){
+  var weekStartStr=localDateStr(weekStart);
+  var ltCount=0;
+  // Count project loose threads
+  Object.keys(app.allDrafts).forEach(function(pid){(app.allDrafts[pid]||[]).forEach(function(d){
     if(d.status==='loose_thread'&&!d.archived){
-      var created=new Date(d.createdAt||0);
-      if(created>=weekStart)ltCount++;
+      var createdStr=(d.createdAt||'').slice(0,10);
+      if(createdStr>=weekStartStr)ltCount++;
     }
   });});
+  // Count global loose threads
+  Object.values(app.globalLT||{}).forEach(function(lt){
+    if(!lt.archived){
+      var createdStr=(lt.createdAt||'').slice(0,10);
+      if(createdStr>=weekStartStr)ltCount++;
+    }
+  });
   return(
 <div>
   <div className="dash-greeting dash-greeting-mobile">{greeting||''}</div>
