@@ -144,7 +144,7 @@ var VIEW_MODES=[
   {key:'strands',icon:'gesture',      label:'Spools',     group:'strands'}
 ];
 var PRESET_COLORS=['#2f76e0','#64e02f','#ce2fe0','#2fe07f','#e02f79','#c45e28','#e8a030','#2f9966','#b83220','#f0c050'];
-var FIELD_TYPES=[{id:'short_text',label:'Short text'},{id:'long_text',label:'Long text'},{id:'number',label:'Number'},{id:'boolean',label:'Yes / No'},{id:'select',label:'Dropdown'},{id:'strand_ref',label:'Link to Spool'}];
+var FIELD_TYPES=[{id:'short_text',label:'Short text'},{id:'long_text',label:'Long text'},{id:'number',label:'Number'},{id:'boolean',label:'Yes / No'},{id:'select',label:'Dropdown'},{id:'strand_ref',label:'Reference'}];
 var PROJ_TYPES=[
   {id:'fiction',    label:'Fiction',     icon:'auto_stories',colls:['Characters','Locations','Lore & World'],desc:'Novels, short fiction, narrative'},
   {id:'nonfiction', label:'Non-Fiction', icon:'article',     colls:['Sources','Interviews','Subjects'],      desc:'Essays, memoir, journalism'},
@@ -2053,6 +2053,7 @@ function TableView({app}){
   var sf=useState(null);var filter=sf[0];var setFilter=sf[1];
   var ss=useState('order');var sort=ss[0];var setSort=ss[1];
   var sb=useState(false);var bindOpen=sb[0];var setBindOpen=sb[1];
+  var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
   var so2=useState(null);var dragOver=so2[0];var setDragOver=so2[1];
   var sco=useState(false);var colOpen=sco[0];var setColOpen=sco[1];
   var scp=useState({top:0,left:0,right:0});var colPos=scp[0];var setColPos=scp[1];
@@ -2091,7 +2092,11 @@ function TableView({app}){
   var allDrafts=app.allDrafts[app.projId]||[];
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
-  var displayed=applyFS(tree,filter,sort);
+  var displayed=applyFS(tree,filter,sort).filter(function(p){
+    if(!searchQ.trim())return true;
+    var q=searchQ.toLowerCase();
+    return (p.title||'').toLowerCase().includes(q)||(p.synopsis||'').toLowerCase().includes(q)||(p.body?stripHtml(p.body).toLowerCase().includes(q):false);
+  });
   function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
   var tblProjStrands=app.allStrands[app.projId]||{};
   var tblProjTemplates=app.allTemplates[app.projId]||[];
@@ -2123,7 +2128,7 @@ function TableView({app}){
   {taggedStrands.map(function(st){return <option key={st.id} value={st.id}>{st.name}</option>;})}
 </select>
     );}
-    if(col.startsWith('cf_')){var fid=col.slice(3);return <input className="tbl-inp syn" defaultValue={draft.customFields&&draft.customFields[fid]?draft.customFields[fid]:''} placeholder="—" onBlur={function(e){var cf=Object.assign({},draft.customFields||{});cf[fid]=e.target.value;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{width:90}}/>;}
+    if(col.startsWith('cf_')){var fid=col.slice(3);var cfVal=draft.customFields&&draft.customFields[fid]?draft.customFields[fid]:'';return <input className="tbl-inp" defaultValue={cfVal} placeholder="—" onBlur={function(e){var cf=Object.assign({},draft.customFields||{});cf[fid]=e.target.value;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',fontStyle:cfVal?'normal':'italic',opacity:cfVal?1:.75}}/>;}
     return null;
   }
   function renderRow(draft,label,isNested,parentIdx,childIdx,hasChildren,isExpanded){return(
@@ -2150,8 +2155,8 @@ function TableView({app}){
   );}
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} hideStructure={true}/>
-  <div className="table-wrap" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto'}}>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} hideStructure={true} searchQ={searchQ} onSearch={setSearchQ}/>
+  <div className="table-wrap" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto',padding:20}}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>
   <table className="wt">
@@ -2160,7 +2165,7 @@ function TableView({app}){
         <th style={{width:28,background:'#E2D0B8'}}/>
         <th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>
         {visCols.map(function(col,ci){var av=allAvailCols.find(function(c){return c.id===col;});return(
-<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#6B4A26',fontWeight:600,cursor:'grab',userSelect:'none'}} className="resizable"
+<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600,cursor:'grab',userSelect:'none'}} className="resizable"
   draggable={true}
   onDragStart={function(e){e.dataTransfer.setData('colIdx',''+ci);}}
   onDragOver={function(e){e.preventDefault();}}
@@ -2189,7 +2194,7 @@ function TableView({app}){
     </tbody>
   </table>
   <div style={{padding:'9px 12px'}}><button className="btn btn-ghost btn-sm" onClick={addDraft}>+ Add draft</button></div>
-  <div style={{padding:'0 16px'}}><LooseThreadsSection threads={ltDrafts} app={app} view="table"/></div>
+
 </div>
     )}
   </div>
@@ -3043,7 +3048,7 @@ function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrand
 // ── IconSearchPopup ──
 function IconSearchPopup({current,onSelect,onClose}){
   var sq=useState('');var q=sq[0];var setQ=sq[1];
-  var COMMON_ICONS=['auto_stories','gesture','hub','lightbulb','book_ribbon','favorite','star','location_on','person','group','explore','psychology','edit_note','campaign','local_library','history_edu','science','palette','music_note','sports_esports','pets','restaurant','travel_explore','hiking','fitness_center','work','school','medical_services','gavel','theater_comedy','movie','sports','emoji_objects','language','public','home','apartment','landscape','nature','cloud','sunny','storm','calendar_month','schedule','alarm','notifications','bookmark','label','tag','flag','trophy','diamond','crown','sword','shield','map','compass','key','lock','search','visibility','eye_tracking','mic','headphones','piano','guitar','brush','draw','photo_camera','videocam','computer','phone_android','watch','satellite','rocket_launch','bug_report','code','terminal','database','storage','folder','article','description','receipt','savings','account_balance','trending_up','analytics','pie_chart','bar_chart','timeline','people','supervisor_account','diversity_3'];
+  var COMMON_ICONS=['auto_stories','book_ribbon','gesture','hub','lightbulb','favorite','star','location_on','person','group','explore','psychology','edit_note','campaign','local_library','history_edu','science','palette','music_note','sports_esports','pets','restaurant','hiking','fitness_center','work','school','medical_services','gavel','theater_comedy','movie','emoji_objects','language','public','home','landscape','nature','cloud','sunny','calendar_month','schedule','alarm','notifications','bookmark','label','flag','trophy','diamond','map','key','search','mic','headphones','brush','photo_camera','computer','phone_android','rocket_launch','code','database','folder','article','savings','account_balance','trending_up','analytics','people','diversity_3','quiz','help','info','warning','error','check_circle','cancel','add_circle','remove_circle','verified','military_tech','workspace_premium','grade','celebration','emoji_events','sports_score','casino','toys','child_care','elderly','accessible','spa','self_improvement','yoga','travel_explore','flight','train','directions_car','directions_bike','park','beach_access','forest','water','fire_truck','sailing','agriculture','construction','factory','store','shopping_cart','attach_money','currency_exchange','contract','handshake','volunteer_activism','mood','sentiment_satisfied','emoji_people','face','waving_hand','thumb_up','thumb_down','back_hand','fingerprint','visibility','visibility_off','lock','lock_open','security','shield','electric_bolt','water_drop','air','eco','recycling','compost','energy_savings_leaf','solar_power','wind_power','coronavirus','vaccines','medication','stethoscope','emergency','bloodtype','monitor_heart','biotech','microbiology','genetics','experiment','telescope','microscope','satellite_alt','travel_explore','public','language','globe','egg_alt','cake','local_pizza','ramen_dining','set_meal','coffee','liquor','sports_bar','wine_bar'];
   var filtered=q?COMMON_ICONS.filter(function(ic){return ic.includes(q.toLowerCase())}):COMMON_ICONS;
   return(
 <div style={{position:'fixed',inset:0,zIndex:700,display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -3056,7 +3061,7 @@ function IconSearchPopup({current,onSelect,onClose}){
 <button key={ic} onClick={function(){onSelect(ic);onClose();}} title={ic.replace(/_/g,' ')} style={{width:40,height:40,borderRadius:8,border:'1.5px solid '+(isActive?'#c45e28':'var(--border)'),background:isActive?'rgba(196,94,40,.1)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .1s'}}
   onMouseOver={function(e){if(!isActive)e.currentTarget.style.background='var(--bg2)';}}
   onMouseOut={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
-  <span className="material-symbols-outlined" style={{fontSize:20,color:isActive?'#c45e28':'var(--mid)'}}>{ic}</span>
+  <span style={{fontFamily:'Material Symbols Outlined',fontStyle:'normal',fontSize:22,lineHeight:1,display:'inline-block',letterSpacing:'normal',textTransform:'none',direction:'ltr',WebkitFontSmoothing:'antialiased',color:isActive?'#c45e28':'var(--mid)'}}>{ic}</span>
 </button>
       );})}
       {filtered.length===0&&<div style={{fontSize:13,color:'var(--mid)',padding:8}}>No icons match.</div>}
@@ -3108,14 +3113,14 @@ function NewSpoolModal({onConfirm,onCancel}){
     <div style={{marginBottom:20}}>
       <span className="sect-lbl">Icon</span>
       <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
-        {SPOOL_ICONS.map(function(ic){return(
+        {SPOOL_ICONS.slice(0,10).map(function(ic){return(
 <button key={ic} onClick={function(){setIcon(ic);}} style={{width:36,height:36,borderRadius:6,border:'1px solid '+(icon===ic?color:'var(--border)'),background:icon===ic?color+'22':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}}>
   <span className="material-symbols-outlined" style={{fontSize:18,color:icon===ic?color:'var(--mid)'}}>{ic}</span>
 </button>
         );})}
 
-        <button onClick={function(){setShowModalIconSearch(true);}} style={{width:36,height:36,borderRadius:6,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--mid)'}}>search</span>
+        <button onClick={function(){setShowModalIconSearch(true);}} style={{padding:'0 10px',height:36,borderRadius:6,border:'1px solid var(--border)',background:'transparent',cursor:'pointer',fontSize:11,fontFamily:'DM Sans, sans-serif',color:'var(--mid)',whiteSpace:'nowrap'}}>
+          Search more
         </button>
         {showModalIconSearch&&<IconSearchPopup current={icon} onSelect={function(ic){setIcon(ic);}} onClose={function(){setShowModalIconSearch(false);}}/> }      </div>
     </div>
@@ -3184,7 +3189,31 @@ function StrandsPage({app,allProjects}){
 </div>
     );
     if(f.type==='select')return(<select key={sid+'-'+f.id} defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}><option value="">Select...</option>{(f.options||[]).map(function(o){return <option key={o} value={o}>{o}</option>;})}</select>);
+    if(f.type==='strand_ref'){
+      var refCollName=f.refSpool||'';
+      var refStrands=refCollName?(app.allStrands[pid]&&app.allStrands[pid][refCollName]||[]):[];
+      var currentVals=val?val.split(',').filter(Boolean):[];
+      if(!refCollName)return <span style={{fontSize:13,color:'var(--mid)',fontStyle:'italic'}}>No spool linked — edit field settings.</span>;
+      if(f.refMultiple){return(
+<div key={sid+'-'+f.id} style={{display:'flex',flexWrap:'wrap',gap:4}}>
+  {refStrands.map(function(st){var sel=currentVals.includes(st.id);return(
+<label key={st.id} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:10,cursor:'pointer',background:sel?'rgba(196,94,40,.1)':'var(--bg2)',border:'1px solid '+(sel?'var(--indigo)':'var(--border)'),fontSize:12,color:sel?'var(--indigo)':'var(--text)'}}>
+  <input type="checkbox" style={{width:'auto',margin:0}} checked={sel} onChange={function(){var nv=sel?currentVals.filter(function(v){return v!==st.id;}):currentVals.concat([st.id]);updateField(sid,f.id,nv.join(','));}}/>
+  {st.name}
+</label>
+  );})}
+  {refStrands.length===0&&<span style={{fontSize:12,color:'var(--mid)',fontStyle:'italic'}}>No items in {refCollName}.</span>}
+</div>
+      );}
+      return(
+<select key={sid+'-'+f.id} value={val||''} onChange={function(e){updateField(sid,f.id,e.target.value);}} style={{width:'100%'}}>
+  <option value="">— Select {refCollName}</option>
+  {refStrands.map(function(st){return <option key={st.id} value={st.id}>{st.name}</option>;})}
+</select>
+      );
+    }
     return <input key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} type={f.type==='number'?'number':'text'} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
+
   }
   // Collection settings editing
   var sef=useState(null);var editingFields=sef[0];var setEditingFields=sef[1];
@@ -3270,16 +3299,23 @@ function StrandsPage({app,allProjects}){
   <div style={{marginBottom:16}}>
     <span className="sect-lbl">Icon</span>
     <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:6}}>
-      {SPOOL_ICONS.map(function(ic){var isActive=(editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories')===ic;return(
+      {SPOOL_ICONS.slice(0,10).map(function(ic){var isActive=(editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories')===ic;return(
 <button key={ic} onClick={function(){setEditingSpoolIcon(ic);}} style={{width:32,height:32,borderRadius:6,border:'1.5px solid '+(isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--border)'),background:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')+'22':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
   <span className="material-symbols-outlined" style={{fontSize:16,color:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--mid)'}}>{ic}</span>
 </button>
       );})}
-      <button onClick={function(){setShowIconSearch(true);}} style={{width:32,height:32,borderRadius:6,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',title:'More icons'}}>
-        <span className="material-symbols-outlined" style={{fontSize:16,color:'var(--mid)'}}>search</span>
+      <button onClick={function(){setShowIconSearch(true);}} style={{padding:'0 10px',height:32,borderRadius:6,border:'1px solid var(--border)',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontFamily:'DM Sans, sans-serif',color:'var(--mid)',whiteSpace:'nowrap'}}>
+        Search more
       </button>
     </div>
     {showIconSearch&&<IconSearchPopup current={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onSelect={function(ic){setEditingSpoolIcon(ic);}} onClose={function(){setShowIconSearch(false);}}/>}
+  </div>
+  {/* Use as filter toggle */}
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+    <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,color:'var(--text)',fontWeight:600}}>Use as a filter?</span>
+    <div onClick={function(){var cur=activeTpl?activeTpl.showInFilter!==false:true;app.updateTemplate(pid,activeTpl&&activeTpl.id,{showInFilter:!cur});}} style={{width:36,height:20,borderRadius:10,background:(activeTpl?activeTpl.showInFilter!==false:true)?'#7A5A38':'#A88060',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
+      <div style={{position:'absolute',top:2,left:(activeTpl?activeTpl.showInFilter!==false:true)?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
+    </div>
   </div>
   <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:12,color:'var(--text)'}}>Fields</div>
   {deleteCollConfirm&&(
@@ -3324,17 +3360,6 @@ function StrandsPage({app,allProjects}){
     <input value={newFieldName} onChange={function(e){setNewFieldName(e.target.value);}} placeholder="New field name" onKeyDown={function(e){if(e.key==='Enter')addFieldToSettings();}} style={{flex:1}}/>
     <select value={newFieldType} onChange={function(e){setNewFieldType(e.target.value);}} style={{width:110}}>{FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}</select>
     <button className="btn btn-ghost btn-sm" onClick={addFieldToSettings}>Add</button>
-  </div>
-  <div style={{paddingTop:16,borderTop:'1px solid var(--border)',marginBottom:16}}>
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-      <div>
-        <span className="sect-lbl" style={{display:'block',marginBottom:2}}>Show in Define filter</span>
-        <span style={{fontSize:12,color:'var(--mid)'}}>When off, this spool won't appear in the sequence filter dropdown.</span>
-      </div>
-      <div onClick={function(){var cur=activeTpl?activeTpl.showInFilter!==false:true;app.updateTemplate(pid,activeTpl&&activeTpl.id,{showInFilter:!cur});}} style={{width:36,height:20,borderRadius:10,background:(activeTpl?activeTpl.showInFilter!==false:true)?'#7A5A38':'#A88060',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
-        <div style={{position:'absolute',top:2,left:(activeTpl?activeTpl.showInFilter!==false:true)?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
-      </div>
-    </div>
   </div>
   <div style={{paddingTop:16,borderTop:'1px solid var(--border)'}}>
     <span className="sect-lbl">Share across projects</span>
