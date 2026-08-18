@@ -227,6 +227,7 @@ function draftLabel(draft,parentDraft){
 var CSS=`
 @import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&family=Caveat:wght@400;600&display=swap');
 @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 
 :root {
   --bg0:#fdf8f0; --bg1:#f5ede0; --bg2:#ede0cc; --bg3:#e2d0b8; --bg4:#d4b896;
@@ -250,6 +251,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--indigo);outline-
 textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 ::-webkit-scrollbar{width:4px;height:4px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px;}
 .mi{font-family:'Material Icons';font-style:normal;font-size:20px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}
+.material-symbols-outlined{font-family:'Material Symbols Outlined';font-style:normal;font-size:20px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;direction:ltr;-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--r);font-size:14px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:all .15s;white-space:nowrap;}
 .btn-primary{background:var(--indigo);color:#fff;box-shadow:0 1px 4px rgba(42,31,16,.15);}.btn-primary:hover{background:var(--amber-dark);color:#fff;}
 .btn-ghost{color:var(--mid);border-color:var(--border);background:var(--bg1);}.btn-ghost:hover{color:var(--text);border-color:var(--bg4);background:var(--bg2);}
@@ -307,7 +309,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .week-bar{width:100%;border-radius:2px 2px 0 0;background:var(--bg3);min-height:2px;}
 .week-bar.today{background:var(--indigo);}
 .week-day-lbl{font-size:9px;color:var(--mid);}
-.view-hdr{display:flex;align-items:center;gap:8px;padding:0 16px;height:55px;border-bottom:1px solid #A88060;flex-shrink:0;background:#EDE0CC;flex-wrap:nowrap;}
+.view-hdr{display:flex;align-items:center;gap:0;padding:0 20px;height:55px;border-bottom:1px solid #A88060;flex-shrink:0;background:#FDF8F0;flex-wrap:nowrap;}
 .filter-btn{display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:var(--r);border:1px solid var(--border);font-size:13px;color:var(--mid);cursor:pointer;background:var(--bg0);transition:all .15s;}
 .filter-btn:hover{border-color:var(--bg4);color:var(--text);background:var(--bg1);}
 .filter-btn.active{border-color:var(--indigo);color:var(--indigo);background:rgba(196,94,40,.06);}
@@ -1046,29 +1048,32 @@ function SortDropdown({sort,setSort}){
 
 // ── ViewHeader ──
 function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind}){
-  var s=useState(false);var filterOpen=s[0];var setFilterOpen=s[1];
-  var p=useState({top:0,left:0});var filterPos=p[0];var setFilterPos=p[1];
-  var filterRef=useRef(null);
+  var sf=useState(false);var filterOpen=sf[0];var setFilterOpen=sf[1];
+  var sp=useState({top:0,left:0});var filterPos=sp[0];var setFilterPos=sp[1];
+  var ss=useState(false);var searchOpen=ss[0];var setSearchOpen=ss[1];
+  var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
+  var st=useState(false);var structureOn=st[0];var setStructureOn=st[1];
+  var filterRef=useRef(null);var searchRef=useRef(null);
   var projStrands=app.allStrands[app.projId]||{};
   useEffect(function(){if(!filterOpen)return;function onDown(e){
     if(filterRef.current&&filterRef.current.contains(e.target))return;
-    // Also allow clicks on the dropdown itself (it's fixed-position, outside filterRef)
     var drop=document.querySelector('.filter-dropdown');
     if(drop&&drop.contains(e.target))return;
     setFilterOpen(false);
   }document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[filterOpen]);
-  function openFilter(e){var r=e.currentTarget.getBoundingClientRect();setFilterPos({top:r.bottom+4,left:r.left});setFilterOpen(!filterOpen);}
+  useEffect(function(){if(searchOpen&&searchRef.current)searchRef.current.focus();},[searchOpen]);
   var hasFilter=!!filter;
+  var SEP=(<div style={{width:1,height:24,background:'#7A5A38',opacity:.5,margin:'0 10px',flexShrink:0}}/>);
   return(
 <div className="view-hdr">
-  <div style={{position:'relative',display:'inline-flex'}}>
-    <button ref={filterRef} className={'filter-btn'+(hasFilter?' active':'')} onClick={openFilter}>
-      <span className="mi" style={{fontSize:16}}>filter_alt</span>
-      <span>Refine Arc</span>
-    </button>
-    {hasFilter&&<span style={{position:'absolute',top:-6,right:-6,background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:16,height:16,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>1</span>}
-  </div>
-  {filterOpen&&(
+  <div style={{display:'flex',alignItems:'center',flex:1}}>
+    <div style={{position:'relative'}}>
+      <button ref={filterRef} onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setFilterPos({top:r.bottom+4,left:r.left});setFilterOpen(!filterOpen);}} style={{display:'flex',alignItems:'center',gap:7,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer',position:'relative'}}>
+        <span className="material-symbols-outlined" style={{fontSize:20,color:'#6B4A26'}}>{hasFilter?'filter_alt_off':'filter_alt'}</span>
+        <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'#7A5A38'}}>Define</span>
+        {hasFilter&&<span style={{position:'absolute',top:10,right:6,background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:14,height:14,fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>1</span>}
+      </button>
+      {filterOpen&&(
 <div className="filter-dropdown" style={{top:filterPos.top,left:filterPos.left,minWidth:220,padding:0}}>
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px 4px'}}>
     <span style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em'}}>Filter by strand</span>
@@ -1077,18 +1082,41 @@ function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind}){
   {Object.keys(projStrands).map(function(coll){var collStrands=projStrands[coll]||[];if(collStrands.length===0)return null;return(<CollFilterGroup key={coll} coll={coll} strands={collStrands} filter={filter} setFilter={setFilter} setFilterOpen={setFilterOpen}/>);})}
   {Object.values(projStrands).flat().length===0&&<div style={{padding:'8px 12px',fontSize:13,color:'var(--mid)'}}>No strands yet.</div>}
 </div>
-  )}
-  <SortDropdown sort={sort} setSort={setSort}/>
-  <div style={{flex:1}}/>
-  <button className="btn btn-ghost btn-sm" onClick={onBind}>Bind</button>
-  <button className="btn btn-primary btn-sm" onClick={onAddDraft}>
-    <span className="mi" style={{fontSize:16}}>add</span>New draft
-  </button>
+      )}
+    </div>
+    {SEP}
+    <button onClick={function(){setStructureOn(!structureOn);}} style={{display:'flex',alignItems:'center',gap:8,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer'}}>
+      <div style={{width:34,height:18,borderRadius:9,background:structureOn?'#7A5A38':'#A88060',position:'relative',transition:'background .2s',flexShrink:0}}>
+        <div style={{position:'absolute',top:2,left:structureOn?16:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
+      </div>
+      <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'#7A5A38'}}>Structure</span>
+    </button>
+    {SEP}
+    <div style={{display:'flex',alignItems:'center',padding:'0 12px',height:55}}>
+      {searchOpen?(
+<input ref={searchRef} value={searchQ} onChange={function(e){setSearchQ(e.target.value);}} placeholder="Search drafts…" onBlur={function(){if(!searchQ)setSearchOpen(false);}} style={{width:180,padding:'6px 10px',fontSize:14,border:'1px solid var(--border)',borderRadius:20,fontFamily:'DM Sans, sans-serif',background:'var(--bg1)',color:'var(--text)',outline:'none'}}/>
+      ):(
+<button onClick={function(){setSearchOpen(true);}} style={{display:'flex',alignItems:'center',background:'transparent',border:'none',cursor:'pointer',padding:0}}>
+  <span className="material-symbols-outlined" style={{fontSize:22,color:'#6B4A26'}}>search</span>
+</button>
+      )}
+    </div>
+  </div>
+  <div style={{display:'flex',alignItems:'center',gap:8}}>
+    <button onClick={onBind} title="Bind" style={{display:'flex',alignItems:'center',justifyContent:'center',width:38,height:38,borderRadius:8,background:'transparent',border:'1px solid var(--border)',cursor:'pointer',color:'var(--mid)',transition:'all .15s'}}
+      onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';e.currentTarget.style.color='var(--text)';}}
+      onMouseOut={function(e){e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--mid)';}}>
+      <span className="material-symbols-outlined" style={{fontSize:20}}>collections_bookmark</span>
+    </button>
+    <button onClick={onAddDraft} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:'var(--indigo)',color:'#fff',border:'none',borderRadius:8,fontSize:14,fontFamily:'DM Sans, sans-serif',fontWeight:600,cursor:'pointer',transition:'background .15s'}}
+      onMouseOver={function(e){e.currentTarget.style.background='#2A1F10';}}
+      onMouseOut={function(e){e.currentTarget.style.background='var(--indigo)';}}>
+      <span className="material-symbols-outlined" style={{fontSize:18}}>add</span>New draft
+    </button>
+  </div>
 </div>
   );
 }
-
-
 // ── StatusDotWithArchive ──
 function StatusDotWithArchive({draft,app,showLabel}){
   var sac=useState(false);var showConfirm=sac[0];var setShowConfirm=sac[1];
@@ -2735,6 +2763,62 @@ function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrand
   return(<div className={'strands-tab'+(isActive?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){setEditing(true);}}>{coll}</div>);
 }
 
+
+// ── NewSpoolModal ──
+var SPOOL_ICONS=['auto_stories','gesture','hub','lightbulb','book_ribbon','favorite','star','location_on','person','group','explore','psychology','edit_note','campaign','local_library','history_edu','science','palette','music_note','sports_esports'];
+var SPOOL_COLORS=['#c45e28','#2f76e0','#2f9966','#ce2fe0','#e02f79','#e8a030','#b83220','#2fe07f','#64e02f','#f0c050'];
+function NewSpoolModal({onConfirm,onCancel}){
+  var sn=useState('');var name=sn[0];var setName=sn[1];
+  var si=useState('auto_stories');var icon=si[0];var setIcon=si[1];
+  var sc=useState('#c45e28');var color=sc[0];var setColor=sc[1];
+  var ref=useRef(null);
+  useEffect(function(){if(ref.current)ref.current.focus();},[]);
+  return(
+<div style={{position:'fixed',inset:0,zIndex:500,display:'flex',alignItems:'center',justifyContent:'center'}}>
+  <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={onCancel}/>
+  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:24,width:380,maxWidth:'92vw',boxShadow:'0 20px 60px rgba(42,31,16,.15)'}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600,marginBottom:16,color:'var(--text)'}}>Create Spool</div>
+    {/* Preview */}
+    <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,padding:'10px 14px',background:'var(--bg2)',borderRadius:8}}>
+      <div style={{width:36,height:36,borderRadius:8,background:color,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+        <span className="material-symbols-outlined" style={{fontSize:20,color:'#fff'}}>{icon}</span>
+      </div>
+      <span style={{fontFamily:'var(--serif)',fontSize:15,fontWeight:600,color:'var(--text)'}}>{name||'Spool name'}</span>
+    </div>
+    {/* Name */}
+    <div style={{marginBottom:14}}>
+      <span className="sect-lbl">Name</span>
+      <input ref={ref} value={name} onChange={function(e){setName(e.target.value);}} placeholder="e.g. Characters, Locations…" onKeyDown={function(e){if(e.key==='Enter'&&name.trim())onConfirm(name,icon,color);if(e.key==='Escape')onCancel();}}/>
+    </div>
+    {/* Colour */}
+    <div style={{marginBottom:14}}>
+      <span className="sect-lbl">Colour</span>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:6}}>
+        {SPOOL_COLORS.map(function(c){return(
+<div key={c} onClick={function(){setColor(c);}} style={{width:24,height:24,borderRadius:'50%',background:c,cursor:'pointer',transform:color===c?'scale(1.25)':'scale(1)',boxShadow:color===c?'0 0 0 2px var(--bg1),0 0 0 4px '+c:'none',transition:'transform .15s',flexShrink:0}}/>
+        );})}
+      </div>
+    </div>
+    {/* Icon */}
+    <div style={{marginBottom:20}}>
+      <span className="sect-lbl">Icon</span>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
+        {SPOOL_ICONS.map(function(ic){return(
+<button key={ic} onClick={function(){setIcon(ic);}} style={{width:36,height:36,borderRadius:6,border:'1px solid '+(icon===ic?color:'var(--border)'),background:icon===ic?color+'22':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}}>
+  <span className="material-symbols-outlined" style={{fontSize:18,color:icon===ic?color:'var(--mid)'}}>{ic}</span>
+</button>
+        );})}
+      </div>
+    </div>
+    <div style={{display:'flex',gap:8}}>
+      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onCancel}>Cancel</button>
+      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={function(){if(name.trim())onConfirm(name,icon,color);}} disabled={!name.trim()}>Create Spool</button>
+    </div>
+  </div>
+</div>
+  );
+}
+
 // ── StrandsPage ──
 function StrandsPage({app,allProjects}){
   var pid=app.projId;
@@ -2947,6 +3031,13 @@ function StrandsPage({app,allProjects}){
   <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
     <button className="btn-icon" onClick={openCollSettings} title="Spool settings"><span className="mi" style={{fontSize:18}}>settings</span></button>
     <button className="btn btn-ghost btn-sm" onClick={function(){setNewColl(true);}}>+ Create Spool</button>
+  {newColl&&<NewSpoolModal onConfirm={function(name,icon,color){
+    if(!name.trim())return;
+    var nt={id:genId(),projectId:pid,name:name.trim(),icon:icon,color:color,fields:defaultFields(name.trim()),sharedWith:[]};
+    app.addTemplate(pid,nt);
+    app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name.trim()]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});
+    setActiveColl(name.trim());setNewColl(false);
+  }} onCancel={function(){setNewColl(false);}}/>}
   </div>
 </div>
     )}
