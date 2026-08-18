@@ -3046,25 +3046,78 @@ function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrand
 
 
 // ── IconSearchPopup ──
+// Uses full Material Symbols library — no hardcoded list
+var ICON_CATEGORIES={
+  'Narrative & Writing':['auto_stories','book_ribbon','edit_note','history_edu','create','draw','stylus_note','ink_highlighter','quill','ink_pen','description','article','library_books','menu_book','local_library','sticky_note_2','assignment','topic','newsstand','feed','drafts'],
+  'People':['person','group','diversity_3','family_restroom','child_care','elderly','face','waving_hand','handshake','supervisor_account','manage_accounts','badge','contacts','emoji_people','social_distance','connect_without_contact'],
+  'Places':['location_on','map','home','apartment','castle','cottage','cabin','park','forest','beach_access','landscape','terrain','public','travel_explore','flight','train','directions_car','anchor','explore','near_me'],
+  'Nature & World':['nature','water','fire','water_drop','air','eco','recycling','sunny','storm','cloud','wb_sunny','nights_stay','ac_unit','tsunami','volcano','energy_savings_leaf','solar_power','wind_power','grass','flower'],
+  'Objects & Items':['key','lock','shield','sword','diamond','crown','trophy','flag','bookmark','label','tag','star','favorite','gift','cake','coffee','restaurant','local_pizza','wine_bar','sports_bar'],
+  'Science & Tech':['science','biotech','experiment','microbiology','telescope','microscope','satellite_alt','psychology','lightbulb','hub','code','terminal','database','computer','phone_android','watch','rocket_launch','smart_toy'],
+  'Arts & Culture':['palette','brush','photo_camera','music_note','headphones','piano','mic','theater_comedy','movie','sports_esports','casino','sports','emoji_objects','gesture','animation','casino'],
+  'Health & Body':['medical_services','stethoscope','vaccines','medication','monitor_heart','bloodtype','fitness_center','self_improvement','spa','yoga','emergency','biotech'],
+  'Symbols':['bolt','warning','info','help','check_circle','cancel','add_circle','verified','military_tech','workspace_premium','grade','celebration','emoji_events','trending_up','analytics','savings','account_balance','gavel','campaign']
+};
+var ALL_PRESET_ICONS=Object.values(ICON_CATEGORIES).flat();
+
 function IconSearchPopup({current,onSelect,onClose}){
   var sq=useState('');var q=sq[0];var setQ=sq[1];
-  var COMMON_ICONS=['auto_stories','book_ribbon','gesture','hub','lightbulb','favorite','star','location_on','person','group','explore','psychology','edit_note','campaign','local_library','history_edu','science','palette','music_note','sports_esports','pets','restaurant','hiking','fitness_center','work','school','medical_services','gavel','theater_comedy','movie','emoji_objects','language','public','home','landscape','nature','cloud','sunny','calendar_month','schedule','alarm','notifications','bookmark','label','flag','trophy','diamond','map','key','search','mic','headphones','brush','photo_camera','computer','phone_android','rocket_launch','code','database','folder','article','savings','account_balance','trending_up','analytics','people','diversity_3','quiz','help','info','warning','error','check_circle','cancel','add_circle','remove_circle','verified','military_tech','workspace_premium','grade','celebration','emoji_events','sports_score','casino','toys','child_care','elderly','accessible','spa','self_improvement','yoga','travel_explore','flight','train','directions_car','directions_bike','park','beach_access','forest','water','fire_truck','sailing','agriculture','construction','factory','store','shopping_cart','attach_money','currency_exchange','contract','handshake','volunteer_activism','mood','sentiment_satisfied','emoji_people','face','waving_hand','thumb_up','thumb_down','back_hand','fingerprint','visibility','visibility_off','lock','lock_open','security','shield','electric_bolt','water_drop','air','eco','recycling','compost','energy_savings_leaf','solar_power','wind_power','coronavirus','vaccines','medication','stethoscope','emergency','bloodtype','monitor_heart','biotech','microbiology','genetics','experiment','telescope','microscope','satellite_alt','travel_explore','public','language','globe','egg_alt','cake','local_pizza','ramen_dining','set_meal','coffee','liquor','sports_bar','wine_bar'];
-  var filtered=q?COMMON_ICONS.filter(function(ic){return ic.includes(q.toLowerCase())}):COMMON_ICONS;
+  var showAll=!q.trim();
+  var iconStyle={fontFamily:"'Material Symbols Outlined'",fontStyle:'normal',fontSize:24,lineHeight:1,display:'flex',alignItems:'center',justifyContent:'center',letterSpacing:'normal',textTransform:'none',direction:'ltr',WebkitFontSmoothing:'antialiased'};
+
+  // When typing, try to show any valid icon name — material symbols accepts any string
+  // Show curated categories when no search, or filtered presets + the raw typed name
+  var results=showAll?ALL_PRESET_ICONS:ALL_PRESET_ICONS.filter(function(ic){return ic.includes(q.toLowerCase().replace(/\s+/g,'_'));});
+  var typedName=q.trim().toLowerCase().replace(/\s+/g,'_');
+  var showTyped=typedName&&!results.includes(typedName);
+
   return(
 <div style={{position:'fixed',inset:0,zIndex:700,display:'flex',alignItems:'center',justifyContent:'center'}}>
   <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={onClose}/>
-  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:14,padding:24,width:480,maxWidth:'92vw',maxHeight:'80vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(42,31,16,.2)'}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600,marginBottom:14,color:'var(--text)'}}>Choose icon</div>
-    <input autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search icons…" style={{padding:'8px 12px',fontSize:14,border:'1px solid var(--border)',borderRadius:8,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',marginBottom:14}}/>
-    <div style={{display:'flex',gap:6,flexWrap:'wrap',overflowY:'auto',flex:1}}>
-      {filtered.map(function(ic){var isActive=current===ic;return(
-<button key={ic} onClick={function(){onSelect(ic);onClose();}} title={ic.replace(/_/g,' ')} style={{width:40,height:40,borderRadius:8,border:'1.5px solid '+(isActive?'#c45e28':'var(--border)'),background:isActive?'rgba(196,94,40,.1)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .1s'}}
+  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:14,padding:24,width:560,maxWidth:'94vw',maxHeight:'82vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(42,31,16,.2)'}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600,marginBottom:6,color:'var(--text)'}}>Choose icon</div>
+    <div style={{fontSize:12,color:'var(--mid)',marginBottom:12}}>Search by name, or type any <a href="https://fonts.google.com/icons" target="_blank" rel="noopener" style={{color:'var(--indigo)'}}>Material Symbol</a> name directly.</div>
+    <input autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search icons (e.g. dragon, mountain, crystal)…" style={{padding:'8px 12px',fontSize:14,border:'1px solid var(--border)',borderRadius:8,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',marginBottom:12}}/>
+    <div style={{overflowY:'auto',flex:1}}>
+      {/* Typed custom name — always show if it could be a valid icon */}
+      {showTyped&&(
+<div style={{marginBottom:14}}>
+  <div style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>Use custom icon name</div>
+  <button onClick={function(){onSelect(typedName);onClose();}} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderRadius:8,border:'1.5px solid var(--indigo)',background:'rgba(196,94,40,.06)',cursor:'pointer',width:'100%',textAlign:'left'}}>
+    <span style={Object.assign({},iconStyle,{fontSize:28,color:'var(--indigo)',width:36,height:36})}>{typedName}</span>
+    <div>
+      <div style={{fontFamily:'DM Sans,sans-serif',fontSize:13,fontWeight:600,color:'var(--indigo)'}}>{typedName}</div>
+      <div style={{fontFamily:'DM Sans,sans-serif',fontSize:11,color:'var(--mid)'}}>If this is a valid Material Symbol name, it will render as an icon.</div>
+    </div>
+  </button>
+</div>
+      )}
+      {/* Category sections when not searching */}
+      {showAll?Object.keys(ICON_CATEGORIES).map(function(cat){return(
+<div key={cat} style={{marginBottom:16}}>
+  <div style={{fontSize:11,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>{cat}</div>
+  <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+    {ICON_CATEGORIES[cat].map(function(ic){var isActive=current===ic;return(
+<button key={ic} onClick={function(){onSelect(ic);onClose();}} title={ic.replace(/_/g,' ')} style={{width:40,height:40,borderRadius:8,border:'1.5px solid '+(isActive?'#c45e28':'var(--border)'),background:isActive?'rgba(196,94,40,.1)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
   onMouseOver={function(e){if(!isActive)e.currentTarget.style.background='var(--bg2)';}}
   onMouseOut={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
-  <span style={{fontFamily:'Material Symbols Outlined',fontStyle:'normal',fontSize:22,lineHeight:1,display:'inline-block',letterSpacing:'normal',textTransform:'none',direction:'ltr',WebkitFontSmoothing:'antialiased',color:isActive?'#c45e28':'var(--mid)'}}>{ic}</span>
+  <span style={Object.assign({},iconStyle,{fontSize:20,color:isActive?'#c45e28':'var(--mid)'})}>{ic}</span>
 </button>
-      );})}
-      {filtered.length===0&&<div style={{fontSize:13,color:'var(--mid)',padding:8}}>No icons match.</div>}
+    );})}
+  </div>
+</div>
+      )}):(
+<div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+  {results.map(function(ic){var isActive=current===ic;return(
+<button key={ic} onClick={function(){onSelect(ic);onClose();}} title={ic.replace(/_/g,' ')} style={{width:40,height:40,borderRadius:8,border:'1.5px solid '+(isActive?'#c45e28':'var(--border)'),background:isActive?'rgba(196,94,40,.1)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
+  onMouseOver={function(e){if(!isActive)e.currentTarget.style.background='var(--bg2)';}}
+  onMouseOut={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
+  <span style={Object.assign({},iconStyle,{fontSize:20,color:isActive?'#c45e28':'var(--mid)'})}>{ic}</span>
+</button>
+  );})}
+  {results.length===0&&!showTyped&&<div style={{fontSize:13,color:'var(--mid)',padding:8}}>No presets match. Type any Material Symbol name above to use it directly.</div>}
+</div>
+      )}
     </div>
     <button className="btn btn-ghost" style={{marginTop:14,width:'100%',justifyContent:'center'}} onClick={onClose}>Cancel</button>
   </div>
@@ -3142,6 +3195,103 @@ function NewSpoolModal({onConfirm,onCancel}){
   );
 }
 
+
+// ── StrandRefField ──
+// Stores an array of {id, label} objects as JSON string
+function StrandRefField({f,sid,val,pid,app,onUpdate}){
+  var refCollName=f.refSpool||'';
+  var refStrands=refCollName?(app.allStrands[pid]&&app.allStrands[pid][refCollName]||[]):[];
+  var projTemplates=app.allTemplates[pid]||[];
+
+  // Parse stored value — supports both legacy comma string and new JSON format
+  function parseRefs(v){
+    if(!v)return[];
+    try{var parsed=JSON.parse(v);if(Array.isArray(parsed))return parsed;}catch(e){}
+    // Legacy: plain comma-separated IDs
+    return v.split(',').filter(Boolean).map(function(id){return{id:id,label:''};});
+  }
+  function saveRefs(refs){onUpdate(refs.length?JSON.stringify(refs):'');}
+
+  var srl=useState(parseRefs(val));var refs=srl[0];var setRefs=srl[1];
+  var sss=useState('');var selId=sss[0];var setSelId=sss[1];
+  var slb=useState('');var newLabel=slb[0];var setNewLabel=slb[1];
+  var ssq=useState('');var searchQ=ssq[0];var setSearchQ=ssq[1];
+
+  if(!refCollName)return(<span style={{fontSize:13,color:'var(--mid)',fontStyle:'italic'}}>No spool linked — edit field settings.</span>);
+
+  var selectedIds=refs.map(function(r){return r.id;});
+  var available=refStrands.filter(function(st){
+    if(!f.refMultiple&&refs.length>=1)return false;
+    if(selectedIds.includes(st.id))return false;
+    if(searchQ&&!(st.name||'').toLowerCase().includes(searchQ.toLowerCase()))return false;
+    return true;
+  });
+  var tpl=projTemplates.find(function(t){return t.name===refCollName;});
+  var spoolColor=(tpl&&tpl.color)||'#c45e28';
+
+  function addRef(){
+    if(!selId)return;
+    var st=refStrands.find(function(s){return s.id===selId;});if(!st)return;
+    var newRefs=refs.concat([{id:selId,label:newLabel.trim()}]);
+    setRefs(newRefs);saveRefs(newRefs);setSelId('');setNewLabel('');setSearchQ('');
+  }
+  function removeRef(idx){var nr=refs.filter(function(_,i){return i!==idx;});setRefs(nr);saveRefs(nr);}
+  function updateLabel(idx,lbl){var nr=refs.map(function(r,i){return i===idx?Object.assign({},r,{label:lbl}):r;});setRefs(nr);saveRefs(nr);}
+
+  return(
+<div style={{display:'flex',flexDirection:'column',gap:8}}>
+  {/* Existing refs */}
+  {refs.map(function(r,i){
+    var st=refStrands.find(function(s){return s.id===r.id;});
+    if(!st)return null;
+    return(
+<div key={r.id+i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:10,background:spoolColor+'14',border:'1px solid '+spoolColor+'44'}}>
+  {/* Circle avatar */}
+  <div style={{width:24,height:24,borderRadius:'50%',background:st.color||spoolColor,border:'2px solid '+spoolColor,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,boxSizing:'border-box'}}>
+    {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontFamily:'DM Sans,sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
+  </div>
+  <div style={{flex:1,minWidth:0}}>
+    <div style={{fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:600,color:spoolColor}}>{st.name}</div>
+    {/* Inline label edit */}
+    <input value={r.label} onChange={function(e){updateLabel(i,e.target.value);}} placeholder="Add relationship label…" style={{fontFamily:'DM Sans,sans-serif',fontSize:11,color:'var(--mid)',background:'transparent',border:'none',outline:'none',padding:0,width:'100%',fontStyle:r.label?'normal':'italic'}}/>
+  </div>
+  <button onClick={function(){removeRef(i);}} style={{background:'none',border:'none',cursor:'pointer',padding:2,color:spoolColor,opacity:.6,display:'flex',alignItems:'center'}}>
+    <span className="material-symbols-outlined" style={{fontSize:14}}>close</span>
+  </button>
+</div>
+    );
+  })}
+
+  {/* Add new ref — show if multiple allowed or no refs yet */}
+  {(f.refMultiple||refs.length===0)&&(
+<div style={{display:'flex',flexDirection:'column',gap:6,padding:'8px 10px',borderRadius:10,background:'var(--bg2)',border:'1px dashed var(--border)'}}>
+  {/* Search + select */}
+  <input value={searchQ} onChange={function(e){setSearchQ(e.target.value);setSelId('');}} placeholder={'Search '+refCollName+'…'} style={{fontFamily:'DM Sans,sans-serif',fontSize:12,padding:'4px 8px',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg1)',color:'var(--text)',outline:'none'}}/>
+  {searchQ&&available.length>0&&(
+<div style={{maxHeight:120,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg1)'}}>
+  {available.map(function(st){return(
+<div key={st.id} onClick={function(){setSelId(st.id);setSearchQ(st.name);}} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',cursor:'pointer',borderBottom:'1px solid var(--bg2)'}}
+  onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
+  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  <div style={{width:18,height:18,borderRadius:'50%',background:st.color||spoolColor,flexShrink:0}}/>
+  <span style={{fontSize:12,fontFamily:'DM Sans,sans-serif',color:'var(--text)'}}>{st.name}</span>
+</div>
+  );})}
+</div>
+  )}
+  {searchQ&&available.length===0&&<span style={{fontSize:11,color:'var(--mid)',fontStyle:'italic'}}>No matches.</span>}
+  {selId&&(
+<input value={newLabel} onChange={function(e){setNewLabel(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')addRef();}} placeholder="Relationship label (e.g. Mother, Mentor)…" style={{fontFamily:'DM Sans,sans-serif',fontSize:12,padding:'4px 8px',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg1)',color:'var(--text)',outline:'none'}}/>
+  )}
+  {selId&&(
+<button onClick={addRef} style={{alignSelf:'flex-start',padding:'4px 12px',borderRadius:6,background:spoolColor,color:'#fff',border:'none',cursor:'pointer',fontSize:12,fontFamily:'DM Sans,sans-serif',fontWeight:600}}>Add</button>
+  )}
+</div>
+  )}
+</div>
+  );
+}
+
 // ── StrandsPage ──
 function StrandsPage({app,allProjects}){
   var pid=app.projId;
@@ -3190,27 +3340,7 @@ function StrandsPage({app,allProjects}){
     );
     if(f.type==='select')return(<select key={sid+'-'+f.id} defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}><option value="">Select...</option>{(f.options||[]).map(function(o){return <option key={o} value={o}>{o}</option>;})}</select>);
     if(f.type==='strand_ref'){
-      var refCollName=f.refSpool||'';
-      var refStrands=refCollName?(app.allStrands[pid]&&app.allStrands[pid][refCollName]||[]):[];
-      var currentVals=val?val.split(',').filter(Boolean):[];
-      if(!refCollName)return <span style={{fontSize:13,color:'var(--mid)',fontStyle:'italic'}}>No spool linked — edit field settings.</span>;
-      if(f.refMultiple){return(
-<div key={sid+'-'+f.id} style={{display:'flex',flexWrap:'wrap',gap:4}}>
-  {refStrands.map(function(st){var sel=currentVals.includes(st.id);return(
-<label key={st.id} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:10,cursor:'pointer',background:sel?'rgba(196,94,40,.1)':'var(--bg2)',border:'1px solid '+(sel?'var(--indigo)':'var(--border)'),fontSize:12,color:sel?'var(--indigo)':'var(--text)'}}>
-  <input type="checkbox" style={{width:'auto',margin:0}} checked={sel} onChange={function(){var nv=sel?currentVals.filter(function(v){return v!==st.id;}):currentVals.concat([st.id]);updateField(sid,f.id,nv.join(','));}}/>
-  {st.name}
-</label>
-  );})}
-  {refStrands.length===0&&<span style={{fontSize:12,color:'var(--mid)',fontStyle:'italic'}}>No items in {refCollName}.</span>}
-</div>
-      );}
-      return(
-<select key={sid+'-'+f.id} value={val||''} onChange={function(e){updateField(sid,f.id,e.target.value);}} style={{width:'100%'}}>
-  <option value="">— Select {refCollName}</option>
-  {refStrands.map(function(st){return <option key={st.id} value={st.id}>{st.name}</option>;})}
-</select>
-      );
+      return <StrandRefField key={sid+'-'+f.id} f={f} sid={sid} val={val} pid={pid} app={app} onUpdate={function(newVal){updateField(sid,f.id,newVal);}}/>;
     }
     return <input key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} type={f.type==='number'?'number':'text'} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
 
