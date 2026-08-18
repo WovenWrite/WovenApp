@@ -824,20 +824,17 @@ function GlobalLooseThreads({app}){
   return(
 <div style={{marginTop:24}}>
   <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Loose Threads</div>
-  <div className="cards-grid">
-    <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:6,display:'flex',flexDirection:'column',boxShadow:'none',height:'auto',minHeight:100}} onClick={handleAddLT}>
-      <span className="mi" style={{fontSize:22,color:'var(--placeholder)'}}>add_circle_outline</span>
-      <span style={{fontSize:12,color:'var(--placeholder)'}}>New loose thread</span>
+  <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+    <div onClick={handleAddLT} style={{background:"transparent",border:"2px dashed #A88060",padding:"10px 15px",borderRadius:15,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,minWidth:120,flexShrink:0,minHeight:80}} onMouseEnter={function(e){e.currentTarget.style.borderColor="#c45e28";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#A88060";}}>
+      <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
     </div>
     {visibleLT.map(function(d){return(
-<div key={d.id} className="draft-card" style={{height:'auto',minHeight:140,cursor:'pointer'}} onClick={function(){setOpenLTId(d.id);}}>
-  <div className="card-body" style={{padding:'10px 12px'}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:d.title?'var(--text)':'var(--placeholder)',marginBottom:4,lineHeight:1.3}}>{d.title||'Untitled loose thread'}</div>
-    <div style={{fontSize:12,color:'var(--mid)',lineHeight:1.5,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:4,WebkitBoxOrient:'vertical'}}>{d.synopsis||''}</div>
-  </div>
-  <div className="card-footer" style={{justifyContent:'flex-end'}}>
-    <span style={{fontSize:11,color:'var(--placeholder)'}}>Click to edit</span>
-  </div>
+<div key={d.id} style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,minWidth:160,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
+  onClick={function(){setOpenLTId(d.id);}}
+  onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';e.currentTarget.style.boxShadow='0 4px 12px rgba(196,94,40,.12)';}}
+  onMouseLeave={function(e){e.currentTarget.style.borderColor='transparent';e.currentTarget.style.boxShadow='none';}}>
+  <div style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2A1F10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.title||'Untitled loose thread'}</div>
+  {d.synopsis&&<div style={{fontFamily:'DM Sans, sans-serif',fontSize:14,fontStyle:'italic',color:'#A88060',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.synopsis}</div>}
 </div>
     );})}
   </div>
@@ -1511,18 +1508,25 @@ function StrandCircle({strand,spoolColor,size}){
 function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   var so=useState(false);var dragOver=so[0];var setDragOver=so[1];
   var sac=useState(false);var archiveConfirm=sac[0];var setArchiveConfirm=sac[1];
+  var set=useState(false);var editTitle=set[0];var setEditTitle=set[1];
+  var ses=useState(false);var editSyn=ses[0];var setEditSyn=ses[1];
+  var stv=useState(draft.title||'');var titleVal=stv[0];var setTitleVal=stv[1];
+  var ssv=useState(draft.synopsis||'');var synVal=ssv[0];var setSynVal=ssv[1];
+  var sth=useState(false);var thumbHover=sth[0];var setThumbHover=sth[1];
+  var ssc=useState(false);var strandConfirm=ssc[0];var setStrandConfirm=ssc[1];
+  var ssi=useState(null);var strandConfirmId=ssi[0];var setStrandConfirmId=ssi[1];
   var sdrag=useRef(false);var smouse=useRef({x:0,y:0});
+  var fileRef=useRef(null);
   var pid=app.projId;
   var projStrands=app.allStrands[pid]||{};
   var projTemplates=app.allTemplates[pid]||[];
 
-  // Gather tagged strands with their spool color
   var tagged=[];
   Object.keys(projStrands).forEach(function(coll){
     (projStrands[coll]||[]).forEach(function(st){
       if((draft.strandTags||[]).includes(st.id)){
         var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
-        tagged.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));
+        tagged.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28',collName:coll}));
       }
     });
   });
@@ -1536,101 +1540,136 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
     else if(draft.status==='loose_thread'){ch.order=(app.allDrafts[pid]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length+1;}
     app.updateDraft(pid,draft.id,ch);
   }
-  function doArchive(){
-    var allDr=app.allDrafts[pid]||[];
-    var children=allDr.filter(function(d){return d.parentId===draft.id&&!d.archived;});
-    app.updateDraft(pid,draft.id,{archived:true});
-    children.forEach(function(c){app.updateDraft(pid,c.id,{archived:true});});
-    setArchiveConfirm(false);
-  }
+  function doArchive(){var allDr=app.allDrafts[pid]||[];var children=allDr.filter(function(d){return d.parentId===draft.id&&!d.archived;});app.updateDraft(pid,draft.id,{archived:true});children.forEach(function(c){app.updateDraft(pid,c.id,{archived:true});});setArchiveConfirm(false);}
+  function removeStrand(strandId){app.updateDraft(pid,draft.id,{strandTags:(draft.strandTags||[]).filter(function(id){return id!==strandId;})});setStrandConfirm(false);setStrandConfirmId(null);}
 
-  // Click vs drag detection
   function handleMouseDown(e){smouse.current={x:e.clientX,y:e.clientY};sdrag.current=false;}
   function handleMouseMove(e){var dx=e.clientX-smouse.current.x;var dy=e.clientY-smouse.current.y;if(Math.sqrt(dx*dx+dy*dy)>4)sdrag.current=true;}
   function handleMouseUp(e){
     if(!sdrag.current&&!structureMode){
-      // It's a click, not a drag — open draft
       if(!e.target.closest('.status-dot-wrap'))app.openDraft(draft.id);
     }
   }
+  function handleThumbnailUpload(e){
+    var file=e.target.files&&e.target.files[0];if(!file)return;
+    if(file.size>3*1024*1024){alert('Please use an image under 3 MB.');return;}
+    if(window.uploadImage){window.uploadImage(file).then(function(url){if(url)app.updateDraft(pid,draft.id,{thumbnail:url});});}
+  }
 
-  // Body text preview (fallback when no synopsis)
   var bodyPreview=draft.body?stripHtml(draft.body).slice(0,300):'';
-
-  // Strand circles: max 3 visible + overflow
-  var visibleStrands=tagged.slice(0,3);
-  var overflow=tagged.length-3;
-
-  // Overflow tooltip
+  var visibleStrands=structureMode?tagged:tagged.slice(0,3);
+  var overflow=structureMode?0:tagged.length-3;
   var overflowRef=useRef(null);var overflowTt=useRef(null);
-  function showOverflow(){if(!overflowRef.current||!overflowTt.current)return;var r=overflowRef.current.getBoundingClientRect();overflowTt.current.style.left=(r.left+r.width/2)+'px';overflowTt.current.style.top=(r.top-6)+'px';overflowTt.current.style.opacity='1';}
+  function showOverflow(){if(!overflowRef.current||!overflowTt.current)return;var r=overflowRef.current.getBoundingClientRect();overflowTt.current.style.left=(r.left+r.width/2)+'px';overflowTt.current.style.top=(r.bottom+6)+'px';overflowTt.current.style.opacity='1';}
   function hideOverflow(){if(overflowTt.current)overflowTt.current.style.opacity='0';}
+
+  var AMBER='#c45e28';
 
   return(
 <div
-  style={{width:270,height:400,borderRadius:15,overflow:'visible',background:'var(--bg1)',border:'1px solid var(--border)',display:'flex',flexDirection:'column',cursor:structureMode?'grab':'pointer',boxShadow:'0 2px 8px rgba(42,31,16,.06)',transition:'box-shadow .15s',flexShrink:0,position:'relative'}}
-  draggable={structureMode}
-  onDragStart={structureMode?function(e){e.dataTransfer.setData('draftId',draft.id);}:undefined}
+  style={{width:270,borderRadius:15,overflow:'visible',background:'var(--bg1)',border:'2px solid transparent',display:'flex',flexDirection:'column',cursor:structureMode?'default':'pointer',boxShadow:'0 2px 8px rgba(42,31,16,.06)',transition:'box-shadow .2s,border-color .2s',flexShrink:0,position:'relative',height:structureMode?'auto':400}}
+  draggable={false}
   onDragOver={structureMode?function(e){e.preventDefault();setDragOver(true);}:undefined}
   onDragLeave={structureMode?function(){setDragOver(false);}:undefined}
   onDrop={structureMode?function(e){e.preventDefault();setDragOver(false);var fromId=e.dataTransfer.getData('draftId');if(fromId&&fromId!==draft.id)app.reorderDraft(pid,fromId,draft.order||0);}:undefined}
   onMouseDown={handleMouseDown}
   onMouseMove={handleMouseMove}
   onMouseUp={handleMouseUp}
-  onMouseOver={function(e){e.currentTarget.style.boxShadow='0 6px 20px rgba(42,31,16,.12)';}}
-  onMouseOut={function(e){e.currentTarget.style.boxShadow='0 2px 8px rgba(42,31,16,.06)';}}
+  onMouseEnter={function(e){e.currentTarget.style.boxShadow='0 4px 16px rgba(42,31,16,.12)';e.currentTarget.style.borderColor=AMBER;}}
+  onMouseLeave={function(e){e.currentTarget.style.boxShadow='0 2px 8px rgba(42,31,16,.06)';e.currentTarget.style.borderColor='transparent';}}
 >
   {/* Thumbnail */}
-  <div style={{height:150,background:'#E2D0B8',flexShrink:0,backgroundImage:draft.thumbnail?'url('+draft.thumbnail+')':undefined,backgroundSize:'cover',backgroundPosition:'center',position:'relative',borderRadius:'15px 15px 0 0',overflow:'hidden'}}>
-    {dragOver&&<div style={{position:'absolute',inset:0,background:'rgba(196,94,40,.15)',borderRadius:'15px 15px 0 0'}}/>}
+  <div
+    style={{height:150,background:'#E2D0B8',flexShrink:0,backgroundImage:draft.thumbnail?'url('+draft.thumbnail+')':undefined,backgroundSize:'cover',backgroundPosition:'center',position:'relative',borderRadius:'13px 13px 0 0',overflow:'hidden',cursor:structureMode?'pointer':'inherit'}}
+    onMouseEnter={function(){if(structureMode)setThumbHover(true);}}
+    onMouseLeave={function(){setThumbHover(false);}}
+    onClick={function(){if(structureMode&&fileRef.current)fileRef.current.click();}}
+  >
+    {dragOver&&<div style={{position:'absolute',inset:0,background:'rgba(196,94,40,.15)'}}/>}
+    {structureMode&&thumbHover&&(
+<div style={{position:'absolute',inset:0,background:'rgba(196,94,40,.75)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+  <span className="material-symbols-outlined" style={{fontSize:32,color:'#fff'}}>edit</span>
+</div>
+    )}
+    {structureMode&&<input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleThumbnailUpload}/>}
+    {structureMode&&(
+<div draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}} onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:8,right:8,width:28,height:28,background:'rgba(253,248,240,.85)',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:'grab',zIndex:2}}>
+  <span className="material-symbols-outlined" style={{fontSize:18,color:'#7A5A38'}}>drag_indicator</span>
+</div>
+    )}
   </div>
 
   {/* Content */}
-  <div style={{flex:1,background:'#F5EDE0',padding:'10px 15px',display:'flex',flexDirection:'column',gap:13,minHeight:0,borderRadius:'0 0 15px 15px',overflow:'hidden'}}>
-    {/* Title */}
-    <div style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',flexShrink:0}}>
-      {label}- {draft.title||'Untitled'}
-    </div>
+  <div style={{flex:1,background:'#F5EDE0',padding:'10px 15px',display:'flex',flexDirection:'column',gap:10,minHeight:0,borderRadius:'0 0 13px 13px',overflow:'hidden'}}>
 
-    {/* Synopsis / body preview */}
-    <div style={{flex:1,minHeight:0,overflow:'hidden',position:'relative'}}
-      onMouseOver={function(e){e.currentTarget.style.overflowY='auto';}}
-      onMouseOut={function(e){e.currentTarget.style.overflowY='hidden';}}>
-      {draft.synopsis?(
-<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',lineHeight:1.45,display:'-webkit-box',WebkitLineClamp:5,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
-  {draft.synopsis}
+    {/* Title */}
+    {structureMode&&editTitle?(
+<textarea autoFocus rows={2} value={titleVal} onChange={function(e){setTitleVal(e.target.value);}} onBlur={function(){app.updateDraft(pid,draft.id,{title:titleVal});setEditTitle(false);}} style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,background:'transparent',border:'2px solid '+AMBER,borderRadius:8,outline:'none',resize:'none',padding:'4px 8px',width:'100%',boxSizing:'border-box'}}/>
+    ):(
+<div
+  style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',flexShrink:0,borderRadius:6,padding:'2px 4px',transition:'background .15s',cursor:structureMode?'text':'inherit',border:'2px solid transparent'}}
+  onClick={function(){if(structureMode){setTitleVal(draft.title||'');setEditTitle(true);}}}
+  onMouseEnter={function(e){if(structureMode)e.currentTarget.style.background='rgba(196,94,40,.06)';}}
+  onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+  {label}- {draft.title||'Untitled'}
 </div>
-      ):bodyPreview?(
-<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'rgba(122,90,56,.75)',fontStyle:'italic',lineHeight:1.45,display:'-webkit-box',WebkitLineClamp:5,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
-  {bodyPreview}
+    )}
+
+    {/* Synopsis / preview */}
+    {structureMode&&editSyn?(
+<textarea autoFocus rows={4} value={synVal} onChange={function(e){setSynVal(e.target.value);}} onBlur={function(){app.updateDraft(pid,draft.id,{synopsis:synVal});setEditSyn(false);}} placeholder="Add a synopsis…" style={{fontFamily:'DM Sans, sans-serif',fontSize:15,color:'#7A5A38',lineHeight:1.45,background:'transparent',border:'2px solid '+AMBER,borderRadius:8,outline:'none',resize:'none',padding:'4px 8px',flex:1,boxSizing:'border-box'}}/>
+    ):(
+<div
+  style={{flex:1,minHeight:0,overflow:'hidden',position:'relative',borderRadius:6,padding:'2px 4px',transition:'background .15s',cursor:structureMode?'text':'inherit',border:'2px solid transparent'}}
+  onClick={function(){if(structureMode){setSynVal(draft.synopsis||'');setEditSyn(true);}}}
+  onMouseEnter={function(e){if(structureMode)e.currentTarget.style.background='rgba(196,94,40,.06)';}}
+  onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+  {draft.synopsis?(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',lineHeight:1.45,display:'-webkit-box',WebkitLineClamp:5,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{draft.synopsis}</div>
+  ):bodyPreview?(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'rgba(122,90,56,.75)',fontStyle:'italic',lineHeight:1.45,display:'-webkit-box',WebkitLineClamp:5,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{bodyPreview}</div>
+  ):(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'rgba(122,90,56,.4)',fontStyle:'italic',lineHeight:1.45}}>{structureMode?'Click to add synopsis…':'Start writing…'}</div>
+  )}
 </div>
-      ):(
-<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'rgba(122,90,56,.4)',fontStyle:'italic',lineHeight:1.45}}>
-  Start writing…
+    )}
+
+    {/* Strand chips — expanded in structure mode */}
+    {structureMode&&tagged.length>0&&(
+<div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+  {tagged.map(function(st){return(
+<div key={st.id} style={{display:'flex',alignItems:'center',gap:5,padding:'3px 8px',borderRadius:12,background:st.spoolColor+'22',border:'1px solid '+st.spoolColor,position:'relative'}}>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:11,color:st.spoolColor,fontWeight:600}}>{st.name}</span>
+  <button onClick={function(e){e.stopPropagation();setStrandConfirmId(st.id);setStrandConfirm(true);}} style={{background:'none',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',color:st.spoolColor,opacity:.7}}>
+    <span className="material-symbols-outlined" style={{fontSize:14}}>close</span>
+  </button>
 </div>
-      )}
-    </div>
+  );})}
+</div>
+    )}
 
     {/* Bottom row */}
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,marginTop:'auto'}}>
-      {/* Left: strand circles */}
-      <div style={{display:'flex',alignItems:'center'}}>
-        {visibleStrands.map(function(st,i){return(
-<div key={st.id} style={{width:25,height:25,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-8:0,boxSizing:'border-box',position:'relative',zIndex:visibleStrands.length-i,cursor:'default'}} className="has-tooltip">
+      {/* Left: strand circles (standard mode only) */}
+      {!structureMode&&(
+<div style={{display:'flex',alignItems:'center'}}>
+  {visibleStrands.map(function(st,i){return(
+<div key={st.id} title={st.name} style={{width:25,height:25,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||AMBER),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-8:0,boxSizing:'border-box',position:'relative',zIndex:visibleStrands.length-i,cursor:'default'}}>
   {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:11}}>{st.emoji}</span>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
-  <span className="tooltip-text" style={{whiteSpace:'nowrap',transform:'translateX(-50%) translateY(8px)',top:'100%',bottom:'auto',marginTop:0}}>{st.name}</span>
 </div>
-        );})}
-        {overflow>0&&(
+  );})}
+  {overflow>0&&(
 <div ref={overflowRef} onMouseEnter={showOverflow} onMouseLeave={hideOverflow} style={{width:25,height:25,borderRadius:'50%',background:'#E2D0B8',border:'1px solid #A88060',display:'flex',alignItems:'center',justifyContent:'center',marginLeft:-8,flexShrink:0,cursor:'default',zIndex:0}}>
   <span style={{fontFamily:'DM Sans, sans-serif',fontSize:10,color:'#7A5A38',fontWeight:600}}>+{overflow}</span>
-  <span ref={overflowTt} className="tooltip-text" style={{position:'fixed',opacity:0,transition:'opacity .1s',whiteSpace:'pre'}}>{tagged.slice(3).map(function(s){return s.name;}).join('\n')}</span>
+  <div ref={overflowTt} style={{position:'fixed',opacity:0,transition:'opacity .15s',background:'#7A5A38',color:'#fdf8f0',fontSize:11,padding:'5px 10px',borderRadius:6,pointerEvents:'none',zIndex:9999,whiteSpace:'pre',lineHeight:1.6}}>{tagged.slice(3).map(function(s){return s.name;}).join('
+')}</div>
 </div>
-        )}
-      </div>
-
+  )}
+</div>
+      )}
+      {structureMode&&<div/>}
       {/* Right: status dot + word count */}
-      <div className="status-dot-wrap" style={{display:'flex',alignItems:'center',gap:13}} onClick={function(e){e.stopPropagation();}}>
+      <div className="status-dot-wrap" style={{display:'flex',alignItems:'center',gap:8}} onClick={function(e){e.stopPropagation();}}>
         <StatusDotWithArchive draft={draft} app={app} showLabel={false} dotSize={15}/>
         <span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#a88060'}}>{(draft.wordCount||0)}w</span>
       </div>
@@ -1638,6 +1677,19 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   </div>
 
   {archiveConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[pid]||[]} onConfirm={doArchive} onCancel={function(){setArchiveConfirm(false);}}/>}
+  {strandConfirm&&(
+<div style={{position:'fixed',inset:0,zIndex:600,display:'flex',alignItems:'center',justifyContent:'center'}}>
+  <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={function(){setStrandConfirm(false);}}/>
+  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:12,padding:24,width:280,boxShadow:'0 12px 40px rgba(42,31,16,.15)'}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:8,color:'var(--text)'}}>Remove strand?</div>
+    <div style={{fontSize:13,color:'var(--mid)',marginBottom:16}}>This will remove the strand tag from this draft but won't delete the strand.</div>
+    <div style={{display:'flex',gap:8}}>
+      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={function(){setStrandConfirm(false);}}>Cancel</button>
+      <button className="btn btn-primary" style={{flex:1,justifyContent:'center',background:'var(--danger)'}} onClick={function(){removeStrand(strandConfirmId);}}>Remove</button>
+    </div>
+  </div>
+</div>
+  )}
 </div>
   );
 }
@@ -1670,13 +1722,13 @@ function SynopsisPreview({draft,onUpdate}){
 // ── LooseThreadsSection ──
 function LooseThreadsSection({threads,app,view}){
   var sortedThreads=threads.slice().sort(function(a,b){return (b.createdAt||'').localeCompare(a.createdAt||'');});
+  var sex=useState(false);var expanded=sex[0];var setExpanded=sex[1];
   function addLT(){app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
 
   if(view==='table'){return(
 <div style={{padding:'0 0 12px'}}>
   <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderTop:'1px solid var(--border)'}}>
-    <span style={{color:'var(--teal)',fontFamily:'var(--scribble)',fontSize:16,fontWeight:600}}>~</span>
-    <span style={{fontSize:13,fontWeight:600,color:'var(--mid)'}}>Loose Threads</span>
+    <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:13,color:'var(--mid)'}}>Loose Threads</span>
     {threads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:18,height:18,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{threads.length}</span>}
   </div>
   {sortedThreads.map(function(d){return(
@@ -1689,7 +1741,10 @@ function LooseThreadsSection({threads,app,view}){
 </div>
   );}
 
-  // Cards view — new tile layout
+  // How many tiles fit in one row (approx based on tile width 220+10gap)
+  var ONE_ROW=5;
+  var displayedThreads=expanded?sortedThreads:sortedThreads.slice(0,ONE_ROW);
+
   return(
 <div
   style={{background:'#F5EDE0',padding:'16px 16px 24px',marginTop:0}}
@@ -1703,17 +1758,27 @@ function LooseThreadsSection({threads,app,view}){
   <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
     <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'var(--text)'}}>Loose Threads</span>
     {threads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:22,height:22,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{threads.length}</span>}
-    <button style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:5,background:'transparent',border:'none',cursor:'pointer',fontSize:13,color:'var(--teal)',fontFamily:'DM Sans, sans-serif'}} onClick={addLT}>
-      <span className="mi" style={{fontSize:16}}>add</span>Add
-    </button>
+    {threads.length>ONE_ROW&&(
+<button onClick={function(){setExpanded(!expanded);}} title={expanded?'Collapse':'Expand all'} style={{marginLeft:'auto',display:'flex',alignItems:'center',background:'transparent',border:'none',cursor:'pointer',color:'var(--mid)',padding:4}}>
+  <span className="material-symbols-outlined" style={{fontSize:22}}>{expanded?'collapse_all':'expand_all'}</span>
+</button>
+    )}
   </div>
   {/* Tile grid */}
   <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
-    {sortedThreads.map(function(d){
+    {/* Ghost add tile */}
+    <div onClick={addLT} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
+      onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';}}
+      onMouseLeave={function(e){e.currentTarget.style.borderColor='#A88060';}}>
+      <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
+    </div>
+    {displayedThreads.map(function(d){
       var bodyPreview=d.body?stripHtml(d.body).slice(0,200):'';
       return(
-<div key={d.id} style={{background:'#FDF8F0',border:'1px solid #E2D0B8',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:220,flexShrink:0}}
-  onClick={function(){app.openDraft(d.id);}}>
+<div key={d.id} style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:220,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
+  onClick={function(){app.openDraft(d.id);}}
+  onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';e.currentTarget.style.boxShadow='0 4px 12px rgba(196,94,40,.12)';}}
+  onMouseLeave={function(e){e.currentTarget.style.borderColor='transparent';e.currentTarget.style.boxShadow='none';}}>
   <div style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2A1F10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
     {d.title||'Untitled loose thread'}
   </div>
@@ -1726,7 +1791,7 @@ function LooseThreadsSection({threads,app,view}){
       );
     })}
     {sortedThreads.length===0&&(
-<div style={{fontSize:13,color:'var(--placeholder)',fontStyle:'italic',padding:'8px 0'}}>No loose threads yet. Drag a draft here to park it.</div>
+<div style={{fontSize:13,color:'var(--placeholder)',fontStyle:'italic',padding:'8px 0'}}>No loose threads yet. Drag a draft here or click + to add one.</div>
     )}
   </div>
 </div>
