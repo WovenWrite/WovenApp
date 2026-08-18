@@ -302,6 +302,7 @@ function DraftEditor({app}){
   var editorContainerRef=useRef(null);
   var saveTimer=useRef(null);
   var initialised=useRef(false);
+  var sessionStartWc=useRef(draft.wordCount||0);
 
   // Derived font size from zoom
   var baseFontSize=DEFAULT_FONT_SIZE;
@@ -321,10 +322,12 @@ function DraftEditor({app}){
     });
     if(draft&&draft.body){
       q.clipboard.dangerouslyPasteHTML(draft.body);
-      // Clear history so Ctrl+Z can't undo back to blank state
       if(q.history)q.history.clear();
     }
-    if(draft&&draft.wordCount)setWordCount(draft.wordCount);
+    // Set from actual Quill content after paste — not stale React state
+    var initialWc=countWords(q.getText());
+    setWordCount(initialWc);
+    sessionStartWc.current=initialWc;
     q.on('selection-change',function(range){
       if(!range||range.length===0){
         // cursor position — get format at cursor
@@ -348,7 +351,8 @@ function DraftEditor({app}){
       else if(fmt.header)setActiveFormat(String(fmt.header));
       else setActiveFormat('');
     });
-    q.on('text-change',function(){
+    q.on('text-change',function(delta,oldDelta,source){
+      if(source!=='user')return; // ignore API/paste init events
       var txt=q.getText();
       var wc=countWords(txt);
       setWordCount(wc);
@@ -358,6 +362,15 @@ function DraftEditor({app}){
         var html=q.root.innerHTML;
         if(app&&app.updateDraft)app.updateDraft(pid,did,{body:html,wordCount:wc,updatedAt:new Date().toISOString()});
         setSaveState('saved');
+      // Record words written this session for dashboard stats
+      var added=Math.max(0,wc-sessionStartWc.current);
+      if(added>0){
+        if(app&&app.recordSession)app.recordSession(pid,added);
+        sessionStartWc.current=wc;
+      } else if(wc<sessionStartWc.current){
+        // Word count went down (deletion) — update baseline so future additions are correct
+        sessionStartWc.current=wc;
+      }
       // Snapshot every hour (mirrors App.jsx saveSnapshot logic)
       var snKey='woven:versions:'+did;
       try{
