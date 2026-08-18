@@ -255,15 +255,15 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .btn-ghost{color:var(--mid);border-color:var(--border);background:var(--bg1);}.btn-ghost:hover{color:var(--text);border-color:var(--bg4);background:var(--bg2);}
 .btn-danger{color:var(--danger);border-color:var(--danger);}.btn-danger:hover{background:rgba(184,50,32,.08);}
 .btn-sm{padding:5px 11px;font-size:13px;}.btn-icon{padding:5px;border-radius:var(--r);color:var(--mid);display:inline-flex;align-items:center;}.btn-icon:hover{background:var(--bg2);color:var(--text);}
-.nav{display:flex;align-items:center;padding:0 14px;height:54px;background:#E2D0B8;border-bottom:1px solid #A88060;flex-shrink:0;gap:10px;box-shadow:0 1px 4px rgba(42,31,16,.05);}
+.nav{display:flex;align-items:center;padding:0 14px;height:54px;background:#E2D0B8;flex-shrink:0;gap:10px;}
 .wordmark{font-family:var(--serif);font-size:22px;font-weight:600;color:var(--indigo);cursor:pointer;user-select:none;}
-.avatar{width:32px;height:32px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;cursor:pointer;overflow:hidden;border:1.5px solid rgba(42,31,16,.15);}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;cursor:pointer;overflow:hidden;}
 .view-switcher{display:flex;align-items:center;background:#F5EDE0;border-radius:50px;padding:4px;gap:2px;border:1px solid #A88060;}
 .view-seg{height:32px;width:36px;display:flex;align-items:center;justify-content:center;border-radius:50px;cursor:pointer;transition:all .15s;color:var(--mid);position:relative;flex-shrink:0;}
 .view-seg:hover{color:var(--text);background:rgba(42,31,16,.06);}
 .view-seg.active{background:var(--bg0);color:var(--indigo);box-shadow:0 1px 4px rgba(42,31,16,.10);}
 .view-seg .mi{font-size:18px;}
-.view-seg-tip{position:absolute;bottom:-34px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg0);font-size:11px;padding:3px 8px;border-radius:4px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .1s;z-index:100;}
+.view-seg-tip{position:absolute;bottom:-34px;left:50%;transform:translateX(-50%);background:#7A5A38;color:#fdf8f0;font-size:11px;padding:3px 8px;border-radius:4px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .1s;z-index:100;}
 .view-seg:hover .view-seg-tip{opacity:1;}
 .view-sep{width:1px;height:18px;background:#A88060;margin:0 2px;flex-shrink:0;opacity:.4;}
 .proj-title-inp{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--text);background:transparent;border:none;padding:2px 4px;border-radius:4px;min-width:60px;max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -653,21 +653,17 @@ function Panel({open,onClose,title,children,footer}){
 
 // ── ViewSwitcher ──
 function ViewSwitcher({view,setView}){
-  var mainModes=VIEW_MODES.filter(function(m){return m.group==='main';});
-  var strandMode=VIEW_MODES.find(function(m){return m.group==='strands';});
   return(
 <div className="view-switcher">
-  {mainModes.map(function(m){return(
-<div key={m.key} className={'view-seg'+(view===m.key?' active':'')} onClick={function(){setView(m.key);}}>
-  <span className="mi">{m.icon}</span>
-  <span className="view-seg-tip">{m.label}</span>
-</div>
-  );})}
-  <div className="view-sep"/>
-  <div className={'view-seg'+(view===strandMode.key?' active':'')} onClick={function(){setView(strandMode.key);}}>
-    <span className="mi">{strandMode.icon}</span>
-    <span className="view-seg-tip">{strandMode.label}</span>
+  {VIEW_MODES.map(function(m,i){return(
+<React.Fragment key={m.key}>
+  {m.group==='strands'&&<div className="view-sep"/>}
+  <div className={'view-seg'+(view===m.key?' active':'')} onClick={function(){setView(m.key);}}>
+    <span className="material-symbols-outlined" style={{fontSize:20}}>{m.icon}</span>
+    <span className="view-seg-tip">{m.label}</span>
   </div>
+</React.Fragment>
+  );})}
 </div>
   );
 }
@@ -917,7 +913,6 @@ function Dashboard({app,onOpenProfile,onNewProject}){
   <nav className="nav" style={{justifyContent:'space-between'}}>
     <WovenLogo size={26}/>
     <div style={{display:'flex',alignItems:'center',gap:8}}>
-      <button className="btn-icon" title="Sign out" onClick={function(){app.signOut();}}><span className="mi" style={{fontSize:20}}>logout</span></button>
       <div className="avatar" onClick={function(){onOpenProfile(null);}}>{profile.headshot?<img src={profile.headshot} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:initials(firstName+' '+(profile.lastName||''))}</div>
     </div>
   </nav>
@@ -957,8 +952,13 @@ function Dashboard({app,onOpenProfile,onNewProject}){
         <span className="mi" style={{fontSize:20,color:'var(--border)'}}>chevron_right</span>
       </div>
     </div>
-    <div className="dash-sidebar">
-      <StatsSection app={app} onOpenProfile={onOpenProfile} greeting={greeting}/>
+    <div className="dash-sidebar" style={{display:'flex',flexDirection:'column'}}>
+      <div style={{flex:1}}><StatsSection app={app} onOpenProfile={onOpenProfile} greeting={greeting}/></div>
+      <div style={{paddingTop:16,borderTop:'1px solid var(--border)',marginTop:16}}>
+        <button className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}} onClick={function(){app.signOut();}}>
+          <span className="mi" style={{fontSize:16}}>logout</span>Sign out
+        </button>
+      </div>
     </div>
   </div>
   {editProj&&<ProjectEditPanel proj={editProj} app={app} onClose={function(){setEditingProjId(null);}}/>}
@@ -985,7 +985,6 @@ function ProjectNav({app,onOpenProfile}){
   <div style={{flex:1,display:'flex',justifyContent:'center'}}>
     <ViewSwitcher view={app.view} setView={app.setView}/>
   </div>
-  <GlobalSaveIndicator/>
   <div className="avatar" onClick={function(){onOpenProfile(null);}}>{(app.profile&&app.profile.headshot)?<img src={app.profile.headshot} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:initials(((app.profile||{}).firstName||'')+' '+((app.profile||{}).lastName||''))}</div>
 </nav>
   );
@@ -2775,7 +2774,7 @@ function StrandsPage({app,allProjects}){
   function handleImageUpload(e,sid){var file=e.target.files&&e.target.files[0];if(!file)return;uploadImage(file).then(function(url){if(url)updateStrand(sid,{image:url});});}
   function getDraftAppearances(sid){return(app.allDrafts[pid]||[]).filter(function(d){return(d.strandTags||[]).includes(sid);});}
   function renderFieldInput(f,sid,val){
-    if(f.type==='long_text')return <textarea key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} rows={3} onBlur={function(e){updateField(sid,f.id,e.target.value);}} style={{resize:'vertical',minHeight:72}}/>;
+    if(f.type==='long_text')return <textarea key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} rows={3} onBlur={function(e){updateField(sid,f.id,e.target.value);}} style={{resize:'vertical',minHeight:72,cursor:'default'}}/>;
     if(f.type==='boolean')return(
 <div style={{display:'flex',gap:14}}>
   {['Yes','No'].map(function(opt){return(
@@ -2823,10 +2822,13 @@ function StrandsPage({app,allProjects}){
       saveDB('woven:strands:'+pid,reordered);
       return n;
     });
-    // Save new key order explicitly so it survives page reload
-    setTimeout(function(){
-      try{localStorage.setItem('woven:collOrder:'+pid,JSON.stringify(Object.keys((app.allStrands&&app.allStrands[pid])||{})));}catch(e){}
-    },50);
+    // Save new order immediately (setAllStrands is async so we compute from current keys)
+    var currentKeys=Object.keys((app&&app.allStrands&&app.allStrands[pid])||{});
+    var fi2=currentKeys.indexOf(fromColl);var ti2=currentKeys.indexOf(toColl);
+    if(fi2>=0&&ti2>=0){
+      var newOrder=currentKeys.slice();newOrder.splice(fi2,1);newOrder.splice(ti2,0,fromColl);
+      try{localStorage.setItem('woven:collOrder:'+pid,JSON.stringify(newOrder));}catch(e){}
+    }
   }
   var detailContent=showCollSettings&&editingFields?(
 <div style={{padding:24}}>
@@ -2945,8 +2947,10 @@ function StrandsPage({app,allProjects}){
 </div>
     ):(
 <div style={{display:'flex',alignItems:'center',gap:4,marginLeft:'auto'}}>
-  <button className="btn-icon" onClick={openCollSettings} title="Collection settings"><span className="mi" style={{fontSize:18}}>settings</span></button>
-  <button className="btn btn-ghost btn-sm" onClick={function(){setNewColl(true);}}>+ Add collection</button>
+  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+    <button className="btn-icon" onClick={openCollSettings} title="Spool settings"><span className="mi" style={{fontSize:18}}>settings</span></button>
+    <button className="btn btn-ghost btn-sm" onClick={function(){setNewColl(true);}}>+ Create Spool</button>
+  </div>
 </div>
     )}
   </div>
@@ -3143,6 +3147,8 @@ function ProfilePanel({app,focusField,open,onClose}){
   var authEmail=(app.currentUser&&app.currentUser.email)||profile.email||'';
   var se=useState(authEmail);var email=se[0];var setEmail=se[1];
   var sh=useState(profile.headshot||null);var headshot=sh[0];var setHeadshot=sh[1];
+  // Sync headshot when profile updates (e.g. after login loads fresh data)
+  useEffect(function(){setHeadshot(profile.headshot||null);},[profile.headshot]);
   var sg=useState(app.goal||500);var goalVal=sg[0];var setGoalVal=sg[1];
   var goalRef=useRef(null);
   useEffect(function(){if(open&&focusField==='goal'&&goalRef.current){setTimeout(function(){goalRef.current&&goalRef.current.focus();},200);};}, [open,focusField]);
@@ -3533,7 +3539,13 @@ function App(){
   var shareId=urlParams.get('share');
   if(shareId)return(<div className="woven-root"><GlobalStyles/><SharedDraftView shareId={shareId}/></div>);
 
-  if(authLoading)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg0)',fontFamily:'var(--serif)',fontSize:24,color:'var(--mid)'}}>Loading...</div>);
+  if(authLoading)return(
+<div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg0)',gap:16}}>
+  <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
+  <div style={{width:36,height:36,borderRadius:'50%',border:'3px solid var(--border)',borderTopColor:'var(--indigo)',animation:'spin .8s linear infinite'}}/>
+  <span style={{fontFamily:'var(--serif)',fontSize:18,color:'var(--mid)'}}>Loading Woven…</span>
+</div>
+  );
   if(!currentUser)return(<div><GlobalStyles/><AuthScreen onAuth={function(user){window.__wovenUserId=user.id;setCurrentUser(user);loadAllData();}}/></div>);
 
   var inner=null;
