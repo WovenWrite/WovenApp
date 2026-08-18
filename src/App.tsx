@@ -144,7 +144,7 @@ var VIEW_MODES=[
   {key:'strands',icon:'gesture',      label:'Spools',     group:'strands'}
 ];
 var PRESET_COLORS=['#2f76e0','#64e02f','#ce2fe0','#2fe07f','#e02f79','#c45e28','#e8a030','#2f9966','#b83220','#f0c050'];
-var FIELD_TYPES=[{id:'short_text',label:'Short text'},{id:'long_text',label:'Long text'},{id:'number',label:'Number'},{id:'boolean',label:'Yes / No'},{id:'select',label:'Dropdown'}];
+var FIELD_TYPES=[{id:'short_text',label:'Short text'},{id:'long_text',label:'Long text'},{id:'number',label:'Number'},{id:'boolean',label:'Yes / No'},{id:'select',label:'Dropdown'},{id:'strand_ref',label:'Link to Spool'}];
 var PROJ_TYPES=[
   {id:'fiction',    label:'Fiction',     icon:'auto_stories',colls:['Characters','Locations','Lore & World'],desc:'Novels, short fiction, narrative'},
   {id:'nonfiction', label:'Non-Fiction', icon:'article',     colls:['Sources','Interviews','Subjects'],      desc:'Essays, memoir, journalism'},
@@ -356,7 +356,8 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .empty-view{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:48px 24px;gap:12px;color:var(--placeholder);text-align:center;}
 .table-wrap{flex:1;overflow:auto;}
 .wt{border-collapse:collapse;width:100%;table-layout:fixed;}
-.wt th{background:var(--bg1);border-bottom:2px solid var(--border);padding:9px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;position:sticky;top:0;z-index:2;white-space:nowrap;user-select:none;overflow:hidden;position:relative;}
+.wt td{background:#FDF8F0;font-family:'DM Sans',sans-serif;font-size:16px;color:#7A5A38;}
+.wt th{background:#E2D0B8;font-family:'DM Sans',sans-serif;font-size:16px;color:#6B4A26;font-weight:600;border-bottom:2px solid var(--border);padding:9px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;position:sticky;top:0;z-index:2;white-space:nowrap;user-select:none;overflow:hidden;position:relative;}
 .wt th.resizable{resize:horizontal;overflow:hidden;min-width:60px;}
 .col-resize-handle{position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;background:transparent;z-index:3;}
 .col-resize-handle:hover{background:var(--indigo);opacity:.3;}
@@ -829,7 +830,7 @@ function GlobalLooseThreads({app}){
       <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
     </div>
     {visibleLT.map(function(d){return(
-<div key={d.id} style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:150,maxWidth:150,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
+<div key={d.id} style={{background:'#FDF8F0',border:'1px solid #E2D0B8',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:150,maxWidth:150,flexShrink:0,transition:'border-color .2s,box-shadow .2s',outline:'1px solid transparent'}}
   onClick={function(){setOpenLTId(d.id);}}
   onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';e.currentTarget.style.boxShadow='0 4px 12px rgba(196,94,40,.12)';}}
   onMouseLeave={function(e){e.currentTarget.style.borderColor='transparent';e.currentTarget.style.boxShadow='none';}}>
@@ -1119,7 +1120,7 @@ function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind,structu
 </div>
       )}
     </div>
-    {SEP}
+    {!hideStructure&&SEP}
     {!hideStructure&&<button onClick={function(){var nv=!structureOn;setStructureOn(nv);if(onStructureToggle)onStructureToggle(nv);}} style={{display:'flex',alignItems:'center',gap:8,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer'}}>
       <div style={{width:34,height:18,borderRadius:9,background:structureOn?'#7A5A38':'#A88060',position:'relative',transition:'background .2s',flexShrink:0}}>
         <div style={{position:'absolute',top:2,left:structureOn?16:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
@@ -1653,7 +1654,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   function handleThumbnailUpload(e){
     var file=e.target.files&&e.target.files[0];if(!file)return;
     if(file.size>3*1024*1024){alert('Please use an image under 3 MB.');return;}
-    if(window.uploadImage){window.uploadImage(file).then(function(url){if(url)app.updateDraft(pid,draft.id,{thumbnail:url});});}
+    uploadImage(file).then(function(url){if(url)app.updateDraft(pid,draft.id,{thumbnail:url});});
   }
 
   var bodyPreview=draft.body?stripHtml(draft.body).slice(0,300):'';
@@ -2092,12 +2093,30 @@ function TableView({app}){
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
   var displayed=applyFS(tree,filter,sort);
   function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
+  var tblProjStrands=app.allStrands[app.projId]||{};
+  var tblProjTemplates=app.allTemplates[app.projId]||[];
   function renderCell(col,draft){
-    if(col==='title')return <input className="tbl-inp" style={{fontFamily:'var(--serif)',fontWeight:600,fontSize:14,textOverflow:'ellipsis',overflow:'hidden',whiteSpace:'nowrap'}} title={draft.title||''} defaultValue={draft.title} placeholder="Untitled" onBlur={function(e){app.updateDraft(app.projId,draft.id,{title:e.target.value});}}/>;
-    if(col==='status'){return <StatusDotWithArchive draft={draft} app={app} showLabel={true}/>;}
-    if(col==='wordCount')return <span style={{fontSize:12,color:'var(--mid)'}}>{draft.wordCount||0}</span>;
-    if(col==='synopsis')return <input className="tbl-inp syn" defaultValue={draft.synopsis} placeholder="Synopsis..." onBlur={function(e){app.updateDraft(app.projId,draft.id,{synopsis:e.target.value});}} style={{width:'100%'}}/>;
-    if(col==='strandTags'){var ps2=app.allStrands[app.projId]||{};var ts2=[];Object.keys(ps2).forEach(function(c){(ps2[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id))ts2.push(st);});});return(<div style={{display:'flex',flexWrap:'nowrap',gap:3,overflow:'hidden'}}>{ts2.slice(0,2).map(function(st){return <span key={st.id} className="chip" style={{background:'rgba(196,94,40,.1)',color:'var(--indigo)',borderColor:'rgba(196,94,40,.25)',borderWidth:1,borderStyle:'solid',fontSize:11,flexShrink:0}}>{st.name}</span>;})} {ts2.length>2&&<OverflowTooltip label={'+'+(ts2.length-2)} names={ts2.slice(2).map(function(s){return s.name;})}/>}</div>);}
+    if(col==='title')return <input className="tbl-inp" style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2a1f10',textOverflow:'ellipsis',overflow:'hidden',whiteSpace:'nowrap'}} title={draft.title||''} defaultValue={draft.title} placeholder="Untitled" onBlur={function(e){app.updateDraft(app.projId,draft.id,{title:e.target.value});}}/>;
+    if(col==='status'){var si=STATUSES[draft.status]||STATUSES.first_draft;return(
+<div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'4px 10px',borderRadius:12,background:si.color+'18'}}>
+  <div style={{width:8,height:8,borderRadius:'50%',background:si.color,flexShrink:0}}/>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,color:si.color,fontWeight:500,whiteSpace:'nowrap'}}>{si.label}</span>
+</div>
+    );}
+    if(col==='wordCount')return <span style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38'}}>{draft.wordCount||0}</span>;
+    if(col==='synopsis')return <input className="tbl-inp" defaultValue={draft.synopsis} placeholder="No synopsis…" onBlur={function(e){app.updateDraft(app.projId,draft.id,{synopsis:e.target.value});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',fontStyle:draft.synopsis?'normal':'italic',opacity:draft.synopsis?1:.75}}/>;
+    if(col==='strandTags'){var ts2=[];Object.keys(tblProjStrands).forEach(function(c){(tblProjStrands[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id)){var tpl=tblProjTemplates.find(function(t){return t.name===c||t.id===st.templateId;});ts2.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));}});});return(
+<div style={{display:'flex',alignItems:'center',gap:-4,overflow:'hidden'}}>
+  {ts2.slice(0,4).map(function(st,i){return(
+<div key={st.id} title={st.name} style={{width:24,height:24,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-6:0,boxSizing:'border-box',cursor:'default'}}
+  onMouseEnter={function(e){var tt=document.getElementById('woven-tt');if(tt){var r=e.currentTarget.getBoundingClientRect();tt.textContent=st.name;tt.style.display='block';tt.style.left=(r.left+r.width/2)+'px';tt.style.top=(r.bottom+6)+'px';}}}
+  onMouseLeave={function(){var tt=document.getElementById('woven-tt');if(tt)tt.style.display='none';}}>
+  {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:8,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
+</div>
+  );})}
+  {ts2.length>4&&<span style={{marginLeft:2,fontSize:11,color:'#7A5A38'}}>+{ts2.length-4}</span>}
+</div>
+    );}
     if(col==='pov'){var projStrands=app.allStrands[app.projId]||{};var taggedStrands=[];Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id))taggedStrands.push(st);});});return(
 <select style={{background:'transparent',border:'none',padding:0,fontSize:12,color:'var(--mid)',width:90}} value={draft.pov||''} onChange={function(e){app.updateDraft(app.projId,draft.id,{pov:e.target.value});}}>
   <option value="">—</option>
@@ -2124,27 +2143,33 @@ function TableView({app}){
     </div>
   </td>
   {visCols.map(function(col){return <td key={col}>{renderCell(col,draft)}</td>;})}
-  <td><button className="card-open" onClick={function(){app.openDraft(draft.id);}}>Draft</button></td>
+  <td><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
+    <span className="material-symbols-outlined" style={{fontSize:20}}>arrow_forward</span>
+  </button></td>
 </tr>
   );}
   return(
 <div className="view-layout">
   <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} hideStructure={true}/>
-  <div className="table-wrap dot-grid" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto'}}>
+  <div className="table-wrap" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto'}}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>
   <table className="wt">
     <thead>
-      <tr>
-        <th style={{width:32}}/>
-        <th style={{width:48}}>#</th>
-        {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});return(
-<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160}} className="resizable">
+      <tr style={{background:'#E2D0B8'}}>
+        <th style={{width:28,background:'#E2D0B8'}}/>
+        <th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>
+        {visCols.map(function(col,ci){var av=allAvailCols.find(function(c){return c.id===col;});return(
+<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#6B4A26',fontWeight:600,cursor:'grab',userSelect:'none'}} className="resizable"
+  draggable={true}
+  onDragStart={function(e){e.dataTransfer.setData('colIdx',''+ci);}}
+  onDragOver={function(e){e.preventDefault();}}
+  onDrop={function(e){e.preventDefault();var from=parseInt(e.dataTransfer.getData('colIdx'),10);if(isNaN(from)||from===ci)return;var nc=visCols.slice();var item=nc.splice(from,1)[0];nc.splice(ci,0,item);setVisCols(nc);try{localStorage.setItem(projKey,JSON.stringify(nc));}catch(e){}}} >
   {av?av.label:col}
-  <div className="col-resize-handle" onMouseDown={function(e){startResize(col,e);}}/>
+  <div className="col-resize-handle" onMouseDown={function(e){e.stopPropagation();startResize(col,e);}}/>
 </th>
         );})}
-        <th style={{width:54}}>
+        <th style={{width:46,background:'#E2D0B8'}}>
           <button ref={colRef} className="btn-icon" style={{padding:2,color:'var(--mid)'}} onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setColPos({top:r.bottom+4,right:window.innerWidth-r.right});setColOpen(!colOpen);}} title="Edit columns">
             <span className="mi" style={{fontSize:18}}>settings</span>
           </button>
@@ -3014,6 +3039,34 @@ function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrand
 }
 
 
+
+// ── IconSearchPopup ──
+function IconSearchPopup({current,onSelect,onClose}){
+  var sq=useState('');var q=sq[0];var setQ=sq[1];
+  var COMMON_ICONS=['auto_stories','gesture','hub','lightbulb','book_ribbon','favorite','star','location_on','person','group','explore','psychology','edit_note','campaign','local_library','history_edu','science','palette','music_note','sports_esports','pets','restaurant','travel_explore','hiking','fitness_center','work','school','medical_services','gavel','theater_comedy','movie','sports','emoji_objects','language','public','home','apartment','landscape','nature','cloud','sunny','storm','calendar_month','schedule','alarm','notifications','bookmark','label','tag','flag','trophy','diamond','crown','sword','shield','map','compass','key','lock','search','visibility','eye_tracking','mic','headphones','piano','guitar','brush','draw','photo_camera','videocam','computer','phone_android','watch','satellite','rocket_launch','bug_report','code','terminal','database','storage','folder','article','description','receipt','savings','account_balance','trending_up','analytics','pie_chart','bar_chart','timeline','people','supervisor_account','diversity_3'];
+  var filtered=q?COMMON_ICONS.filter(function(ic){return ic.includes(q.toLowerCase())}):COMMON_ICONS;
+  return(
+<div style={{position:'fixed',inset:0,zIndex:700,display:'flex',alignItems:'center',justifyContent:'center'}}>
+  <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={onClose}/>
+  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:14,padding:24,width:480,maxWidth:'92vw',maxHeight:'80vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(42,31,16,.2)'}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600,marginBottom:14,color:'var(--text)'}}>Choose icon</div>
+    <input autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search icons…" style={{padding:'8px 12px',fontSize:14,border:'1px solid var(--border)',borderRadius:8,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',marginBottom:14}}/>
+    <div style={{display:'flex',gap:6,flexWrap:'wrap',overflowY:'auto',flex:1}}>
+      {filtered.map(function(ic){var isActive=current===ic;return(
+<button key={ic} onClick={function(){onSelect(ic);onClose();}} title={ic.replace(/_/g,' ')} style={{width:40,height:40,borderRadius:8,border:'1.5px solid '+(isActive?'#c45e28':'var(--border)'),background:isActive?'rgba(196,94,40,.1)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .1s'}}
+  onMouseOver={function(e){if(!isActive)e.currentTarget.style.background='var(--bg2)';}}
+  onMouseOut={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
+  <span className="material-symbols-outlined" style={{fontSize:20,color:isActive?'#c45e28':'var(--mid)'}}>{ic}</span>
+</button>
+      );})}
+      {filtered.length===0&&<div style={{fontSize:13,color:'var(--mid)',padding:8}}>No icons match.</div>}
+    </div>
+    <button className="btn btn-ghost" style={{marginTop:14,width:'100%',justifyContent:'center'}} onClick={onClose}>Cancel</button>
+  </div>
+</div>
+  );
+}
+
 // ── NewSpoolModal ──
 var SPOOL_ICONS=['auto_stories','gesture','hub','lightbulb','book_ribbon','favorite','star','location_on','person','group','explore','psychology','edit_note','campaign','local_library','history_edu','science','palette','music_note','sports_esports'];
 var SPOOL_COLORS=['#c45e28','#2f76e0','#2f9966','#ce2fe0','#e02f79','#e8a030','#b83220','#2fe07f','#64e02f','#f0c050'];
@@ -3022,6 +3075,7 @@ function NewSpoolModal({onConfirm,onCancel}){
   var si=useState('auto_stories');var icon=si[0];var setIcon=si[1];
   var sc=useState('#c45e28');var color=sc[0];var setColor=sc[1];
   var ssif=useState(true);var showInFilter=ssif[0];var setShowInFilter=ssif[1];
+  var smis=useState(false);var showModalIconSearch=smis[0];var setShowModalIconSearch=smis[1];
   var ref=useRef(null);
   useEffect(function(){if(ref.current)ref.current.focus();},[]);
   return(
@@ -3059,7 +3113,11 @@ function NewSpoolModal({onConfirm,onCancel}){
   <span className="material-symbols-outlined" style={{fontSize:18,color:icon===ic?color:'var(--mid)'}}>{ic}</span>
 </button>
         );})}
-      </div>
+
+        <button onClick={function(){setShowModalIconSearch(true);}} style={{width:36,height:36,borderRadius:6,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--mid)'}}>search</span>
+        </button>
+        {showModalIconSearch&&<IconSearchPopup current={icon} onSelect={function(ic){setIcon(ic);}} onClose={function(){setShowModalIconSearch(false);}}/> }      </div>
     </div>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
       <div>
@@ -3132,6 +3190,7 @@ function StrandsPage({app,allProjects}){
   var sef=useState(null);var editingFields=sef[0];var setEditingFields=sef[1];
   var sesc=useState(null);var editingSpoolColor=sesc[0];var setEditingSpoolColor=sesc[1];
   var sesi=useState(null);var editingSpoolIcon=sesi[0];var setEditingSpoolIcon=sesi[1];
+  var ssis=useState(false);var showIconSearch=ssis[0];var setShowIconSearch=ssis[1];
   var snfn=useState('');var newFieldName=snfn[0];var setNewFieldName=snfn[1];
   var snft=useState('short_text');var newFieldType=snft[0];var setNewFieldType=snft[1];
   var ssw=useState([]);var sharedWith=ssw[0];var setSharedWith=ssw[1];
@@ -3216,7 +3275,11 @@ function StrandsPage({app,allProjects}){
   <span className="material-symbols-outlined" style={{fontSize:16,color:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--mid)'}}>{ic}</span>
 </button>
       );})}
+      <button onClick={function(){setShowIconSearch(true);}} style={{width:32,height:32,borderRadius:6,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',title:'More icons'}}>
+        <span className="material-symbols-outlined" style={{fontSize:16,color:'var(--mid)'}}>search</span>
+      </button>
     </div>
+    {showIconSearch&&<IconSearchPopup current={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onSelect={function(ic){setEditingSpoolIcon(ic);}} onClose={function(){setShowIconSearch(false);}}/>}
   </div>
   <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:12,color:'var(--text)'}}>Fields</div>
   {deleteCollConfirm&&(
@@ -3240,9 +3303,20 @@ function StrandsPage({app,allProjects}){
   onDrop={function(e){e.preventDefault();var from=parseInt(e.dataTransfer.getData('fieldIdx'),10);if(isNaN(from)||from===i)return;var nf=editingFields.slice();var item=nf.splice(from,1)[0];nf.splice(i,0,item);setEditingFields(nf);}}>
   <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab',flexShrink:0}}>drag_indicator</span>
   <input defaultValue={f.label} style={{maxWidth:160,fontSize:13}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});setEditingFields(nf);}}/>
-  <select value={f.type} style={{width:110,fontSize:13}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value});setEditingFields(nf);}}>
+  <select value={f.type} style={{width:110,fontSize:13}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value,refSpool:null,refMultiple:false});setEditingFields(nf);}}>
     {FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}
   </select>
+  {f.type==='strand_ref'&&(
+<div style={{display:'flex',gap:4,alignItems:'center',marginTop:4}}>
+  <select value={f.refSpool||''} style={{fontSize:11,flex:1}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refSpool:e.target.value});setEditingFields(nf);}}>
+    <option value="">Pick spool…</option>
+    {Object.keys(app.allStrands[pid]||{}).map(function(c){return <option key={c} value={c}>{c}</option>;})}
+  </select>
+  <label style={{fontSize:11,display:'flex',alignItems:'center',gap:3,whiteSpace:'nowrap',cursor:'pointer'}}>
+    <input type="checkbox" checked={!!f.refMultiple} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refMultiple:e.target.checked});setEditingFields(nf);}}/> Multiple
+  </label>
+</div>
+  )}
   <button className="btn-icon" onClick={function(){setEditingFields(editingFields.filter(function(_,j){return j!==i;}));}}><span className="mi" style={{fontSize:18}}>delete</span></button>
 </div>
   );})}
