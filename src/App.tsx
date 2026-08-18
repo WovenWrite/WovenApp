@@ -824,7 +824,7 @@ function GlobalLooseThreads({app}){
   return(
 <div style={{marginTop:24}}>
   <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Loose Threads</div>
-  <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+  <div style={{display:"flex",flexWrap:"nowrap",gap:10,overflowX:"auto",paddingBottom:4}}>
     <div onClick={handleAddLT} style={{background:"transparent",border:"2px dashed #A88060",padding:"10px 15px",borderRadius:15,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,minWidth:120,flexShrink:0,minHeight:80}} onMouseEnter={function(e){e.currentTarget.style.borderColor="#c45e28";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#A88060";}}>
       <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
     </div>
@@ -1045,12 +1045,13 @@ function SortDropdown({sort,setSort}){
 }
 
 // ── ViewHeader ──
-function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind,structureMode,onStructureToggle}){
+function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind,structureMode,onStructureToggle,searchQ,onSearch}){
   var sf=useState(false);var filterOpen=sf[0];var setFilterOpen=sf[1];
   var sp=useState({top:0,left:0});var filterPos=sp[0];var setFilterPos=sp[1];
   var ss=useState(false);var searchOpen=ss[0];var setSearchOpen=ss[1];
   var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
   var st=useState(structureMode||false);var structureOn=st[0];var setStructureOn=st[1];
+  var sfs=useState('');var filterSearch=sfs[0];var setFilterSearch=sfs[1];
   var filterRef=useRef(null);var searchRef=useRef(null);
   var projStrands=app.allStrands[app.projId]||{};
   useEffect(function(){if(!filterOpen)return;function onDown(e){
@@ -1072,12 +1073,29 @@ function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind,structu
         {hasFilter&&<span style={{position:'absolute',top:10,right:6,background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:14,height:14,fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>1</span>}
       </button>
       {filterOpen&&(
-<div className="filter-dropdown" style={{top:filterPos.top,left:filterPos.left,minWidth:220,padding:0}}>
+<div className="filter-dropdown" style={{top:filterPos.top,left:filterPos.left,minWidth:240,padding:0}}>
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px 4px'}}>
     <span style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em'}}>Filter by strand</span>
     {hasFilter&&<button className="btn btn-ghost btn-sm" style={{padding:'2px 8px',fontSize:11}} onClick={function(){setFilter(null);setFilterOpen(false);}}>Clear</button>}
   </div>
-  {Object.keys(projStrands).map(function(coll){var collStrands=projStrands[coll]||[];if(collStrands.length===0)return null;return(<CollFilterGroup key={coll} coll={coll} strands={collStrands} filter={filter} setFilter={setFilter} setFilterOpen={setFilterOpen}/>);})}
+  <div style={{padding:'4px 10px 8px'}}>
+    <input value={filterSearch} onChange={function(e){setFilterSearch(e.target.value);}} placeholder="Search spools…" style={{width:'100%',padding:'5px 10px',fontSize:12,border:'1px solid var(--border)',borderRadius:20,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',boxSizing:'border-box'}}/>
+  </div>
+  {(function(){
+    var pid=app.projId;
+    var savedOrder=null;try{var so=localStorage.getItem('woven:collOrder:'+pid);if(so)savedOrder=JSON.parse(so);}catch(e){}
+    var rawColl=Object.keys(projStrands);
+    var orderedColl=savedOrder?savedOrder.filter(function(c){return rawColl.includes(c);}).concat(rawColl.filter(function(c){return !savedOrder.includes(c);})):rawColl;
+    var projTemplates=app.allTemplates[pid]||[];
+    return orderedColl.map(function(coll){
+      var tpl=projTemplates.find(function(t){return t.name===coll;});
+      if(tpl&&tpl.showInFilter===false)return null;
+      var collStrands=projStrands[coll]||[];
+      if(filterSearch){collStrands=collStrands.filter(function(s){return (s.name||'').toLowerCase().includes(filterSearch.toLowerCase());});}
+      if(collStrands.length===0)return null;
+      return(<CollFilterGroup key={coll} coll={coll} strands={collStrands} filter={filter} setFilter={setFilter} setFilterOpen={setFilterOpen}/>);
+    });
+  })()}
   {Object.values(projStrands).flat().length===0&&<div style={{padding:'8px 12px',fontSize:13,color:'var(--mid)'}}>No strands yet.</div>}
 </div>
       )}
@@ -1092,7 +1110,7 @@ function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind,structu
     {SEP}
     <div style={{display:'flex',alignItems:'center',padding:'0 12px',height:55}}>
       {searchOpen?(
-<input ref={searchRef} value={searchQ} onChange={function(e){setSearchQ(e.target.value);}} placeholder="Search drafts…" onBlur={function(){if(!searchQ)setSearchOpen(false);}} style={{width:180,padding:'6px 10px',fontSize:14,border:'1px solid var(--border)',borderRadius:20,fontFamily:'DM Sans, sans-serif',background:'var(--bg1)',color:'var(--text)',outline:'none'}}/>
+<input ref={searchRef} value={searchQ||''} onChange={function(e){setSearchQ(e.target.value);if(onSearch)onSearch(e.target.value);}} placeholder="Search drafts…" onBlur={function(){if(!searchQ)setSearchOpen(false);}} style={{width:200,padding:'6px 10px',fontSize:14,border:'1px solid var(--border)',borderRadius:20,fontFamily:'DM Sans, sans-serif',background:'var(--bg1)',color:'var(--text)',outline:'none'}}/>
       ):(
 <button onClick={function(){setSearchOpen(true);}} style={{display:'flex',alignItems:'center',background:'transparent',border:'none',cursor:'pointer',padding:0}}>
   <span className="material-symbols-outlined" style={{fontSize:22,color:'#6B4A26'}}>search</span>
@@ -1505,6 +1523,69 @@ function StrandCircle({strand,spoolColor,size}){
   );
 }
 
+
+// ── StrandTagPicker ──
+function StrandTagPicker({draft,app,pid,tagged}){
+  var so=useState(false);var open=so[0];var setOpen=so[1];
+  var sq=useState('');var q=sq[0];var setQ=sq[1];
+  var ref=useRef(null);
+  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
+
+  var projStrands=app.allStrands[pid]||{};
+  var projTemplates=app.allTemplates[pid]||[];
+  var taggedIds=(draft.strandTags||[]);
+
+  // All strands not yet tagged, optionally filtered by q
+  var available=[];
+  Object.keys(projStrands).forEach(function(coll){
+    (projStrands[coll]||[]).forEach(function(st){
+      if(taggedIds.includes(st.id))return;
+      if(q&&!(st.name||'').toLowerCase().includes(q.toLowerCase()))return;
+      var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
+      available.push(Object.assign({},st,{collName:coll,spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));
+    });
+  });
+
+  function tag(strandId){
+    app.updateDraft(pid,draft.id,{strandTags:taggedIds.concat([strandId])});
+    setQ('');setOpen(false);
+  }
+
+  return(
+<div ref={ref} style={{position:'relative',display:'inline-block'}}>
+  <button onClick={function(e){e.stopPropagation();setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:12,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',fontSize:11,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>
+    <span className="material-symbols-outlined" style={{fontSize:14,color:'var(--teal)'}}>add</span>
+    Tag spool
+  </button>
+  {open&&available.length===0&&!q&&(
+<div style={{position:'absolute',bottom:'calc(100% + 6px)',left:0,zIndex:600,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--mid)',whiteSpace:'nowrap',boxShadow:'0 4px 16px rgba(42,31,16,.12)'}}>All strands are already tagged.</div>
+  )}
+  {open&&(available.length>0||q)&&(
+<div style={{position:'absolute',bottom:'calc(100% + 6px)',left:0,zIndex:600,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:10,boxShadow:'0 4px 16px rgba(42,31,16,.12)',minWidth:200,overflow:'hidden'}}>
+  <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)'}}>
+    <input autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search strands…" style={{width:'100%',padding:'4px 8px',fontSize:12,border:'1px solid var(--border)',borderRadius:6,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',boxSizing:'border-box'}}/>
+  </div>
+  <div style={{maxHeight:180,overflowY:'auto'}}>
+    {available.map(function(st){return(
+<div key={st.id} onClick={function(e){e.stopPropagation();tag(st.id);}} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid var(--bg2)'}}
+  onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
+  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  <div style={{width:16,height:16,borderRadius:'50%',background:st.spoolColor,flexShrink:0}}/>
+  <div>
+    <div style={{fontSize:12,fontWeight:600,color:'var(--text)',fontFamily:'DM Sans, sans-serif'}}>{st.name}</div>
+    <div style={{fontSize:10,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>{st.collName}</div>
+  </div>
+</div>
+    );})}
+    {available.length===0&&q&&<div style={{padding:'10px 12px',fontSize:12,color:'var(--mid)'}}>No matches.</div>}
+  </div>
+</div>
+  )}
+</div>
+  );
+}
+
+
 function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   var so=useState(false);var dragOver=so[0];var setDragOver=so[1];
   var sac=useState(false);var archiveConfirm=sac[0];var setArchiveConfirm=sac[1];
@@ -1568,14 +1649,15 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   return(
 <div
   style={{width:270,borderRadius:15,overflow:'visible',background:'var(--bg1)',border:'2px solid transparent',display:'flex',flexDirection:'column',cursor:structureMode?'default':'pointer',boxShadow:'0 2px 8px rgba(42,31,16,.06)',transition:'box-shadow .2s,border-color .2s',flexShrink:0,position:'relative',height:structureMode?'auto':400}}
-  draggable={false}
+  draggable={structureMode}
+  onDragStart={structureMode?function(e){e.dataTransfer.setData('draftId',draft.id);}:undefined}
   onDragOver={structureMode?function(e){e.preventDefault();setDragOver(true);}:undefined}
   onDragLeave={structureMode?function(){setDragOver(false);}:undefined}
-  onDrop={structureMode?function(e){e.preventDefault();setDragOver(false);var fromId=e.dataTransfer.getData('draftId');if(fromId&&fromId!==draft.id)app.reorderDraft(pid,fromId,draft.order||0);}:undefined}
+  onDrop={structureMode?function(e){e.preventDefault();setDragOver(false);var fromId=e.dataTransfer.getData('draftId');if(fromId&&fromId!==draft.id){var isLT=(app.allDrafts[pid]||[]).find(function(d){return d.id===fromId;});if(isLT&&isLT.status==='loose_thread'){app.updateDraft(pid,fromId,{status:'first_draft',order:draft.order||0,parentId:null});}else{app.reorderDraft(pid,fromId,draft.order||0);}}}:undefined}
   onMouseDown={handleMouseDown}
   onMouseMove={handleMouseMove}
   onMouseUp={handleMouseUp}
-  onMouseEnter={function(e){e.currentTarget.style.boxShadow='0 4px 16px rgba(42,31,16,.12)';e.currentTarget.style.borderColor=AMBER;}}
+  onMouseEnter={function(e){e.currentTarget.style.boxShadow='0 4px 16px rgba(42,31,16,.12)';if(!structureMode)e.currentTarget.style.borderColor=AMBER;}}
   onMouseLeave={function(e){e.currentTarget.style.boxShadow='0 2px 8px rgba(42,31,16,.06)';e.currentTarget.style.borderColor='transparent';}}
 >
   {/* Thumbnail */}
@@ -1617,7 +1699,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
 
     {/* Synopsis / preview */}
     {structureMode&&editSyn?(
-<textarea autoFocus rows={4} value={synVal} onChange={function(e){setSynVal(e.target.value);}} onBlur={function(){app.updateDraft(pid,draft.id,{synopsis:synVal});setEditSyn(false);}} placeholder="Add a synopsis…" style={{fontFamily:'DM Sans, sans-serif',fontSize:15,color:'#7A5A38',lineHeight:1.45,background:'transparent',border:'2px solid '+AMBER,borderRadius:8,outline:'none',resize:'none',padding:'4px 8px',flex:1,boxSizing:'border-box'}}/>
+<textarea autoFocus rows={4} value={synVal} onChange={function(e){setSynVal(e.target.value);}} onBlur={function(){app.updateDraft(pid,draft.id,{synopsis:synVal});setEditSyn(false);}} placeholder="Add a synopsis…" style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',lineHeight:1.45,background:'transparent',border:'2px solid '+AMBER,borderRadius:8,outline:'none',resize:'none',padding:'2px 4px',flex:1,boxSizing:'border-box'}}/>
     ):(
 <div
   style={{flex:1,minHeight:0,overflow:'hidden',position:'relative',borderRadius:6,padding:'2px 4px',transition:'background .15s',cursor:structureMode?'text':'inherit',border:'2px solid transparent'}}
@@ -1634,17 +1716,21 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
 </div>
     )}
 
-    {/* Strand chips — expanded in structure mode */}
-    {structureMode&&tagged.length>0&&(
-<div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-  {tagged.map(function(st){return(
-<div key={st.id} style={{display:'flex',alignItems:'center',gap:5,padding:'3px 8px',borderRadius:12,background:st.spoolColor+'22',border:'1px solid '+st.spoolColor,position:'relative'}}>
+    {/* Strand chips + tag button — expanded in structure mode */}
+    {structureMode&&(
+<div>
+  <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:tagged.length>0?6:0}}>
+    {tagged.map(function(st){return(
+<div key={st.id} style={{display:'flex',alignItems:'center',gap:5,padding:'3px 8px',borderRadius:12,background:st.spoolColor+'22',border:'1px solid '+st.spoolColor}}>
   <span style={{fontFamily:'DM Sans, sans-serif',fontSize:11,color:st.spoolColor,fontWeight:600}}>{st.name}</span>
   <button onClick={function(e){e.stopPropagation();setStrandConfirmId(st.id);setStrandConfirm(true);}} style={{background:'none',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',color:st.spoolColor,opacity:.7}}>
     <span className="material-symbols-outlined" style={{fontSize:14}}>close</span>
   </button>
 </div>
-  );})}
+    );})}
+  </div>
+  {/* Tag new strand */}
+  <StrandTagPicker draft={draft} app={app} pid={pid} tagged={tagged}/>
 </div>
     )}
 
@@ -1666,7 +1752,18 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   )}
 </div>
       )}
-      {structureMode&&<div/>}
+      {/* Left: arrows in structure mode */}
+      {structureMode&&(
+<div style={{display:'flex',alignItems:'center',gap:4}}>
+  <button onClick={function(e){e.stopPropagation();if(onMoveUp)onMoveUp(draft.id);}} title="Move left" style={{width:26,height:26,borderRadius:6,border:'1px solid var(--border)',background:'var(--bg2)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
+    <span className="material-symbols-outlined" style={{fontSize:16,color:'var(--mid)'}}>arrow_back</span>
+  </button>
+  <button onClick={function(e){e.stopPropagation();if(onMoveDown)onMoveDown(draft.id);}} title="Move right" style={{width:26,height:26,borderRadius:6,border:'1px solid var(--border)',background:'var(--bg2)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
+    <span className="material-symbols-outlined" style={{fontSize:16,color:'var(--mid)'}}>arrow_forward</span>
+  </button>
+</div>
+      )}
+      {!structureMode&&<div/>}
       {/* Right: status dot + word count */}
       <div className="status-dot-wrap" style={{display:'flex',alignItems:'center',gap:8}} onClick={function(e){e.stopPropagation();}}>
         <StatusDotWithArchive draft={draft} app={app} showLabel={false} dotSize={15}/>
@@ -1676,19 +1773,24 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   </div>
 
   {archiveConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[pid]||[]} onConfirm={doArchive} onCancel={function(){setArchiveConfirm(false);}}/>}
-  {strandConfirm&&(
+  {strandConfirm&&(function(){
+    var confirmSt=tagged.find(function(t){return t.id===strandConfirmId;});
+    var spoolName=confirmSt?confirmSt.collName:'Spool';
+    var strandName=confirmSt?confirmSt.name:'this item';
+    return(
 <div style={{position:'fixed',inset:0,zIndex:600,display:'flex',alignItems:'center',justifyContent:'center'}}>
   <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={function(){setStrandConfirm(false);}}/>
-  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:12,padding:24,width:280,boxShadow:'0 12px 40px rgba(42,31,16,.15)'}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:8,color:'var(--text)'}}>Remove strand?</div>
-    <div style={{fontSize:13,color:'var(--mid)',marginBottom:16}}>This will remove the strand tag from this draft but won't delete the strand.</div>
+  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:12,padding:24,width:300,boxShadow:'0 12px 40px rgba(42,31,16,.15)'}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:8,color:'var(--text)'}}>Remove {strandName} from {spoolName}?</div>
+    <div style={{fontSize:13,color:'var(--mid)',marginBottom:16}}>This removes the tag from this draft. The {strandName} entry in your {spoolName} spool won't be deleted.</div>
     <div style={{display:'flex',gap:8}}>
       <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={function(){setStrandConfirm(false);}}>Cancel</button>
       <button className="btn btn-primary" style={{flex:1,justifyContent:'center',background:'var(--danger)'}} onClick={function(){removeStrand(strandConfirmId);}}>Remove</button>
     </div>
   </div>
 </div>
-  )}
+    );
+  })()}
 </div>
   );
 }
@@ -1774,7 +1876,9 @@ function LooseThreadsSection({threads,app,view}){
     {displayedThreads.map(function(d){
       var bodyPreview=d.body?stripHtml(d.body).slice(0,200):'';
       return(
-<div key={d.id} style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:220,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
+<div key={d.id} style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:'grab',display:'flex',flexDirection:'column',gap:8,width:220,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
+  draggable={true}
+  onDragStart={function(e){e.dataTransfer.setData('draftId',d.id);}}
   onClick={function(){app.openDraft(d.id);}}
   onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';e.currentTarget.style.boxShadow='0 4px 12px rgba(196,94,40,.12)';}}
   onMouseLeave={function(e){e.currentTarget.style.borderColor='transparent';e.currentTarget.style.boxShadow='none';}}>
@@ -1818,6 +1922,7 @@ function CardsView({app}){
   var ss=useState('order');var sort=ss[0];var setSort=ss[1];
   var sb=useState(false);var bindOpen=sb[0];var setBindOpen=sb[1];
   var sst=useState(false);var structureMode=sst[0];var setStructureMode=sst[1];
+  var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
   var allDrafts=app.allDrafts[app.projId]||[];
   var seqDrafts=allDrafts.filter(function(d){return !d.archived&&d.status!=='loose_thread'&&!d.parentId;});
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
@@ -1825,13 +1930,31 @@ function CardsView({app}){
   function addDraft(){var nid=genId();app.addDraft(app.projId,{id:nid,projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqDrafts.length+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});app.openDraft(nid);}
   function moveUp(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<=0)return;app.reorderDraft(app.projId,did,sorted[idx-1].order||0);}
   function moveDown(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<0||idx>=sorted.length-1)return;app.reorderDraft(app.projId,did,sorted[idx+1].order||0);}
-  var displayed=applyFS(tree,filter,sort);
+  var displayed=applyFS(tree,filter,sort).filter(function(p){
+    if(!searchQ.trim())return true;
+    var q=searchQ.toLowerCase();
+    var matchTitle=(p.title||'').toLowerCase().includes(q);
+    var matchSyn=(p.synopsis||'').toLowerCase().includes(q);
+    var matchBody=p.body?stripHtml(p.body).toLowerCase().includes(q):false;
+    return matchTitle||matchSyn||matchBody;
+  });
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} structureMode={structureMode} onStructureToggle={function(v){setStructureMode(v);}}/>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} structureMode={structureMode} onStructureToggle={function(v){setStructureMode(v);}} searchQ={searchQ} onSearch={setSearchQ}/>
   <div className="view-area dot-grid">
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
-<div className="cards-grid">
+<div className="cards-grid"
+  onDragOver={function(e){e.preventDefault();}}
+  onDrop={function(e){
+    e.preventDefault();
+    var fromId=e.dataTransfer.getData('draftId');if(!fromId)return;
+    var allDr=app.allDrafts[pid]||[];
+    var fromDraft=allDr.find(function(d){return d.id===fromId;});
+    if(fromDraft&&fromDraft.status==='loose_thread'){
+      var seqCount=allDr.filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).length;
+      app.updateDraft(pid,fromId,{status:'first_draft',order:seqCount+1,parentId:null});
+    }
+  }}>
   {displayed.map(function(parent){
     var childCount=parent.children?parent.children.length:0;
     var sortedSeq=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
@@ -2870,6 +2993,7 @@ function NewSpoolModal({onConfirm,onCancel}){
   var sn=useState('');var name=sn[0];var setName=sn[1];
   var si=useState('auto_stories');var icon=si[0];var setIcon=si[1];
   var sc=useState('#c45e28');var color=sc[0];var setColor=sc[1];
+  var ssif=useState(true);var showInFilter=ssif[0];var setShowInFilter=ssif[1];
   var ref=useRef(null);
   useEffect(function(){if(ref.current)ref.current.focus();},[]);
   return(
@@ -2909,9 +3033,18 @@ function NewSpoolModal({onConfirm,onCancel}){
         );})}
       </div>
     </div>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+      <div>
+        <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,fontWeight:600,color:'var(--text)'}}>Show in Define filter</span>
+        <div style={{fontSize:11,color:'var(--mid)'}}>Include in sequence filter dropdown</div>
+      </div>
+      <div onClick={function(){setShowInFilter(!showInFilter);}} style={{width:36,height:20,borderRadius:10,background:showInFilter?'#7A5A38':'#A88060',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
+        <div style={{position:'absolute',top:2,left:showInFilter?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
+      </div>
+    </div>
     <div style={{display:'flex',gap:8}}>
       <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onCancel}>Cancel</button>
-      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={function(){if(name.trim())onConfirm(name,icon,color);}} disabled={!name.trim()}>Create Spool</button>
+      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={function(){if(name.trim())onConfirm(name,icon,color,showInFilter);}} disabled={!name.trim()}>Create Spool</button>
     </div>
   </div>
 </div>
@@ -2969,6 +3102,8 @@ function StrandsPage({app,allProjects}){
   }
   // Collection settings editing
   var sef=useState(null);var editingFields=sef[0];var setEditingFields=sef[1];
+  var sesc=useState(null);var editingSpoolColor=sesc[0];var setEditingSpoolColor=sesc[1];
+  var sesi=useState(null);var editingSpoolIcon=sesi[0];var setEditingSpoolIcon=sesi[1];
   var snfn=useState('');var newFieldName=snfn[0];var setNewFieldName=snfn[1];
   var snft=useState('short_text');var newFieldType=snft[0];var setNewFieldType=snft[1];
   var ssw=useState([]);var sharedWith=ssw[0];var setSharedWith=ssw[1];
@@ -2983,7 +3118,14 @@ function StrandsPage({app,allProjects}){
     if(remaining.length>0)setActiveColl(remaining[0]);
     setShowCollSettings(false);setDeleteCollConfirm(false);
   }
-  function saveCollSettings(){if(!activeTpl)return;app.updateTemplate(pid,activeTpl.id,{fields:editingFields,sharedWith:sharedWith});setShowCollSettings(false);}
+  function saveCollSettings(){
+    // Save colour and icon to template
+    if(activeTpl&&(editingSpoolColor||editingSpoolIcon)){
+      var tplUpdates={};
+      if(editingSpoolColor)tplUpdates.color=editingSpoolColor;
+      if(editingSpoolIcon)tplUpdates.icon=editingSpoolIcon;
+      app.updateTemplate(pid,activeTpl.id,tplUpdates);
+    }if(!activeTpl)return;app.updateTemplate(pid,activeTpl.id,{fields:editingFields,sharedWith:sharedWith});setShowCollSettings(false);}
   function addFieldToSettings(){if(!newFieldName.trim()||!editingFields)return;setEditingFields(editingFields.concat([{id:genId(),label:newFieldName.trim(),type:newFieldType}]));setNewFieldName('');}
   var otherProjects=allProjects.filter(function(p){return p.id!==pid;});
   var sco2=useState(null);var dragOverColl=sco2[0];var setDragOverColl=sco2[1];
@@ -3013,13 +3155,46 @@ function StrandsPage({app,allProjects}){
   var detailContent=showCollSettings&&editingFields?(
 <div style={{padding:24}}>
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>{activeColl} — Fields</div>
+    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>{activeColl} — Settings</div>
     <div style={{display:'flex',gap:8}}>
       <button className="btn btn-danger btn-sm" onClick={function(){setDeleteCollConfirm(true);}}><span className="mi" style={{fontSize:14}}>delete</span>Delete</button>
       <button className="btn btn-ghost btn-sm" onClick={function(){setShowCollSettings(false);}}>Cancel</button>
       <button className="btn btn-primary btn-sm" onClick={saveCollSettings}>Save</button>
     </div>
   </div>
+  {/* Spool colour + icon */}
+  <div style={{display:'flex',gap:24,marginBottom:20,padding:16,background:'var(--bg2)',borderRadius:10}}>
+    {/* Preview */}
+    <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+      <div style={{width:44,height:44,borderRadius:10,background:editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+        <span className="material-symbols-outlined" style={{fontSize:24,color:'#fff'}}>{editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'}</span>
+      </div>
+      <span style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>{activeColl}</span>
+    </div>
+    <div style={{flex:1}}>
+      {/* Colours */}
+      <div style={{marginBottom:10}}>
+        <span className="sect-lbl">Colour</span>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:4}}>
+          {SPOOL_COLORS.map(function(c){var isActive=(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')===c;return(
+<div key={c} onClick={function(){setEditingSpoolColor(c);}} style={{width:22,height:22,borderRadius:'50%',background:c,cursor:'pointer',flexShrink:0,transform:isActive?'scale(1.25)':'scale(1)',boxShadow:isActive?'0 0 0 2px var(--bg1),0 0 0 3.5px '+c:'none',transition:'transform .15s'}}/>
+          );})}
+        </div>
+      </div>
+      {/* Icons */}
+      <div>
+        <span className="sect-lbl">Icon</span>
+        <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}}>
+          {SPOOL_ICONS.map(function(ic){var isActive=(editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories')===ic;return(
+<button key={ic} onClick={function(){setEditingSpoolIcon(ic);}} style={{width:32,height:32,borderRadius:6,border:'1.5px solid '+(isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--border)'),background:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')+'22':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+  <span className="material-symbols-outlined" style={{fontSize:16,color:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--mid)'}}>{ic}</span>
+</button>
+          );})}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:12,color:'var(--text)'}}>Fields</div>
   {deleteCollConfirm&&(
 <div className="modal-overlay">
   <div className="modal-backdrop" onClick={function(){setDeleteCollConfirm(false);}}/>
@@ -3051,6 +3226,17 @@ function StrandsPage({app,allProjects}){
     <input value={newFieldName} onChange={function(e){setNewFieldName(e.target.value);}} placeholder="New field name" onKeyDown={function(e){if(e.key==='Enter')addFieldToSettings();}} style={{flex:1}}/>
     <select value={newFieldType} onChange={function(e){setNewFieldType(e.target.value);}} style={{width:110}}>{FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}</select>
     <button className="btn btn-ghost btn-sm" onClick={addFieldToSettings}>Add</button>
+  </div>
+  <div style={{paddingTop:16,borderTop:'1px solid var(--border)',marginBottom:16}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+      <div>
+        <span className="sect-lbl" style={{display:'block',marginBottom:2}}>Show in Define filter</span>
+        <span style={{fontSize:12,color:'var(--mid)'}}>When off, this spool won't appear in the sequence filter dropdown.</span>
+      </div>
+      <div onClick={function(){var cur=activeTpl?activeTpl.showInFilter!==false:true;app.updateTemplate(pid,activeTpl&&activeTpl.id,{showInFilter:!cur});}} style={{width:36,height:20,borderRadius:10,background:(activeTpl?activeTpl.showInFilter!==false:true)?'#7A5A38':'#A88060',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
+        <div style={{position:'absolute',top:2,left:(activeTpl?activeTpl.showInFilter!==false:true)?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
+      </div>
+    </div>
   </div>
   <div style={{paddingTop:16,borderTop:'1px solid var(--border)'}}>
     <span className="sect-lbl">Share across projects</span>
@@ -3130,9 +3316,9 @@ function StrandsPage({app,allProjects}){
   <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
     <button className="btn-icon" onClick={openCollSettings} title="Spool settings"><span className="mi" style={{fontSize:18}}>settings</span></button>
     <button className="btn btn-ghost btn-sm" onClick={function(){setNewColl(true);}}>+ Create Spool</button>
-  {newColl&&<NewSpoolModal onConfirm={function(name,icon,color){
+  {newColl&&<NewSpoolModal onConfirm={function(name,icon,color,sif){
     if(!name.trim())return;
-    var nt={id:genId(),projectId:pid,name:name.trim(),icon:icon,color:color,fields:defaultFields(name.trim()),sharedWith:[]};
+    var nt={id:genId(),projectId:pid,name:name.trim(),icon:icon,color:color,showInFilter:sif!==false,fields:defaultFields(name.trim()),sharedWith:[]};
     app.addTemplate(pid,nt);
     app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name.trim()]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});
     setActiveColl(name.trim());setNewColl(false);
