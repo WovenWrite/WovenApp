@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import PropertiesDrawer from './PropertiesDrawer'
+import StrandsDrawer from './StrandsDrawer'
+import VersionsDrawer from './VersionsDrawer'
 // ── DraftEditor.jsx ──
 // Quill-based draft editor.
 // Requires in index.html:
@@ -286,6 +289,7 @@ function DraftEditor({app}){
   var spv=useState(false);var showVersions=spv[0];var setShowVersions=spv[1];
   var spp=useState(false);var showProperties=spp[0];var setShowProperties=spp[1];
   var sps=useState(false);var showSpool=sps[0];var setShowSpool=sps[1];
+  var ssd=useState(null);var strandDetailId=ssd[0];var setStrandDetailId=ssd[1];
   var sf=useState(window.innerWidth<720);var flowMode=sf[0];var setFlowMode=sf[1];
   // Auto flow on resize
   useEffect(function(){
@@ -426,6 +430,20 @@ function DraftEditor({app}){
 
   function fmt(type,value){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,cur[type]===value?false:value);}}
   function toggleFmt(type){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,!cur[type]);}}
+
+  function handleRestoreVersion(body){
+    if(!quillRef.current)return;
+    quillRef.current.setContents([]);
+    quillRef.current.clipboard.dangerouslyPasteHTML(body);
+    if(quillRef.current.history)quillRef.current.history.clear();
+    var wc=countWords(quillRef.current.getText());
+    setWordCount(wc);
+    setSaveState('saving');
+    if(app&&app.updateDraft)app.updateDraft(pid,did,{body:body,wordCount:wc,updatedAt:new Date().toISOString()});
+    setSaveState('saved');
+    setShowVersions(false);
+  }
+
 
   function handleSwitchBranch(branchDraftId){
     // A strand is a real draft — navigate to it
@@ -626,7 +644,7 @@ function DraftEditor({app}){
           <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary}/>
           <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
           <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowSpool(false);}} active={showProperties}/>
-          <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowProperties(false);}} active={showSpool}/>
+          <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowProperties(false);if(showSpool)setStrandDetailId(null);}} active={showSpool}/>
         </div>
         {/* Mobile collapsed menu */}
         <NavCollapseMenu branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onVersions={function(){setShowVersions(!showVersions);}} onProperties={function(){setShowProperties(!showProperties);}} onSpool={function(){setShowSpool(!showSpool);}}/>
@@ -680,13 +698,15 @@ function DraftEditor({app}){
       </div>
     </div>
 
-    {/* Drawer placeholder */}
-    {!flowMode&&(showVersions||showProperties||showSpool)&&(
-<div style={{width:320,borderLeft:'1px solid '+T.border,background:T.bg1,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:12,overflowY:'auto'}}>
-  <span className="mi" style={{fontSize:36,color:T.border}}>{showVersions?'history':showProperties?'settings':'gesture'}</span>
-  <span style={{fontSize:13,color:T.text,fontFamily:'DM Sans, sans-serif'}}>{showVersions?'Versions':showProperties?'Properties':'Spools'} drawer</span>
-  <span style={{fontSize:11,color:T.border,fontFamily:'DM Sans, sans-serif'}}>Separate component — coming next</span>
-</div>
+    {/* Drawers */}
+    {!flowMode&&showProperties&&(
+      <PropertiesDrawer app={app} draft={draft} variant="inline" onClose={function(){setShowProperties(false);}} onOpenStrand={function(sid){setShowProperties(false);setShowSpool(true);setStrandDetailId(sid);}}/>
+    )}
+    {!flowMode&&showSpool&&(
+      <StrandsDrawer app={app} draft={draft} variant="inline" strandId={strandDetailId} onOpenStrand={setStrandDetailId} onClose={function(){setShowSpool(false);setStrandDetailId(null);}}/>
+    )}
+    {!flowMode&&showVersions&&(
+      <VersionsDrawer draftId={did} variant="inline" onClose={function(){setShowVersions(false);}} onRestore={handleRestoreVersion}/>
     )}
   </div>
 
