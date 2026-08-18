@@ -3455,7 +3455,7 @@ function App(){
   }
   function recordSession(pid,wordsAdded){
     var t=todayStr();
-    if(!wordsAdded||wordsAdded<=0||wordsAdded>500)return;
+    if(!wordsAdded||wordsAdded<=0)return;
     setSessions(function(prev){
       var next=prev.slice();
       var idx=next.findIndex(function(s){return s.date===t&&s.projId===pid;});
