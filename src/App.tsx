@@ -318,8 +318,8 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .filter-coll-lbl{font-size:10px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;padding:8px 8px 4px;display:block;}
 .chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;border:1px solid transparent;}
 .view-layout{display:flex;flex-direction:column;flex:1;overflow:hidden;position:relative;}
-.view-area{flex:1;overflow-y:auto;padding:16px 16px 80px;}
-.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
+.view-area{flex:1;overflow-y:auto;padding:0 0 80px;}
+.cards-grid{display:flex;flex-wrap:wrap;gap:16px;padding:16px;align-content:flex-start;}
 .draft-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s,box-shadow .15s;height:226px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
 .draft-card:hover{box-shadow:0 4px 12px rgba(42,31,16,.08);}
 .draft-card.drag-over{border-color:var(--indigo);background:rgba(196,94,40,.03);}
@@ -608,16 +608,17 @@ function OverflowTooltip({label,names}){
 }
 
 // ── StatusDot ──
-function StatusDot({status,onChange}){
+function StatusDot({status,onChange,size}){
   var s=useState(false);var open=s[0];var setOpen=s[1];
   var p=useState({top:0,left:0});var pos=p[0];var setPos=p[1];
   var ref=useRef(null);
   var info=STATUSES[status]||STATUSES.first_draft;
+  var sz=size||10;
   useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
   function handleClick(e){e.stopPropagation();var r=e.currentTarget.getBoundingClientRect();setPos({top:r.bottom+5,left:r.left});setOpen(!open);}
   return(
 <div ref={ref} style={{display:'inline-flex',alignItems:'center'}}>
-  <div style={{width:10,height:10,borderRadius:'50%',background:info.color,cursor:'pointer',flexShrink:0}} onClick={handleClick} title={info.label}/>
+  <div style={{width:sz,height:sz,borderRadius:'50%',background:info.color,cursor:'pointer',flexShrink:0}} onClick={handleClick} title={info.label}/>
   {open&&<div style={{position:'fixed',top:pos.top,left:pos.left,zIndex:9999,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:8,overflow:'hidden',boxShadow:'0 8px 22px rgba(0,0,0,.5)',minWidth:170}}>
     {Object.keys(STATUSES).map(function(k){var si=STATUSES[k];return(
 <div key={k} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',cursor:'pointer',background:k===status?'var(--bg3)':'transparent',fontSize:14}} onClick={function(){onChange(k);setOpen(false);}}>
@@ -1047,12 +1048,12 @@ function SortDropdown({sort,setSort}){
 }
 
 // ── ViewHeader ──
-function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind}){
+function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind,structureMode,onStructureToggle}){
   var sf=useState(false);var filterOpen=sf[0];var setFilterOpen=sf[1];
   var sp=useState({top:0,left:0});var filterPos=sp[0];var setFilterPos=sp[1];
   var ss=useState(false);var searchOpen=ss[0];var setSearchOpen=ss[1];
   var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
-  var st=useState(false);var structureOn=st[0];var setStructureOn=st[1];
+  var st=useState(structureMode||false);var structureOn=st[0];var setStructureOn=st[1];
   var filterRef=useRef(null);var searchRef=useRef(null);
   var projStrands=app.allStrands[app.projId]||{};
   useEffect(function(){if(!filterOpen)return;function onDown(e){
@@ -1085,7 +1086,7 @@ function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind}){
       )}
     </div>
     {SEP}
-    <button onClick={function(){setStructureOn(!structureOn);}} style={{display:'flex',alignItems:'center',gap:8,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer'}}>
+    <button onClick={function(){var nv=!structureOn;setStructureOn(nv);if(onStructureToggle)onStructureToggle(nv);}} style={{display:'flex',alignItems:'center',gap:8,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer'}}>
       <div style={{width:34,height:18,borderRadius:9,background:structureOn?'#7A5A38':'#A88060',position:'relative',transition:'background .2s',flexShrink:0}}>
         <div style={{position:'absolute',top:2,left:structureOn?16:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
       </div>
@@ -1118,7 +1119,7 @@ function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind}){
   );
 }
 // ── StatusDotWithArchive ──
-function StatusDotWithArchive({draft,app,showLabel}){
+function StatusDotWithArchive({draft,app,showLabel,dotSize}){
   var sac=useState(false);var showConfirm=sac[0];var setShowConfirm=sac[1];
   var info=STATUSES[draft.status]||STATUSES.first_draft;
   function handleChange(s){
@@ -1141,7 +1142,7 @@ function StatusDotWithArchive({draft,app,showLabel}){
   var dotRef=useRef(null);
   return(
 <div style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}} onClick={function(e){if(dotRef.current)dotRef.current.querySelector('[title]').click();}}>
-  <div ref={dotRef}><StatusDot status={draft.status} onChange={handleChange}/></div>
+  <div ref={dotRef}><StatusDot status={draft.status} onChange={handleChange} size={dotSize}/></div>
   {showLabel&&<span style={{fontSize:13,color:info.color,pointerEvents:'none'}}>{info.label}</span>}
   {showConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[app.projId]||[]} onConfirm={doArchive} onCancel={function(){setShowConfirm(false);}}/>}
 </div>
@@ -1493,111 +1494,153 @@ function applyFS(drafts,filter,sort){
 }
 
 // ── DraftCard ──
-function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqCount}){
-  var isMobile=useIsMobile();
-  var so=useState(false);var over=so[0];var setOver=so[1];
-  var sn=useState(false);var nestTarget=sn[0];var setNestTarget=sn[1];
-  var nestTargetRef=useRef(false);
+function StrandCircle({strand,spoolColor,size}){
+  var sz=size||25;
+  var color=spoolColor||'#c45e28';
+  var sr=useRef(null);var tt=useRef(null);
+  function show(){if(!sr.current||!tt.current)return;var r=sr.current.getBoundingClientRect();tt.current.style.left=(r.left+r.width/2)+'px';tt.current.style.top=(r.top-6)+'px';tt.current.style.opacity='1';}
+  function hide(){if(tt.current)tt.current.style.opacity='0';}
+  return(
+<div ref={sr} onMouseEnter={show} onMouseLeave={hide} style={{width:sz,height:sz,borderRadius:'50%',background:strand.color||color,border:'2px solid '+color,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:sr.current?-8:0,cursor:'default',boxSizing:'border-box'}}>
+  {strand.image?<img src={strand.image} alt={strand.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:strand.emoji?<span style={{fontSize:sz*0.5}}>{strand.emoji}</span>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:sz*0.36,fontWeight:700,color:'#fff'}}>{initials(strand.name)}</span>}
+  <span ref={tt} className="tooltip-text" style={{position:'fixed',opacity:0,transition:'opacity .1s'}}>{strand.name}</span>
+</div>
+  );
+}
+
+function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
+  var so=useState(false);var dragOver=so[0];var setDragOver=so[1];
   var sac=useState(false);var archiveConfirm=sac[0];var setArchiveConfirm=sac[1];
-  var nestTimer=useRef(null);
-  var projStrands=app.allStrands[app.projId]||{};
+  var sdrag=useRef(false);var smouse=useRef({x:0,y:0});
+  var pid=app.projId;
+  var projStrands=app.allStrands[pid]||{};
+  var projTemplates=app.allTemplates[pid]||[];
+
+  // Gather tagged strands with their spool color
   var tagged=[];
-  Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id))tagged.push(st);});});
-  function update(changes){app.updateDraft(app.projId,draft.id,changes);}
+  Object.keys(projStrands).forEach(function(coll){
+    (projStrands[coll]||[]).forEach(function(st){
+      if((draft.strandTags||[]).includes(st.id)){
+        var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
+        tagged.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));
+      }
+    });
+  });
+
+  var info=STATUSES[draft.status]||STATUSES.first_draft;
+
   function onStatusChange(s){
     if(s==='archive'){setArchiveConfirm(true);return;}
     var ch={status:s};
     if(s==='loose_thread'){ch.order=null;ch.parentId=null;}
-    else if(draft.status==='loose_thread'){ch.order=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length+1;}
-    update(ch);
+    else if(draft.status==='loose_thread'){ch.order=(app.allDrafts[pid]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length+1;}
+    app.updateDraft(pid,draft.id,ch);
   }
   function doArchive(){
-    var allDr=app.allDrafts[app.projId]||[];
+    var allDr=app.allDrafts[pid]||[];
     var children=allDr.filter(function(d){return d.parentId===draft.id&&!d.archived;});
-    app.updateDraft(app.projId,draft.id,{archived:true});
-    children.forEach(function(c){app.updateDraft(app.projId,c.id,{archived:true});});
+    app.updateDraft(pid,draft.id,{archived:true});
+    children.forEach(function(c){app.updateDraft(pid,c.id,{archived:true});});
     setArchiveConfirm(false);
   }
-  function handleDragOver(e){
-    e.preventDefault();setOver(true);
-    if(!nestTimer.current){
-      nestTimer.current=setTimeout(function(){setNestTarget(true);nestTargetRef.current=true;},1200);
+
+  // Click vs drag detection
+  function handleMouseDown(e){smouse.current={x:e.clientX,y:e.clientY};sdrag.current=false;}
+  function handleMouseMove(e){var dx=e.clientX-smouse.current.x;var dy=e.clientY-smouse.current.y;if(Math.sqrt(dx*dx+dy*dy)>4)sdrag.current=true;}
+  function handleMouseUp(e){
+    if(!sdrag.current&&!structureMode){
+      // It's a click, not a drag — open draft
+      if(!e.target.closest('.status-dot-wrap'))app.openDraft(draft.id);
     }
   }
-  function handleDragLeave(){
-    setOver(false);setNestTarget(false);nestTargetRef.current=false;
-    if(nestTimer.current){clearTimeout(nestTimer.current);nestTimer.current=null;}
-  }
-  function handleDrop(e){
-    e.preventDefault();
-    var fromId=e.dataTransfer.getData('draftId');
-    if(fromId&&fromId!==draft.id){
-      var fromDraft=(app.allDrafts[app.projId]||[]).find(function(d){return d.id===fromId;});
-      var isLT=fromDraft&&fromDraft.status==='loose_thread';
-      var isNesting=nestTargetRef.current&&!draft.parentId&&!isLT&&!fromDraft.parentId;
-      if(isNesting){
-        app.nestDraft(app.projId,fromId,draft.id);
-      } else if(isLT){
-        var seqCount=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;
-        app.updateDraft(app.projId,fromId,{status:'first_draft',order:draft.order||seqCount+1,parentId:null});
-      } else {
-        app.reorderDraft(app.projId,fromId,draft.order||0);
-      }
-    }
-    setOver(false);setNestTarget(false);nestTargetRef.current=false;
-    if(nestTimer.current){clearTimeout(nestTimer.current);nestTimer.current=null;}
-  }
-  var chips=tagged.slice(0,2);
-  var cardCls='draft-card'+(over?' drag-over':'')+(nestTarget?' nest-target':'');
-  var cardEl=(
-<div className={cardCls} draggable={true}
-  onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}}
-  onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
-  <div className="card-hdr" style={{backgroundImage:draft.thumbnail?'url('+draft.thumbnail+')':undefined,backgroundSize:'cover',backgroundPosition:'center'}}>
-    <div style={{display:'flex',alignItems:'center',gap:5,background:draft.thumbnail?'rgba(253,248,240,.75)':'transparent',borderRadius:4,padding:'2px 5px'}}>
-      <span className="card-seq" style={{color:'var(--text)',background:draft.thumbnail?'rgba(253,248,240,.8)':'transparent',borderRadius:4,padding:draft.thumbnail?'1px 6px':undefined}}>{label}</span>
-      {childCount>0&&(
-<div style={{display:'flex',alignItems:'center',gap:2,cursor:'pointer'}}
-  onClick={function(e){e.stopPropagation();app.setView('table');app.updateDraft(app.projId,draft.id,{nestExpanded:true});}}>
-  <span className="mi" style={{fontSize:13,color:'var(--indigo)'}}>account_tree</span>
-  <span style={{fontSize:10,color:'var(--indigo)',fontWeight:600}}>{childCount}</span>
+
+  // Body text preview (fallback when no synopsis)
+  var bodyPreview=draft.body?stripHtml(draft.body).slice(0,300):'';
+
+  // Strand circles: max 3 visible + overflow
+  var visibleStrands=tagged.slice(0,3);
+  var overflow=tagged.length-3;
+
+  // Overflow tooltip
+  var overflowRef=useRef(null);var overflowTt=useRef(null);
+  function showOverflow(){if(!overflowRef.current||!overflowTt.current)return;var r=overflowRef.current.getBoundingClientRect();overflowTt.current.style.left=(r.left+r.width/2)+'px';overflowTt.current.style.top=(r.top-6)+'px';overflowTt.current.style.opacity='1';}
+  function hideOverflow(){if(overflowTt.current)overflowTt.current.style.opacity='0';}
+
+  return(
+<div
+  style={{width:270,height:400,borderRadius:15,overflow:'hidden',background:'var(--bg1)',border:'1px solid var(--border)',display:'flex',flexDirection:'column',cursor:structureMode?'grab':'pointer',boxShadow:'0 2px 8px rgba(42,31,16,.06)',transition:'box-shadow .15s,transform .1s',flexShrink:0}}
+  draggable={structureMode}
+  onDragStart={structureMode?function(e){e.dataTransfer.setData('draftId',draft.id);}:undefined}
+  onDragOver={structureMode?function(e){e.preventDefault();setDragOver(true);}:undefined}
+  onDragLeave={structureMode?function(){setDragOver(false);}:undefined}
+  onDrop={structureMode?function(e){e.preventDefault();setDragOver(false);var fromId=e.dataTransfer.getData('draftId');if(fromId&&fromId!==draft.id)app.reorderDraft(pid,fromId,draft.order||0);}:undefined}
+  onMouseDown={handleMouseDown}
+  onMouseMove={handleMouseMove}
+  onMouseUp={handleMouseUp}
+  onMouseOver={function(e){e.currentTarget.style.boxShadow='0 6px 20px rgba(42,31,16,.12)';if(!structureMode)e.currentTarget.style.transform='translateY(-2px)';}}
+  onMouseOut={function(e){e.currentTarget.style.boxShadow='0 2px 8px rgba(42,31,16,.06)';e.currentTarget.style.transform='translateY(0)';}}
+>
+  {/* Thumbnail */}
+  <div style={{height:150,background:'linear-gradient(135deg,var(--bg3),var(--bg4))',flexShrink:0,backgroundImage:draft.thumbnail?'url('+draft.thumbnail+')':undefined,backgroundSize:'cover',backgroundPosition:'center',position:'relative'}}>
+    {dragOver&&<div style={{position:'absolute',inset:0,background:'rgba(196,94,40,.15)',borderRadius:'15px 15px 0 0'}}/>}
+  </div>
+
+  {/* Content */}
+  <div style={{flex:1,background:'#F5EDE0',padding:'10px 15px',display:'flex',flexDirection:'column',gap:13,minHeight:0}}>
+    {/* Title */}
+    <div style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',flexShrink:0}}>
+      {label}— {draft.title||'Untitled'}
+    </div>
+
+    {/* Synopsis / body preview */}
+    <div style={{flex:1,minHeight:0,overflow:'hidden',position:'relative'}}
+      onMouseOver={function(e){e.currentTarget.style.overflowY='auto';}}
+      onMouseOut={function(e){e.currentTarget.style.overflowY='hidden';}}>
+      {draft.synopsis?(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',lineHeight:1.45,display:'-webkit-box',WebkitLineClamp:5,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
+  {draft.synopsis}
+</div>
+      ):bodyPreview?(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'rgba(122,90,56,.75)',fontStyle:'italic',lineHeight:1.45,display:'-webkit-box',WebkitLineClamp:5,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
+  {bodyPreview}
+</div>
+      ):(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'rgba(122,90,56,.4)',fontStyle:'italic',lineHeight:1.45}}>
+  Start writing…
 </div>
       )}
     </div>
-    {nestTarget&&<span style={{fontSize:10,color:'var(--teal)',fontWeight:600}}>nest here</span>}
-    {isMobile&&!draft.parentId?(
-<div style={{display:'flex',gap:2}}>
-  <button className="arrow-btn" onClick={function(){onMoveUp&&onMoveUp(draft.id);}}><span className="mi" style={{fontSize:16}}>keyboard_arrow_up</span></button>
-  <button className="arrow-btn" onClick={function(){onMoveDown&&onMoveDown(draft.id);}}><span className="mi" style={{fontSize:16}}>keyboard_arrow_down</span></button>
+
+    {/* Bottom row */}
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+      {/* Left: strand circles */}
+      <div style={{display:'flex',alignItems:'center'}}>
+        {visibleStrands.map(function(st,i){return(
+<div key={st.id} style={{width:25,height:25,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-8:0,boxSizing:'border-box',position:'relative',zIndex:visibleStrands.length-i,cursor:'default'}} className="has-tooltip">
+  {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:11}}>{st.emoji}</span>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
+  <span className="tooltip-text" style={{whiteSpace:'nowrap'}}>{st.name}</span>
 </div>
-    ):<span style={{color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:16}}>drag_indicator</span></span>}
-  </div>
-  <div className="card-body">
-    <textarea className="card-title-f" title={draft.title||''} defaultValue={draft.title} placeholder="Untitled draft" rows={1} ref={function(el){if(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,52)+'px';}}} onInput={function(e){e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,52)+'px';}} onBlur={function(e){update({title:e.target.value});}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}}/>
-    {draft.synopsis?(
-<textarea className="card-syn-f" defaultValue={draft.synopsis} rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
-    ):(
-<SynopsisPreview draft={draft} onUpdate={update}/>
-    )}
-    {tagged.length>0&&(
-<div className="strand-chips" style={{marginTop:2,flexWrap:'nowrap',overflow:'hidden'}}>
-  {tagged.slice(0,2).map(function(st){return <span key={st.id} className="chip" style={{background:'rgba(196,94,40,.1)',color:'var(--indigo)',borderColor:'rgba(196,94,40,.25)',borderWidth:1,borderStyle:'solid',fontSize:10,padding:'2px 6px',flexShrink:0}}>{st.name}</span>;})}
-  {tagged.length>2&&<OverflowTooltip label={'+'+(tagged.length-2)} names={tagged.slice(2).map(function(s){return s.name;})}/>}
+        );})}
+        {overflow>0&&(
+<div ref={overflowRef} onMouseEnter={showOverflow} onMouseLeave={hideOverflow} style={{width:25,height:25,borderRadius:'50%',background:'#E2D0B8',border:'1px solid #A88060',display:'flex',alignItems:'center',justifyContent:'center',marginLeft:-8,flexShrink:0,cursor:'default',zIndex:0}}>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:10,color:'#7A5A38',fontWeight:600}}>+{overflow}</span>
+  <span ref={overflowTt} className="tooltip-text" style={{position:'fixed',opacity:0,transition:'opacity .1s',whiteSpace:'pre'}}>{tagged.slice(3).map(function(s){return s.name;}).join('\n')}</span>
 </div>
-    )}
+        )}
+      </div>
+
+      {/* Right: status dot + word count */}
+      <div className="status-dot-wrap" style={{display:'flex',alignItems:'center',gap:13}} onClick={function(e){e.stopPropagation();}}>
+        <StatusDotWithArchive draft={draft} app={app} showLabel={false} dotSize={15}/>
+        <span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#a88060'}}>{(draft.wordCount||0)}w</span>
+      </div>
+    </div>
   </div>
-  <div className="card-footer" style={{flexWrap:'wrap',gap:4}}>
-    <StatusDot status={draft.status} onChange={onStatusChange}/>
-    <span className="card-wc" style={{marginLeft:4}}>{(draft.wordCount||0)+'w'}</span>
-    <button className="card-open" style={{marginLeft:'auto'}} onClick={function(){app.openDraft(draft.id);}}>Open</button>
-    <button className="card-open" title="Duplicate as nested draft" onClick={function(e){e.stopPropagation();app.duplicateDraft(app.projId,draft.id);}}>⧉</button>
-  </div>
+
+  {archiveConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[pid]||[]} onConfirm={doArchive} onCancel={function(){setArchiveConfirm(false);}}/>}
 </div>
   );
-  return(<div>{cardEl}{archiveConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[app.projId]||[]} onConfirm={doArchive} onCancel={function(){setArchiveConfirm(false);}}/>}</div>);
 }
-
-
 // ── SynopsisPreview ──
 function SynopsisPreview({draft,onUpdate}){
   var sh=useState(false);var hovered=sh[0];var setHovered=sh[1];
@@ -1715,6 +1758,7 @@ function CardsView({app}){
   var sf=useState(null);var filter=sf[0];var setFilter=sf[1];
   var ss=useState('order');var sort=ss[0];var setSort=ss[1];
   var sb=useState(false);var bindOpen=sb[0];var setBindOpen=sb[1];
+  var sst=useState(false);var structureMode=sst[0];var setStructureMode=sst[1];
   var allDrafts=app.allDrafts[app.projId]||[];
   var seqDrafts=allDrafts.filter(function(d){return !d.archived&&d.status!=='loose_thread'&&!d.parentId;});
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
@@ -1725,7 +1769,7 @@ function CardsView({app}){
   var displayed=applyFS(tree,filter,sort);
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} structureMode={structureMode} onStructureToggle={function(v){setStructureMode(v);}}/>
   <div className="view-area dot-grid">
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div className="cards-grid">
@@ -1733,7 +1777,7 @@ function CardsView({app}){
     var childCount=parent.children?parent.children.length:0;
     var sortedSeq=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
     var seqIdx=sortedSeq.findIndex(function(d){return d.id===parent.id;});
-    return <DraftCard key={parent.id} draft={parent} label={''+(seqIdx>=0?seqIdx+1:'?')} childCount={childCount} app={app} onMoveUp={moveUp} onMoveDown={moveDown}/>;
+    return <DraftCard key={parent.id} draft={parent} label={''+(seqIdx>=0?seqIdx+1:'?')} app={app} onMoveUp={moveUp} onMoveDown={moveDown} structureMode={structureMode}/>;
   })}
   <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:8,display:'flex',flexDirection:'column',boxShadow:'none'}} onClick={addDraft}>
     <span className="mi" style={{fontSize:28,color:'var(--placeholder)'}}>add_circle_outline</span>
