@@ -655,15 +655,12 @@ function Panel({open,onClose,title,children,footer}){
 function ViewSwitcher({view,setView}){
   return(
 <div className="view-switcher">
-  {VIEW_MODES.map(function(m,i){return(
-<React.Fragment key={m.key}>
-  {m.group==='strands'&&<div className="view-sep"/>}
-  <div className={'view-seg'+(view===m.key?' active':'')} onClick={function(){setView(m.key);}}>
-    <span className="material-symbols-outlined" style={{fontSize:20}}>{m.icon}</span>
-    <span className="view-seg-tip">{m.label}</span>
-  </div>
-</React.Fragment>
-  );})}
+  {VIEW_MODES.map(function(m){var seg=(
+<div key={m.key} className={'view-seg'+(view===m.key?' active':'')} onClick={function(){setView(m.key);}}>
+  <span className="material-symbols-outlined" style={{fontSize:20}}>{m.icon}</span>
+  <span className="view-seg-tip">{m.label}</span>
+</div>
+  );return m.group==='strands'?[<div key={m.key+'-sep'} className="view-sep"/>,seg]:seg;})}
 </div>
   );
 }
