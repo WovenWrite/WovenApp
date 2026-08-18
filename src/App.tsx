@@ -3,6 +3,7 @@ import ExploreCanvas from './ExploreCanvas'
 import { useState, useEffect, useRef } from "react";
 import DraftEditor from './DraftEditor'
 import SharedDraftView from './SharedDraftView'
+import AuthScreen from './auth/AuthScreen'
 
 // ── Version snapshots ──
 var MAX_SNAPSHOTS=20;
@@ -3230,95 +3231,6 @@ function WovenLogo({size,color,dark}){
   );
 }
 
-// ── AuthScreen ──
-function AuthScreen({onAuth}){
-  var se=useState('');var email=se[0];var setEmail=se[1];
-  var sp=useState('');var password=sp[0];var setPassword=sp[1];
-  var sfn=useState('');var firstName=sfn[0];var setFirstName=sfn[1];
-  var sl=useState(false);var loading=sl[0];var setLoading=sl[1];
-  var sm=useState('');var msg=sm[0];var setMsg=sm[1];
-  var smode=useState('signin');var mode=smode[0];var setMode=smode[1];
-  async function handleSubmit(){
-    if(!email.trim()||!password.trim()){setMsg('Please enter email and password.');return;}
-    setLoading(true);setMsg('');
-    var res;
-    if(mode==='signup'){
-      res=await supabase.auth.signUp({email:email.trim(),password:password,options:{data:{first_name:firstName.trim()}}});
-      if(!res.error){setMsg('Account created! Check your email to confirm, then sign in.');}
-      else if(res.error.message&&(res.error.message.toLowerCase().includes('already')||res.error.message.toLowerCase().includes('registered')||res.error.message.toLowerCase().includes('exist'))){setMsg('An account with this email already exists. Try signing in instead.');}
-    } else {
-      res=await supabase.auth.signInWithPassword({email:email.trim(),password:password});
-      if(!res.error&&res.data.user)onAuth(res.data.user);
-    }
-    if(res.error)setMsg(res.error.message);
-    setLoading(false);
-  }
-  var ssv=useState(false);var showPw=ssv[0];var setShowPw=ssv[1];
-  async function handleReset(){
-    if(!email.trim()){setMsg('Enter your email above first.');return;}
-    setLoading(true);
-    var res=await supabase.auth.resetPasswordForEmail(email.trim());
-    setMsg(res.error?res.error.message:'Password reset email sent!');
-    setLoading(false);
-  }
-  return(
-<div className="auth-wrapper" style={{position:'relative',display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--bg0)',fontFamily:'var(--ui)',overflow:'hidden'}}>
-  {/* Grain overlay */}
-  <div className="auth-grain"/>
-  {/* Amber radial blurs - top left */}
-  <div style={{position:'absolute',top:'-10%',left:'-10%',width:'70vw',height:'70vh',background:'radial-gradient(ellipse, rgba(196,94,40,0.35) 0%, rgba(196,94,40,0.15) 35%, transparent 65%)',pointerEvents:'none',filter:'blur(60px)',zIndex:0}}/>
-  {/* Amber radial blurs - bottom right */}
-  <div style={{position:'absolute',bottom:'-10%',right:'-10%',width:'70vw',height:'70vh',background:'radial-gradient(ellipse, rgba(240,192,80,0.30) 0%, rgba(232,160,48,0.12) 35%, transparent 65%)',pointerEvents:'none',filter:'blur(60px)',zIndex:0}}/>
-  <div className="auth-card" style={{position:'relative',zIndex:1,background:'rgba(245,237,224,0.92)',backdropFilter:'blur(12px)',border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'40px',width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(42,31,16,.15)'}}>
-    <div style={{textAlign:'center',marginBottom:28}}>
-      <div style={{marginBottom:10,display:'flex',justifyContent:'center',alignItems:'center'}}><WovenLogo size={36} dark={true}/></div>
-      <div style={{fontSize:14,color:'var(--body-text)',fontWeight:700,fontStyle:'italic',textAlign:'center'}}>Where thinking & writing happen together.</div>
-    </div>
-    {mode==='signup'&&(
-<div style={{marginBottom:14}}>
-  <span className="sect-lbl">First name</span>
-  <input value={firstName} onChange={function(e){setFirstName(e.target.value);}} placeholder="What should we call you?" onKeyDown={function(e){if(e.key==='Enter')handleSubmit();}}/>
-</div>
-    )}
-    <div style={{marginBottom:14}}>
-      <span className="sect-lbl">Email</span>
-      <input type="email" value={email} onChange={function(e){setEmail(e.target.value);}} placeholder="your@email.com" onKeyDown={function(e){if(e.key==='Enter')handleSubmit();}}/>
-    </div>
-    <div style={{marginBottom:8}}>
-      <span className="sect-lbl">Password</span>
-      <div style={{position:'relative'}}>
-        <input type={showPw?'text':'password'} value={password} onChange={function(e){setPassword(e.target.value);}} placeholder="••••••••" onKeyDown={function(e){if(e.key==='Enter')handleSubmit();}} style={{paddingRight:40}}/>
-        <button style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--mid)',padding:0}} onClick={function(){setShowPw(!showPw);}}>
-          <span className="mi" style={{fontSize:18}}>{showPw?'visibility_off':'visibility'}</span>
-        </button>
-      </div>
-    </div>
-    {mode==='signin'&&(
-<div style={{textAlign:'right',marginBottom:16}}>
-  <span style={{fontSize:12,color:'var(--indigo)',cursor:'pointer'}} onClick={handleReset}>Forgot password?</span>
-</div>
-    )}
-    {msg&&<div style={{fontSize:13,color:msg.includes('sent')||msg.includes('created')?'var(--teal)':'var(--danger)',marginBottom:14,padding:'8px 12px',background:'var(--bg2)',borderRadius:'var(--r)'}}>{msg}</div>}
-    <button className="btn btn-primary" style={{width:'100%',justifyContent:'center',marginBottom:12}} onClick={handleSubmit} disabled={loading}>
-      {loading?'Please wait...':(mode==='signup'?'Create account':'Sign in')}
-    </button>
-    {mode==='signin'&&(
-<div style={{marginTop:4}}>
-  <div style={{textAlign:'center',fontSize:12,color:'var(--mid)',marginBottom:10}}>Don't have an account?</div>
-  <button className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}} onClick={function(){setMode('signup');setMsg('');}}>
-    Create a free account
-  </button>
-</div>
-    )}
-    {mode==='signup'&&(
-<div style={{textAlign:'center',fontSize:13,color:'var(--mid)',marginTop:4}}>
-  Have an account? <span style={{color:'var(--indigo)',cursor:'pointer'}} onClick={function(){setMode('signin');setMsg('');}}>Sign in</span>
-</div>
-    )}
-  </div>
-</div>
-  );
-}
 
 // ── App Root ──
 function App(){
