@@ -1548,18 +1548,22 @@ function LooseThreadsSection({threads,app,view,structureMode}){
   );
 
   if(view==='table'){return(
-<div style={{padding:'0 0 12px'}}>
-  <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderTop:'1px solid var(--border)'}}>
+<div style={{padding:'0 0 12px',flexShrink:0}}>
+  <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderTop:'1px solid var(--border)',cursor:'pointer'}} onClick={function(){setExpanded(!expanded);}}>
+    <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--mid)',transition:'transform .15s',transform:expanded?'rotate(90deg)':'none'}}>chevron_right</span>
     <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:13,color:'var(--mid)'}}>Loose Threads</span>
     {threads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:18,height:18,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{threads.length}</span>}
   </div>
-  {sortedThreads.map(function(d){return(
+  {expanded&&sortedThreads.map(function(d){return(
 <div key={d.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderBottom:'1px solid var(--bg2)'}}>
   <input className="tbl-inp" defaultValue={d.title} placeholder="Untitled loose thread" onBlur={function(e){app.updateDraft(app.projId,d.id,{title:e.target.value});}} style={{maxWidth:180}}/>
   <input className="tbl-inp syn" defaultValue={d.synopsis} placeholder="Note..." onBlur={function(e){app.updateDraft(app.projId,d.id,{synopsis:e.target.value});}} style={{flex:1}}/>
   <button className="card-open" onClick={function(){app.openDraft(d.id);}}>Draft</button>
 </div>
   );})}
+  {expanded&&threads.length===0&&(
+<div style={{padding:'6px 12px',fontSize:13,color:'var(--placeholder)',fontStyle:'italic'}}>No loose threads yet.</div>
+  )}
   {fab}
   {drawer}
 </div>
