@@ -626,75 +626,77 @@ function DraftEditor({app}){
   return(
 <div style={{display:'flex',flexDirection:'column',height:'100vh',background:T.bodyBg,overflow:'hidden'}}>
 
-  {/* ── Top nav + toolbar (slide up in flow mode) ── */}
-  <div style={{flexShrink:0,transform:flowMode?'translateY(-110%)':'translateY(0)',transition:'transform .3s cubic-bezier(.4,0,.2,1)',pointerEvents:flowMode?'none':'auto',position:flowMode?'absolute':'relative',width:'100%',zIndex:20}}>
-
-    {/* Nav */}
-    <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:T.navBg,padding:'10px 20px',gap:10,borderBottom:'1px solid rgba(42,31,16,.1)'}}>
-      <div style={{display:'flex',alignItems:'center',gap:10,flex:1,minWidth:0}}>
-        <IconBtn icon="arrow_back" title="Back to sequence" onClick={function(){if(app&&app.setView)app.setView('cards');if(app&&app.setDraftId)app.setDraftId(null);}} style={{flexShrink:0}}/>
-        <EditableTitle value={title} onChange={function(v){setTitle(v);if(app&&app.updateDraft)app.updateDraft(pid,did,{title:v});}}/>
-        <span className="wc-label" data-short={wordCount.toLocaleString()+'w'} style={{fontSize:11,color:T.text,whiteSpace:'nowrap',flexShrink:0,fontFamily:'DM Sans, sans-serif',opacity:.6}}>
-          <span className="wc-full">{wordCount.toLocaleString()} words</span>
-          <span className="wc-short" style={{display:'none'}}>{wordCount.toLocaleString()}w</span>
-        </span>
-      </div>
-      <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-        <div className="nav-drawers" style={{display:'flex',alignItems:'center',gap:10}}>
-          <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary}/>
-          <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
-          <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowSpool(false);}} active={showProperties}/>
-          <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowProperties(false);if(showSpool)setStrandDetailId(null);}} active={showSpool}/>
-        </div>
-        {/* Mobile collapsed menu */}
-        <NavCollapseMenu branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onVersions={function(){setShowVersions(!showVersions);}} onProperties={function(){setShowProperties(!showProperties);}} onSpool={function(){setShowSpool(!showSpool);}}/>
-        <ShareDropdown onExportPDF={handleExportPDF} onExportDocx={handleExportDocx} shareLink={shareLink} onGenerateLink={handleGenerateLink} onDepublish={handleDepublish}/>
-      </div>
-    </nav>
-
-    {/* Format toolbar */}
-    <div style={{display:'flex',alignItems:'center',padding:'6px 20px',background:T.toolBg,borderBottom:'1px solid '+T.stroke,gap:4}}>
-      {/* Left: style, font, size */}
-      <div style={{display:'flex',alignItems:'center',gap:8,marginRight:12}}>
-        <StyledSelect value={activeFormat} onChange={handleStyleChange} options={styleOpts} style={{minWidth:110}}/>
-        <select value={font} onChange={function(e){setFont(e.target.value);}} className="font-select" style={{padding:'4px 8px',background:T.toolBg,border:'1px solid '+T.stroke,borderRadius:6,fontSize:13,color:T.text,cursor:'pointer',outline:'none',minWidth:130,fontFamily:font+', sans-serif'}}>
-          {FONTS.map(function(f){return(<option key={f} value={f} style={{fontFamily:f+', sans-serif'}}>{f}</option>);})}
-        </select>
-      </div>
-      {/* Middle: format buttons */}
-      <div style={{display:'flex',alignItems:'center',gap:0,flex:1,justifyContent:'center'}}>
-        {fmtBtns.map(function(b,i){
-          if(b.sep)return(<div key={'s'+i} className={b.sepClass||''} style={{width:1,height:20,background:T.stroke,margin:'0 4px',flexShrink:0}}/>);
-          var cls=b.cls||'';
-          return(
-<button key={b.icon} onClick={b.action} title={b.title} className={cls} style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,transition:'background .12s'}}
-  onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.08)';}}
-  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
-  <span className="mi" style={{fontSize:18}}>{b.icon}</span>
-</button>
-          );
-        })}
-      </div>
-      {/* Right: zoom + flow */}
-      <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto'}}>
-        <StyledSelect value={String(zoom)} onChange={function(v){setZoom(parseInt(v));}} options={zoomOpts} style={{minWidth:70}}/>
-        <IOSToggle on={false} onChange={function(v){if(v)setFlowMode(true);}} label="Flow"/>
-      </div>
+  {/* ── Nav (slides up in flow mode; always full width, never covered by a drawer) ── */}
+  <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:T.navBg,padding:'10px 20px',gap:10,borderBottom:'1px solid rgba(42,31,16,.1)',flexShrink:0,transform:flowMode?'translateY(-110%)':'translateY(0)',transition:'transform .3s cubic-bezier(.4,0,.2,1)',pointerEvents:flowMode?'none':'auto',position:flowMode?'absolute':'relative',width:'100%',zIndex:20}}>
+    <div style={{display:'flex',alignItems:'center',gap:10,flex:1,minWidth:0}}>
+      <IconBtn icon="arrow_back" title="Back to sequence" onClick={function(){if(app&&app.setView)app.setView('cards');if(app&&app.setDraftId)app.setDraftId(null);}} style={{flexShrink:0}}/>
+      <EditableTitle value={title} onChange={function(v){setTitle(v);if(app&&app.updateDraft)app.updateDraft(pid,did,{title:v});}}/>
+      <span className="wc-label" data-short={wordCount.toLocaleString()+'w'} style={{fontSize:11,color:T.text,whiteSpace:'nowrap',flexShrink:0,fontFamily:'DM Sans, sans-serif',opacity:.6}}>
+        <span className="wc-full">{wordCount.toLocaleString()} words</span>
+        <span className="wc-short" style={{display:'none'}}>{wordCount.toLocaleString()}w</span>
+      </span>
     </div>
-  </div>
+    <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+      <div className="nav-drawers" style={{display:'flex',alignItems:'center',gap:10}}>
+        <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary}/>
+        <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
+        <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowSpool(false);}} active={showProperties}/>
+        <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowProperties(false);if(showSpool)setStrandDetailId(null);}} active={showSpool}/>
+      </div>
+      {/* Mobile collapsed menu */}
+      <NavCollapseMenu branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onVersions={function(){setShowVersions(!showVersions);}} onProperties={function(){setShowProperties(!showProperties);}} onSpool={function(){setShowSpool(!showSpool);}}/>
+      <ShareDropdown onExportPDF={handleExportPDF} onExportDocx={handleExportDocx} shareLink={shareLink} onGenerateLink={handleGenerateLink} onDepublish={handleDepublish}/>
+    </div>
+  </nav>
 
   {/* ── Flow mode minimal bar (slides down when flow active) ── */}
   <div style={{position:'absolute',top:0,left:0,right:0,zIndex:30,transform:flowMode?'translateY(0)':'translateY(-100%)',transition:'transform .3s cubic-bezier(.4,0,.2,1)',pointerEvents:flowMode?'auto':'none'}}>
     {FlowBar}
   </div>
 
-  {/* ── Main area ── */}
+  {/* ── Main area: editor column (toolbar + scroll area) + drawers, side by side below nav ── */}
   <div style={{display:'flex',flex:1,overflow:'hidden',marginTop:flowMode?'48px':'0',transition:'margin-top .3s'}}>
 
-    {/* Editor scroll area */}
-    <div style={{flex:1,overflowY:'scroll',WebkitOverflowScrolling:'touch',paddingTop:48,paddingBottom:20,paddingLeft:40,paddingRight:56,background:T.bodyBg}} className="editor-scroll-area">
-      <div style={{maxWidth:maxWidth+'px',margin:'0 auto',transition:'max-width .2s'}}>
-        <div ref={editorContainerRef} style={editorBodyStyle}/>
+    {/* Editor column — this whole column (including its toolbar) squeezes when a drawer opens */}
+    <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden',minWidth:0}}>
+
+      {/* Format toolbar (slides up in flow mode along with nav) */}
+      <div style={{flexShrink:0,transform:flowMode?'translateY(-110%)':'translateY(0)',transition:'transform .3s cubic-bezier(.4,0,.2,1)',pointerEvents:flowMode?'none':'auto',position:flowMode?'absolute':'relative',width:'100%',zIndex:10}}>
+        <div style={{display:'flex',alignItems:'center',padding:'6px 20px',background:T.toolBg,borderBottom:'1px solid '+T.stroke,gap:4}}>
+          {/* Left: style, font, size */}
+          <div style={{display:'flex',alignItems:'center',gap:8,marginRight:12}}>
+            <StyledSelect value={activeFormat} onChange={handleStyleChange} options={styleOpts} style={{minWidth:110}}/>
+            <select value={font} onChange={function(e){setFont(e.target.value);}} className="font-select" style={{padding:'4px 8px',background:T.toolBg,border:'1px solid '+T.stroke,borderRadius:6,fontSize:13,color:T.text,cursor:'pointer',outline:'none',minWidth:130,fontFamily:font+', sans-serif'}}>
+              {FONTS.map(function(f){return(<option key={f} value={f} style={{fontFamily:f+', sans-serif'}}>{f}</option>);})}
+            </select>
+          </div>
+          {/* Middle: format buttons */}
+          <div style={{display:'flex',alignItems:'center',gap:0,flex:1,justifyContent:'center'}}>
+            {fmtBtns.map(function(b,i){
+              if(b.sep)return(<div key={'s'+i} className={b.sepClass||''} style={{width:1,height:20,background:T.stroke,margin:'0 4px',flexShrink:0}}/>);
+              var cls=b.cls||'';
+              return(
+<button key={b.icon} onClick={b.action} title={b.title} className={cls} style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,transition:'background .12s'}}
+  onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.08)';}}
+  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  <span className="mi" style={{fontSize:18}}>{b.icon}</span>
+</button>
+              );
+            })}
+          </div>
+          {/* Right: zoom + flow */}
+          <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto'}}>
+            <StyledSelect value={String(zoom)} onChange={function(v){setZoom(parseInt(v));}} options={zoomOpts} style={{minWidth:70}}/>
+            <IOSToggle on={false} onChange={function(v){if(v)setFlowMode(true);}} label="Flow"/>
+          </div>
+        </div>
+      </div>
+
+      {/* Editor scroll area */}
+      <div style={{flex:1,overflowY:'scroll',WebkitOverflowScrolling:'touch',paddingTop:48,paddingBottom:20,paddingLeft:40,paddingRight:56,background:T.bodyBg}} className="editor-scroll-area">
+        <div style={{maxWidth:maxWidth+'px',margin:'0 auto',transition:'max-width .2s'}}>
+          <div ref={editorContainerRef} style={editorBodyStyle}/>
+        </div>
       </div>
     </div>
 
