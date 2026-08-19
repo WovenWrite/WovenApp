@@ -6,7 +6,7 @@
 //   <PropertiesDrawer app={app} draft={draft} variant="inline" onClose={...} />
 
 import { useState } from 'react';
-import { Drawer, Section, Collapsible, StatusDotWithArchive, AddFieldInline } from './SharedUI';
+import { Drawer, Section, Field, Collapsible, StatusDotWithArchive, AddFieldInline } from './SharedUI';
 import { genId, uploadImage } from './utils';
 
 export default function PropertiesDrawer({ app, draft, variant, open, onClose, onOpenStrand }) {
@@ -47,26 +47,23 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
   }
 
   return (
-    <Drawer variant={variant || 'inline'} open={open} title="Properties" icon="tune" onClose={onClose} padded={false}>
+    <Drawer variant={variant || 'inline'} open={open} title="Properties" onClose={onClose}>
 
-      <Section label="Title">
-        <input
-          key={draft.id + '-pt'}
-          defaultValue={draft.title || ''}
-          placeholder="Untitled draft"
-          onBlur={function (e) { update({ title: e.target.value, updatedAt: new Date().toISOString() }); }}
-        />
-      </Section>
+      <Field
+        label="Title"
+        key={draft.id + '-pt'}
+        defaultValue={draft.title || ''}
+        placeholder="Untitled draft"
+        onBlur={function (e) { update({ title: e.target.value, updatedAt: new Date().toISOString() }); }}
+      />
 
-      <Section label="Synopsis">
-        <textarea
-          key={draft.id + '-ps'}
-          defaultValue={draft.synopsis}
-          placeholder="Brief synopsis..."
-          rows={3}
-          onBlur={function (e) { update({ synopsis: e.target.value }); }}
-        />
-      </Section>
+      <Field
+        label="Synopsis"
+        key={draft.id + '-ps'}
+        defaultValue={draft.synopsis}
+        placeholder="Brief synopsis..."
+        onBlur={function (e) { update({ synopsis: e.target.value }); }}
+      />
 
       <Section label="Thumbnail">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -151,17 +148,17 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
         {draftFieldDefs.map(function (f) {
           var val = (draft.customFields && draft.customFields[f.id]) || '';
           return (
-            <Section key={f.id} label={f.label}>
-              <input
-                defaultValue={val}
-                placeholder={'Enter ' + f.label.toLowerCase() + '...'}
-                onBlur={function (e) {
-                  var cf = Object.assign({}, draft.customFields || {});
-                  cf[f.id] = e.target.value;
-                  update({ customFields: cf });
-                }}
-              />
-            </Section>
+            <Field
+              key={f.id}
+              label={f.label}
+              defaultValue={val}
+              placeholder={'Enter ' + f.label.toLowerCase() + '...'}
+              onBlur={function (e) {
+                var cf = Object.assign({}, draft.customFields || {});
+                cf[f.id] = e.target.value;
+                update({ customFields: cf });
+              }}
+            />
           );
         })}
 
