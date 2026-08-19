@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { Drawer, Check, Spinner, PrimaryButton } from './SharedUI';
 import { STATUSES, genId, supabase, doExport, buildShareLink } from './utils';
 
-export default function BindDrawer({ app, open, onClose, activeFilter, variant }) {
+export default function BindDrawer({ app, open, onClose, activeFilter, variant, topOffset }) {
   var sf = useState('PDF'); var format = sf[0]; var setFormat = sf[1];
   var sn = useState(false); var inclNested = sn[0]; var setInclNested = sn[1];
   var sx = useState({}); var excluded = sx[0]; var setExcluded = sx[1];
@@ -155,7 +155,7 @@ export default function BindDrawer({ app, open, onClose, activeFilter, variant }
 
   // ── Body ──
   return (
-    <Drawer variant={variant || 'overlay'} open={open} title="Bind your drafts" onClose={onClose} footer={footer}>
+    <Drawer variant={variant || 'overlay'} open={open} title="Bind your drafts" onClose={onClose} footer={footer} topOffset={topOffset}>
 
       {activeStrand && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, padding: '8px 12px', background: 'var(--bg2)', borderRadius: 'var(--r)', border: '1px solid var(--border)' }}>
