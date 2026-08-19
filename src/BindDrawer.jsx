@@ -10,7 +10,7 @@
 //   <BindDrawer app={app} open={bindOpen} activeFilter={filter} onClose={...} />
 
 import { useState } from 'react';
-import { Drawer, Check, Spinner } from './SharedUI';
+import { Drawer, Check, Spinner, PrimaryButton } from './SharedUI';
 import { STATUSES, genId, supabase, doExport, buildShareLink } from './utils';
 
 export default function BindDrawer({ app, open, onClose, activeFilter, variant }) {
@@ -145,22 +145,17 @@ export default function BindDrawer({ app, open, onClose, activeFilter, variant }
         <option value="link">Read-only link — share in browser</option>
       </select>
 
-      <button
-        className="btn btn-primary"
-        style={{ width: '100%', justifyContent: 'center' }}
-        onClick={handleExport}
-        disabled={busy || filtered.length === 0}
-      >
+      <PrimaryButton onClick={handleExport} disabled={busy || filtered.length === 0}>
         {busy
           ? <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Spinner />{format === 'link' ? 'Publishing...' : 'Preparing...'}</span>
           : format === 'link' ? 'Publish link' : 'Export'}
-      </button>
+      </PrimaryButton>
     </div>
   );
 
   // ── Body ──
   return (
-    <Drawer variant={variant || 'overlay'} open={open} title="Bind your drafts" icon="menu_book" onClose={onClose} footer={footer}>
+    <Drawer variant={variant || 'overlay'} open={open} title="Bind your drafts" onClose={onClose} footer={footer}>
 
       {activeStrand && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, padding: '8px 12px', background: 'var(--bg2)', borderRadius: 'var(--r)', border: '1px solid var(--border)' }}>
