@@ -107,6 +107,9 @@ var DRAWER_CSS = `
   text-overflow:ellipsis;}
 .wv-strand-result-icon{color:#A88060;flex-shrink:0;}
 .wv-strand-result-arrow{color:#A88060;flex-shrink:0;font-size:18px;}
+.wv-strand-result-add{color:#A88060;flex-shrink:0;font-size:20px;cursor:pointer;
+  margin-left:10px;transition:color .12s ease;}
+.wv-strand-result-add:hover{color:var(--indigo);}
 
 /* Help text */
 .wv-help-text{font-family:'DM Sans',sans-serif;font-size:16px;color:#A88060;margin:0;
@@ -345,7 +348,7 @@ export function Avatar({ strand, size }) {
 // Large 150x150 spool thumbnail with a click-to-upload affordance and a
 // hover overlay (edit pencil). Image > emoji > initials, same priority as
 // Avatar, for consistency with how the strand appears everywhere else.
-export function SpoolThumbnailUpload({ strand, onUpload }) {
+export function SpoolThumbnailUpload({ strand, onUpload, onClick }) {
   var inputRef = useRef(null);
   function handleFile(e) {
     var file = e.target.files && e.target.files[0];
@@ -353,8 +356,12 @@ export function SpoolThumbnailUpload({ strand, onUpload }) {
     if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5 MB.'); return; }
     uploadImage(file).then(function (url) { if (url) onUpload(url); });
   }
+  function handleClick() {
+    if (onClick) { onClick(); return; }
+    inputRef.current && inputRef.current.click();
+  }
   return (
-    <div className="wv-thumb-upload" style={{ background: strand.color || '#A88060' }} onClick={function () { inputRef.current && inputRef.current.click(); }}>
+    <div className="wv-thumb-upload" style={{ background: strand.color || '#A88060' }} onClick={handleClick}>
       {strand.image
         ? <img src={strand.image} alt={strand.name} />
         : strand.emoji
@@ -395,7 +402,7 @@ export function TertiaryButton({ children, onClick, disabled, type, style }) {
 }
 
 // A row for browse/tag lists — strand thumbnail, name, small spool icon, forward chevron.
-export function StrandResultRow({ strand, onClick, spoolIcon }) {
+export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
   return (
     <div className="wv-strand-result" onClick={onClick}>
       <div className="wv-strand-result-left">
@@ -404,6 +411,15 @@ export function StrandResultRow({ strand, onClick, spoolIcon }) {
         <span className="mi wv-strand-result-icon" style={{ fontSize: 10 }}>{spoolIcon || 'account_tree'}</span>
       </div>
       <span className="mi wv-strand-result-arrow">arrow_forward_ios</span>
+      {onAdd && (
+        <span
+          className="mi wv-strand-result-add"
+          onClick={function (e) { e.stopPropagation(); onAdd(); }}
+          title="Add to this draft"
+        >
+          add_circle_outline
+        </span>
+      )}
     </div>
   );
 }
