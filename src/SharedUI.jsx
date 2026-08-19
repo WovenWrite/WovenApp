@@ -4,7 +4,7 @@
 // the drawers share. Styles are injected once from here so this works
 // identically inside App.jsx, DraftEditor.jsx and ExploreCanvas.jsx.
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { STATUSES, FIELD_TYPES, SYSTEM_COLORS, PRESET_COLORS, initials, uploadImage } from './utils';
 
 // ══════════════════════════════════════════════
@@ -160,12 +160,13 @@ function useDrawerStyles() {
 //   padded   pad the body (default true; set false for edge-to-edge rows)
 //   width    override width in px
 //
-export function Drawer({ variant, open, title, onBack, onClose, footer, padded, children, width, headerExtra }) {
+export function Drawer({ variant, open, title, onBack, onClose, footer, padded, children, width, headerExtra, topOffset }) {
   useDrawerStyles();
   if (open === false) return null;
 
   var isOverlay = variant === 'overlay';
   var style = width ? { '--wv-drawer-w': width + 'px' } : undefined;
+  var overlayStyle = topOffset ? { top: topOffset } : undefined;
   var bodyCls = 'wv-drawer-body' + (padded === false ? '' : ' wv-drawer-body--pad');
 
   var panel = (
@@ -194,7 +195,7 @@ export function Drawer({ variant, open, title, onBack, onClose, footer, padded, 
   if (!isOverlay) return panel;
 
   return (
-    <div className="wv-drawer-overlay">
+    <div className="wv-drawer-overlay" style={overlayStyle}>
       <div className="wv-drawer-backdrop" onClick={onClose} />
       {panel}
     </div>
@@ -215,10 +216,12 @@ export function Section({ label, children, style }) {
 // Auto-grows a textarea to fit its content, up to `maxLines` lines, then
 // scrolls internally. Reads font-size/line-height from computed style so it
 // stays correct if the CSS changes later rather than hardcoding a pixel value.
-function useAutoGrow(maxLines) {
-  var ref = useRef(null);
+// Accepts an optional external ref (object or callback) to merge in, so a
+// caller can still get the DOM node (e.g. to call .focus()).
+function useAutoGrow(maxLines, externalRef) {
+  var localRef = useRef(null);
   useEffect(function () {
-    var el = ref.current;
+    var el = localRef.current;
     if (!el) return;
     function resize() {
       el.style.height = 'auto';
@@ -239,7 +242,11 @@ function useAutoGrow(maxLines) {
       window.removeEventListener('resize', resize);
     };
   }, []);
-  return ref;
+  return useCallback(function (el) {
+    localRef.current = el;
+    if (typeof externalRef === 'function') externalRef(el);
+    else if (externalRef && typeof externalRef === 'object') externalRef.current = el;
+  }, [externalRef]);
 }
 
 // A labeled, auto-growing text field — the one style used for every text
@@ -247,11 +254,14 @@ function useAutoGrow(maxLines) {
 // Uncontrolled by design (defaultValue + onBlur) to match the save-on-blur
 // pattern used throughout the app; pass a `key` on the element itself when
 // the underlying record changes so it remounts with the new defaultValue.
-export function Field({ label, wrap, className, style, ...rest }) {
-  var ref = useAutoGrow(6);
+// Pass `innerRef` (a ref object or callback) if you need the DOM node too —
+// e.g. to call .focus() programmatically. Don't pass a plain `ref` prop;
+// it would collide with the auto-grow behavior's own ref.
+export function Field({ label, wrap, className, style, innerRef, ...rest }) {
+  var setRef = useAutoGrow(6, innerRef);
   var box = (
     <textarea
-      ref={ref}
+      ref={setRef}
       rows={1}
       className={'wv-field-box' + (className ? ' ' + className : '')}
       style={style}
