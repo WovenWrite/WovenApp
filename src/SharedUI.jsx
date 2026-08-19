@@ -125,6 +125,21 @@ var DRAWER_CSS = `
   justify-content:center;flex-shrink:0;transition:all .15s;border:1px solid var(--border);}
 .wv-check.on{border-color:var(--indigo);background:var(--indigo);}
 
+/* Large spool thumbnail — detail view, click to upload */
+.wv-thumb-upload{position:relative;width:150px;height:150px;border-radius:100px;
+  cursor:pointer;overflow:hidden;flex-shrink:0;}
+.wv-thumb-upload img{width:100%;height:100%;object-fit:cover;display:block;}
+.wv-thumb-upload-initials{width:100%;height:100%;display:flex;align-items:center;
+  justify-content:center;font-family:'DM Sans',sans-serif;font-size:24px;font-weight:600;
+  color:#fff;}
+.wv-thumb-upload-emoji{width:100%;height:100%;display:flex;align-items:center;
+  justify-content:center;font-size:56px;}
+.wv-thumb-upload-overlay{position:absolute;inset:0;background:rgba(196,94,40,.75);
+  display:flex;align-items:center;justify-content:center;opacity:0;
+  transition:opacity .15s ease;}
+.wv-thumb-upload:hover .wv-thumb-upload-overlay{opacity:1;}
+.wv-thumb-upload-overlay .mi{color:#fff;font-size:28px;}
+
 /* Mobile — inline drawers become full-screen sheets */
 @media(max-width:768px){
   .wv-drawer--inline{position:fixed;top:54px;bottom:0;left:0;right:0;z-index:50;
@@ -249,22 +264,40 @@ function useAutoGrow(maxLines, externalRef) {
   }, [externalRef]);
 }
 
-// A labeled, auto-growing text field — the one style used for every text
-// input across the drawers (Title, Synopsis, Notes, custom fields, etc.).
+// Merges an external ref (object or callback) into a local one, no auto-grow.
+function useMergedRef(externalRef) {
+  var localRef = useRef(null);
+  return useCallback(function (el) {
+    localRef.current = el;
+    if (typeof externalRef === 'function') externalRef(el);
+    else if (externalRef && typeof externalRef === 'object') externalRef.current = el;
+  }, [externalRef]);
+}
+
+// A labeled text field — the one style used for every text input across the
+// drawers (Title, Synopsis, Notes, custom fields, etc.).
 // Uncontrolled by design (defaultValue + onBlur) to match the save-on-blur
 // pattern used throughout the app; pass a `key` on the element itself when
 // the underlying record changes so it remounts with the new defaultValue.
 // Pass `innerRef` (a ref object or callback) if you need the DOM node too —
 // e.g. to call .focus() programmatically. Don't pass a plain `ref` prop;
-// it would collide with the auto-grow behavior's own ref.
-export function Field({ label, wrap, className, style, innerRef, ...rest }) {
-  var setRef = useAutoGrow(6, innerRef);
+// it would collide with the field's own ref handling.
+// resizeMode: 'auto' (default) grows to fit content up to 6 lines then
+// scrolls. 'manual' starts at a fixed row count and gives the user a native
+// vertical drag-handle instead — for long-text fields the user should be
+// able to resize freely (e.g. spool detail fields).
+export function Field({ label, wrap, className, style, innerRef, resizeMode, rows, ...rest }) {
+  var isManual = resizeMode === 'manual';
+  var autoGrowRef = useAutoGrow(6, innerRef);
+  var manualRef = useMergedRef(innerRef);
+  var setRef = isManual ? manualRef : autoGrowRef;
+  var boxStyle = isManual ? Object.assign({ resize: 'vertical' }, style) : style;
   var box = (
     <textarea
       ref={setRef}
-      rows={1}
+      rows={rows || (isManual ? 4 : 1)}
       className={'wv-field-box' + (className ? ' ' + className : '')}
-      style={style}
+      style={boxStyle}
       {...rest}
     />
   );
@@ -305,6 +338,32 @@ export function Avatar({ strand, size }) {
         : strand.emoji
           ? <span style={{ fontSize: Math.round(sz * 0.55) }}>{strand.emoji}</span>
           : initials(strand.name)}
+    </div>
+  );
+}
+
+// Large 150x150 spool thumbnail with a click-to-upload affordance and a
+// hover overlay (edit pencil). Image > emoji > initials, same priority as
+// Avatar, for consistency with how the strand appears everywhere else.
+export function SpoolThumbnailUpload({ strand, onUpload }) {
+  var inputRef = useRef(null);
+  function handleFile(e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5 MB.'); return; }
+    uploadImage(file).then(function (url) { if (url) onUpload(url); });
+  }
+  return (
+    <div className="wv-thumb-upload" style={{ background: strand.color || '#A88060' }} onClick={function () { inputRef.current && inputRef.current.click(); }}>
+      {strand.image
+        ? <img src={strand.image} alt={strand.name} />
+        : strand.emoji
+          ? <div className="wv-thumb-upload-emoji">{strand.emoji}</div>
+          : <div className="wv-thumb-upload-initials">{initials(strand.name)}</div>}
+      <div className="wv-thumb-upload-overlay">
+        <span className="mi">edit</span>
+      </div>
+      <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
     </div>
   );
 }
