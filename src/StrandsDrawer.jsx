@@ -202,22 +202,20 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
   if (view === 'category' && activeCategory) {
     var items = (projStrands[activeCategory] || []);
     return (
-      <Drawer variant={variant || 'inline'} open={open} title={activeCategory} onBack={backToList} onClose={onClose} padded={false}>
+      <Drawer variant={variant || 'inline'} open={open} title={activeCategory} onBack={backToList} onClose={onClose}>
         {items.length === 0 && (
-          <HelpText style={{ padding: 20 }}>No {activeCategory.toLowerCase()} yet.</HelpText>
+          <HelpText>No {activeCategory.toLowerCase()} yet.</HelpText>
         )}
-        <div style={{ padding: 10 }}>
-          {items.map(function (st) {
-            return (
-              <StrandResultRow
-                key={st.id}
-                strand={st}
-                onClick={function () { openDetail(st.id); }}
-                onAdd={function () { tagStrand(st.id); }}
-              />
-            );
-          })}
-        </div>
+        {items.map(function (st) {
+          return (
+            <StrandResultRow
+              key={st.id}
+              strand={st}
+              onClick={function () { openDetail(st.id); }}
+              onAdd={taggedIds.includes(st.id) ? undefined : function () { tagStrand(st.id); }}
+            />
+          );
+        })}
       </Drawer>
     );
   }
@@ -243,7 +241,6 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
                   key={st.id}
                   strand={st}
                   onClick={function () { openDetail(st.id); }}
-                  onAdd={function () { tagStrand(st.id); }}
                 />
               );
             })}
