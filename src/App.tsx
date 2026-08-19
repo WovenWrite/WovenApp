@@ -10,7 +10,7 @@ import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
 import LooseThreadDrawer from './LooseThreadDrawer'
 import BindDrawer from './BindDrawer'
-import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, CustomColorPicker, EmojiPicker, AddFieldInline } from './SharedUI'
+import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar } from './SharedUI'
 import {
   STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
   supabase, genId, stripHtml, countWords, initials, todayStr,
@@ -2539,6 +2539,17 @@ function StrandsPage({app,allProjects}){
   <button className="btn btn-primary" onClick={addStrand}>+ Add {activeColl.replace(/s$/,'')}</button>
 </div>
   );
+  var findSelectIcon=function(collName){var t=projTemplates.find(function(t){return t.name===collName;});return (t&&t.icon)||'auto_stories';};
+  var findSelectPanel=(
+<Drawer variant="inline" title={activeColl} padded={false}
+  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} placeholder={'Search '+activeColl+'...'} sortSlot={<StrandSortFilter sort={strandSort} setSort={setStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>}/>}
+  footer={<PrimaryButton icon="add" onClick={addStrand}>Add to {activeColl}</PrimaryButton>}>
+  {filtered.length===0&&<HelpText style={{padding:20}}>{collStrands.length===0?'No entries yet.':'No results for "'+search+'".'}</HelpText>}
+  {filtered.map(function(st){return(
+    <StrandResultRow key={st.id} strand={st} spoolIcon={findSelectIcon(activeColl)} onClick={function(){setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}/>
+  );})}
+</Drawer>
+  );
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
   <div className="strands-subnav">
@@ -2574,36 +2585,9 @@ function StrandsPage({app,allProjects}){
     )}
   </div>
   <div className="strands-layout">
-    <div className="strands-left">
-      <div className="strands-list">
-        <div style={{marginBottom:8,display:'flex',gap:4}}>
-          <input placeholder={'Search '+activeColl+'...'} value={search} onChange={function(e){setSearch(e.target.value);}} style={{flex:1}}/>
-          <StrandSortFilter sort={strandSort} setSort={setStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>
-        </div>
-        
-        {filtered.map(function(st){var isAct=activeStrand&&st.id===activeStrand.id;return(
-<div key={st.id} className={'strand-item'+(isAct?' active':'')} style={{justifyContent:'space-between'}}>
-  <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0,cursor:'pointer'}} onClick={function(){setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}>
-    <div className="strand-av" style={{background:st.color,flexShrink:0}}>
-      {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:14}}>{st.emoji}</span>:<span>{initials(st.name)}</span>}
-    </div>
-    <span style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{st.name||'Unnamed'}</span>
-  </div>
-  <button className="btn-icon" style={{padding:2,opacity:0,flexShrink:0}} title="Delete strand"
-    onMouseOver={function(e){e.currentTarget.style.opacity='1';}}
-    onMouseOut={function(e){e.currentTarget.style.opacity='0';}}
-    onClick={function(e){e.stopPropagation();if(window.confirm('Delete "'+( st.name||'Unnamed')+'"? This cannot be undone.')){
-      app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[activeColl]=(ps[activeColl]||[]).filter(function(s){return s.id!==st.id;});n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});
-      if(activeStrandId===st.id)setActiveStrandId(null);
-    }}}>
-    <span className="mi" style={{fontSize:15,color:'var(--danger)'}}>delete</span>
-  </button>
-</div>
-        );})}
-        <div className="strands-add-btn" onClick={addStrand}><span className="mi" style={{fontSize:18}}>add</span><span>Add to {activeColl}</span></div>
-      </div>
-    </div>
     {!isMobile&&<div style={{flex:1,overflowY:'auto'}}>{detailContent}</div>}
+    {!isMobile&&findSelectPanel}
+    {isMobile&&!mobileDetailOpen&&findSelectPanel}
     {isMobile&&mobileDetailOpen&&(
 <div style={{position:'fixed',inset:0,zIndex:50,background:'var(--bg1)',overflow:'auto'}}>
   <div style={{display:'flex',alignItems:'center',gap:8,padding:'14px 16px',borderBottom:'1px solid var(--border)'}}>
