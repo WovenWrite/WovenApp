@@ -1,68 +1,23 @@
 // @ts-nocheck
 import ExploreCanvas from './ExploreCanvas'
 import { useState, useEffect, useRef } from "react";
-
-// ── Version snapshots ──
-var MAX_SNAPSHOTS=20;
-var SNAPSHOT_INTERVAL_MS=60*60*1000;
-function getSnapshotKey(draftId){return 'woven:versions:'+draftId;}
-function loadSnapshots(draftId){try{var v=localStorage.getItem(getSnapshotKey(draftId));return v?JSON.parse(v):[];}catch(e){return[];}}
-function saveSnapshot(draftId,body,wordCount,label){
-  if(!body||!body.trim())return;
-  var snapshots=loadSnapshots(draftId);var now=Date.now();
-  var last=snapshots[0];
-  if(label==='auto'&&last&&(now-last.ts)<SNAPSHOT_INTERVAL_MS)return;
-  var snap={id:genId(),ts:now,label:label||'auto',body:body,wordCount:wordCount||0};
-  var updated=[snap].concat(snapshots).slice(0,MAX_SNAPSHOTS);
-  try{localStorage.setItem(getSnapshotKey(draftId),JSON.stringify(updated));}catch(e){}
-  var uid=window.__wovenUserId;
-  if(uid){supabase.from('wf_data').upsert({key:getSnapshotKey(draftId),user_id:uid,value:updated,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(){});}
-}
-function formatSnapshotTime(ts){
-  var d=new Date(ts);var now=new Date();
-  var isToday=d.toDateString()===now.toDateString();
-  var yesterday=new Date(now);yesterday.setDate(yesterday.getDate()-1);
-  var isYesterday=d.toDateString()===yesterday.toDateString();
-  var time=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  if(isToday)return 'Today '+time;
-  if(isYesterday)return 'Yesterday '+time;
-  return d.toLocaleDateString([],{month:'short',day:'numeric'})+' '+time;
-}
-
-// ── Supabase (loaded via CDN) ──
-var SB_URL='https://mxsdiqrbxlvcwexfdtrj.supabase.co';
-var SB_KEY='sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u';
-// Supabase — loaded via index.html CDN script tag
-// getSupabase() safely returns client once CDN is ready
-function getSupabase(){
-  if(!window.__sb){
-    if(window.supabase&&window.supabase.createClient){
-      window.__sb=window.supabase.createClient(SB_URL,SB_KEY);
-    }
-  }
-  return window.__sb||null;
-}
-var supabase={
-  auth:{
-    getSession:function(){return getSupabase()?getSupabase().auth.getSession():Promise.resolve({data:{session:null}});},
-    getUser:function(){return getSupabase()?getSupabase().auth.getUser():Promise.resolve({data:{user:null}});},
-    signUp:function(o){return getSupabase()?getSupabase().auth.signUp(o):Promise.resolve({error:{message:'Auth not ready'}});},
-    signInWithPassword:function(o){return getSupabase()?getSupabase().auth.signInWithPassword(o):Promise.resolve({error:{message:'Auth not ready'}});},
-    signOut:function(){return getSupabase()?getSupabase().auth.signOut():Promise.resolve({});},
-    resetPasswordForEmail:function(e){return getSupabase()?getSupabase().auth.resetPasswordForEmail(e):Promise.resolve({error:{message:'Auth not ready'}});},
-    onAuthStateChange:function(cb){if(getSupabase())return getSupabase().auth.onAuthStateChange(cb);return{data:{subscription:{unsubscribe:function(){}}}};}
-  },
-  from:function(table){
-    var client=getSupabase();
-    if(!client){
-      var noop=function(){return Promise.resolve({data:null,error:{message:'DB not ready'}});};
-      var chain={maybeSingle:noop,single:noop,then:function(cb){return Promise.resolve(cb({data:null,error:null}));}};
-      var eqChain=function(){return{eq:function(){return chain;},maybeSingle:noop};};
-      return{select:function(){return{eq:function(){return{eq:eqChain,maybeSingle:noop};},maybeSingle:noop};},upsert:noop,insert:noop};
-    }
-    return client.from(table);
-  }
-};
+import DraftEditor from './DraftEditor'
+import SharedDraftView from './SharedDraftView'
+import AuthScreen from './auth/AuthScreen'
+import PropertiesDrawer from './PropertiesDrawer'
+import ProfileDrawer from './ProfileDrawer'
+import StrandsDrawer from './StrandsDrawer'
+import VersionsDrawer from './VersionsDrawer'
+import LooseThreadDrawer from './LooseThreadDrawer'
+import BindDrawer from './BindDrawer'
+import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar } from './SharedUI'
+import {
+  STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
+  supabase, genId, stripHtml, countWords, initials, todayStr,
+  compressImage, uploadImage, deleteStorageImage,
+  saveSnapshot
+} from './utils'
+// Snapshot helpers, Supabase client, and env constants now live in ./utils
 
 // ── Storage ──
 function saveLS(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
@@ -82,66 +37,22 @@ function loadDB(key,def){
   });
 }
 
-// ── Utils ──
-function genId(){return '_'+Math.random().toString(36).slice(2)+Date.now().toString(36);}
+// genId, compressImage, deleteStorageImage, uploadImage, countWords, stripHtml,
+// todayStr, initials, STATUSES, PRESET_COLORS, FIELD_TYPES, COLL_FIELDS,
+// defaultFields, SYSTEM_COLORS now live in ./utils
 
-// ── Image helpers ──
-function compressImage(file){
-  return new Promise(function(resolve){
-    var img=new Image();var url=URL.createObjectURL(file);
-    img.onload=function(){
-      var MAX=1200;var w=img.width;var h=img.height;
-      if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
-      var canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
-      canvas.getContext('2d').drawImage(img,0,0,w,h);
-      URL.revokeObjectURL(url);
-      canvas.toBlob(function(blob){resolve(blob||file);},{type:'image/jpeg',quality:0.82});
-    };
-    img.onerror=function(){URL.revokeObjectURL(url);resolve(file);};
-    img.src=url;
-  });
-}
-function deleteStorageImage(url){
-  if(!url||!url.includes('supabase'))return;
-  var client=getSupabase();if(!client)return;
-  var marker='/object/public/woven-images/';var idx=url.indexOf(marker);if(idx<0)return;
-  client.storage.from('woven-images').remove([url.slice(idx+marker.length)]).then(function(){});
-}
-async function uploadImage(file){
-  var client=getSupabase();if(!client)return null;
-  var compressed=await compressImage(file);
-  var path='uploads/'+genId()+'.jpg';
-  var res=await client.storage.from('woven-images').upload(path,compressed,{upsert:true,contentType:'image/jpeg'});
-  if(res.error){console.error('Upload error:',res.error);return null;}
-  var pub=client.storage.from('woven-images').getPublicUrl(path);
-  return pub.data&&pub.data.publicUrl?pub.data.publicUrl:null;
-}
-function countWords(t){if(!t)return 0;var s=t.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();return s?s.split(' ').filter(function(w){return w.length>0;}).length:0;}
-function stripHtml(html){return html?html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim():'';}
-function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function dayLbl(offset){var days=['Su','Mo','Tu','We','Th','Fr','Sa'];var d=new Date();d.setDate(d.getDate()-offset);return days[d.getDay()];}
-function initials(name){
-  if(!name||!name.trim())return '?';
-  var p=name.trim().split(/\s+/).filter(function(w){return w.length>0;});
-  if(p.length===0)return '?';
-  if(p.length===1)return p[0].slice(0,1).toUpperCase();
-  if(p.length===2)return(p[0][0]+p[1][0]).toUpperCase();
-  return(p[0][0]+p[1][0]+p[2][0]).toUpperCase();
-}
 function getGreeting(){var h=new Date().getHours();if(h<12)return 'Good morning';if(h<17)return 'Good afternoon';return 'Good evening';}
 function useIsMobile(){var s=useState(window.innerWidth<768);var isMobile=s[0];var setIsMobile=s[1];useEffect(function(){function onResize(){setIsMobile(window.innerWidth<768);}window.addEventListener('resize',onResize);return function(){window.removeEventListener('resize',onResize);};},[]);return isMobile;}
 
 // ── Constants ──
-var STATUSES={loose_thread:{label:'Loose Thread',color:'#d4943e'},first_draft:{label:'First Draft',color:'#2f76e0'},second_draft:{label:'Second Draft',color:'#e02f79'},under_review:{label:'Under Review',color:'#ce2fe0'},complete:{label:'Complete',color:'#64e02f'}};
 // Canvas | Table | Tiles | Cards | (separator) Strands
 var VIEW_MODES=[
-  {key:'canvas', icon:'hub',         label:'Canvas',     group:'main'},
-  {key:'table',  icon:'table_rows',  label:'Timeline',   group:'main'},
-  {key:'cards',  icon:'view_agenda', label:'Storyboard', group:'main'},
-  {key:'strands',icon:'share',       label:'Strands',    group:'strands'}
+  {key:'canvas', icon:'lightbulb',    label:'Canvas',     group:'main'},
+  {key:'table',  icon:'table_rows',   label:'Outline',    group:'main'},
+  {key:'cards',  icon:'book_ribbon',  label:'Storyboard', group:'main'},
+  {key:'strands',icon:'gesture',      label:'Spools',     group:'strands'}
 ];
-var PRESET_COLORS=['#2f76e0','#64e02f','#ce2fe0','#2fe07f','#e02f79','#c45e28','#e8a030','#2f9966','#b83220','#f0c050'];
-var FIELD_TYPES=[{id:'short_text',label:'Short text'},{id:'long_text',label:'Long text'},{id:'number',label:'Number'},{id:'boolean',label:'Yes / No'},{id:'select',label:'Dropdown'}];
 var PROJ_TYPES=[
   {id:'fiction',    label:'Fiction',     icon:'auto_stories',colls:['Characters','Locations','Lore & World'],desc:'Novels, short fiction, narrative'},
   {id:'nonfiction', label:'Non-Fiction', icon:'article',     colls:['Sources','Interviews','Subjects'],      desc:'Essays, memoir, journalism'},
@@ -150,15 +61,6 @@ var PROJ_TYPES=[
   {id:'screenplay', label:'Screenplay', icon:'movie',       colls:['Characters','Locations','Scenes'],       desc:'Film, TV, stage scripts'},
   {id:'other',      label:'Other',      icon:'edit_note',   colls:['Characters','Sources'],                  desc:'Everything else'}
 ];
-var COLL_FIELDS={
-  'Characters':[{id:'aliases',label:'Aliases',type:'short_text'},{id:'role',label:'Role',type:'short_text'},{id:'personality',label:'Personality',type:'long_text'},{id:'appearance',label:'Physical Description',type:'long_text'}],
-  'Locations':[{id:'type',label:'Type',type:'short_text'},{id:'description',label:'Description',type:'long_text'}],
-  'Lore & World':[{id:'category',label:'Category',type:'short_text'},{id:'notes',label:'Notes',type:'long_text'}],
-  'Sources':[{id:'author',label:'Author',type:'short_text'},{id:'url',label:'URL',type:'short_text'},{id:'notes',label:'Notes',type:'long_text'}],
-  'Interviews':[{id:'subject',label:'Subject',type:'short_text'},{id:'date',label:'Date',type:'short_text'},{id:'notes',label:'Notes',type:'long_text'}],
-  'Scenes':[{id:'location',label:'Location',type:'short_text'},{id:'notes',label:'Notes',type:'long_text'}]
-};
-function defaultFields(c){return COLL_FIELDS[c]||[{id:'notes',label:'Notes',type:'long_text'}];}
 var DEFAULT_TABLE_COLS=['title','synopsis','status','strandTags'];
 
 // ── Seed Data ──
@@ -224,6 +126,7 @@ function draftLabel(draft,parentDraft){
 var CSS=`
 @import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&family=Caveat:wght@400;600&display=swap');
 @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 
 :root {
   --bg0:#fdf8f0; --bg1:#f5ede0; --bg2:#ede0cc; --bg3:#e2d0b8; --bg4:#d4b896;
@@ -245,24 +148,25 @@ input,textarea,select{font-family:var(--ui);font-size:14px;color:var(--text);bac
 input::placeholder,textarea::placeholder{color:var(--placeholder);opacity:1;}
 input:focus,textarea:focus,select:focus{outline:2px solid var(--indigo);outline-offset:-1px;background:var(--bg0);}
 textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
-::-webkit-scrollbar{width:4px;height:4px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px;}
+#woven-tt{position:fixed;display:none;background:#7A5A38;color:#fdf8f0;font-size:11px;padding:4px 10px;border-radius:6px;pointer-events:none;z-index:99999;transform:translateX(-50%);font-family:'DM Sans',sans-serif;white-space:nowrap;}::-webkit-scrollbar{width:5px;height:5px;}::-webkit-scrollbar-track{background:transparent;margin:6px 10px 6px 0;}::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:10px;}::-webkit-scrollbar-thumb:hover{background:var(--bg4);}
 .mi{font-family:'Material Icons';font-style:normal;font-size:20px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}
+.material-symbols-outlined{font-family:'Material Symbols Outlined';font-style:normal;font-size:20px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;direction:ltr;-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--r);font-size:14px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:all .15s;white-space:nowrap;}
 .btn-primary{background:var(--indigo);color:#fff;box-shadow:0 1px 4px rgba(42,31,16,.15);}.btn-primary:hover{background:var(--amber-dark);color:#fff;}
 .btn-ghost{color:var(--mid);border-color:var(--border);background:var(--bg1);}.btn-ghost:hover{color:var(--text);border-color:var(--bg4);background:var(--bg2);}
 .btn-danger{color:var(--danger);border-color:var(--danger);}.btn-danger:hover{background:rgba(184,50,32,.08);}
 .btn-sm{padding:5px 11px;font-size:13px;}.btn-icon{padding:5px;border-radius:var(--r);color:var(--mid);display:inline-flex;align-items:center;}.btn-icon:hover{background:var(--bg2);color:var(--text);}
-.nav{display:flex;align-items:center;padding:0 14px;height:54px;background:var(--bg1);border-bottom:1px solid var(--border);flex-shrink:0;gap:10px;box-shadow:0 1px 4px rgba(42,31,16,.05);}
+.nav{display:flex;align-items:center;padding:0 14px;height:54px;background:#E2D0B8;flex-shrink:0;gap:10px;}
 .wordmark{font-family:var(--serif);font-size:22px;font-weight:600;color:var(--indigo);cursor:pointer;user-select:none;}
-.avatar{width:32px;height:32px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;cursor:pointer;}
-.view-switcher{display:flex;align-items:center;background:var(--bg2);border-radius:var(--r);padding:3px;gap:1px;border:1px solid var(--border);}
-.view-seg{height:32px;width:36px;display:flex;align-items:center;justify-content:center;border-radius:6px;cursor:pointer;transition:all .15s;color:var(--mid);position:relative;flex-shrink:0;}
-.view-seg:hover{color:var(--text);}
-.view-seg.active{background:var(--bg0);color:var(--indigo);box-shadow:0 1px 4px rgba(42,31,16,.08);}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;cursor:pointer;overflow:hidden;}
+.view-switcher{display:flex;align-items:center;background:#F5EDE0;border-radius:50px;padding:4px;gap:2px;border:1px solid #A88060;}
+.view-seg{height:32px;width:36px;display:flex;align-items:center;justify-content:center;border-radius:50px;cursor:pointer;transition:all .15s;color:var(--mid);position:relative;flex-shrink:0;}
+.view-seg:hover{color:var(--text);background:rgba(42,31,16,.06);}
+.view-seg.active{background:var(--bg0);color:var(--indigo);box-shadow:0 1px 4px rgba(42,31,16,.10);}
 .view-seg .mi{font-size:18px;}
-.view-seg-tip{position:absolute;bottom:-30px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg0);font-size:11px;padding:3px 8px;border-radius:4px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .1s;z-index:100;}
+.view-seg-tip{position:absolute;bottom:-34px;left:50%;transform:translateX(-50%);background:#7A5A38;color:#fdf8f0;font-size:11px;padding:3px 8px;border-radius:4px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .1s;z-index:100;}
 .view-seg:hover .view-seg-tip{opacity:1;}
-.view-sep{width:1px;height:20px;background:var(--border);margin:0 3px;flex-shrink:0;}
+.view-sep{width:1px;height:18px;background:#A88060;margin:0 2px;flex-shrink:0;opacity:.4;}
 .proj-title-inp{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--text);background:transparent;border:none;padding:2px 4px;border-radius:4px;min-width:60px;max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .proj-title-inp:focus{outline:1px solid var(--indigo);background:var(--bg1);}
 .proj-title-inp::placeholder{color:var(--placeholder);}
@@ -304,7 +208,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .week-bar{width:100%;border-radius:2px 2px 0 0;background:var(--bg3);min-height:2px;}
 .week-bar.today{background:var(--indigo);}
 .week-day-lbl{font-size:9px;color:var(--mid);}
-.view-hdr{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg1);flex-wrap:wrap;}
+.view-hdr{display:flex;align-items:center;gap:0;padding:0 20px;height:55px;border-bottom:1px solid #A88060;flex-shrink:0;background:#FDF8F0;flex-wrap:nowrap;}
 .filter-btn{display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:var(--r);border:1px solid var(--border);font-size:13px;color:var(--mid);cursor:pointer;background:var(--bg0);transition:all .15s;}
 .filter-btn:hover{border-color:var(--bg4);color:var(--text);background:var(--bg1);}
 .filter-btn.active{border-color:var(--indigo);color:var(--indigo);background:rgba(196,94,40,.06);}
@@ -313,8 +217,8 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .filter-coll-lbl{font-size:10px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;padding:8px 8px 4px;display:block;}
 .chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;border:1px solid transparent;}
 .view-layout{display:flex;flex-direction:column;flex:1;overflow:hidden;position:relative;}
-.view-area{flex:1;overflow-y:auto;padding:16px 16px 80px;}
-.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
+.view-area{flex:1;overflow-y:auto;padding:0;display:flex;flex-direction:column;}
+.cards-grid{display:flex;flex-wrap:wrap;gap:16px;padding:20px;align-content:flex-start;flex:1;}
 .draft-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s,box-shadow .15s;height:226px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
 .draft-card:hover{box-shadow:0 4px 12px rgba(42,31,16,.08);}
 .draft-card.drag-over{border-color:var(--indigo);background:rgba(196,94,40,.03);}
@@ -340,7 +244,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .arrow-btn:hover{background:var(--bg2);color:var(--text);}
 .nest-indent{margin-left:24px;position:relative;}
 .nest-indent::before{content:'';position:absolute;left:-12px;top:0;bottom:0;width:1px;background:var(--border);}
-.lt-section{margin-top:24px;border-top:1px solid var(--border);padding-top:18px;}
+.lt-section{}
 .lt-hdr{display:flex;align-items:center;gap:7px;padding:0 0 10px;cursor:pointer;}
 .lt-tilde{color:var(--teal);font-size:20px;font-weight:600;line-height:1;font-family:var(--scribble);}
 .lt-label{font-size:13px;font-weight:600;color:var(--mid);flex:1;}
@@ -351,7 +255,8 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .empty-view{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:48px 24px;gap:12px;color:var(--placeholder);text-align:center;}
 .table-wrap{flex:1;overflow:auto;}
 .wt{border-collapse:collapse;width:100%;table-layout:fixed;}
-.wt th{background:var(--bg1);border-bottom:2px solid var(--border);padding:9px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;position:sticky;top:0;z-index:2;white-space:nowrap;user-select:none;overflow:hidden;position:relative;}
+.wt td{background:#FDF8F0;font-family:'DM Sans',sans-serif;font-size:16px;color:#7A5A38;}
+.wt th{background:#E2D0B8;font-family:'DM Sans',sans-serif;font-size:16px;color:#6B4A26;font-weight:600;border-bottom:2px solid var(--border);padding:9px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;position:sticky;top:0;z-index:2;white-space:nowrap;user-select:none;overflow:hidden;position:relative;}
 .wt th.resizable{resize:horizontal;overflow:hidden;min-width:60px;}
 .col-resize-handle{position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;background:transparent;z-index:3;}
 .col-resize-handle:hover{background:var(--indigo);opacity:.3;}
@@ -414,10 +319,10 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .float-strand-item:hover{background:var(--bg2);}
 .float-strand-new{border-top:1px solid var(--border);padding:8px 10px;cursor:pointer;font-size:13px;color:var(--teal);display:flex;align-items:center;gap:6px;flex-shrink:0;}
 .float-strand-new:hover{background:var(--bg2);}
-.strands-subnav{display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--bg1);padding:0 16px;flex-shrink:0;height:44px;gap:4px;}
-.strands-tab{padding:0 14px;height:100%;font-size:13px;font-weight:500;cursor:pointer;color:var(--mid);border-bottom:2px solid transparent;white-space:nowrap;display:flex;align-items:center;transition:color .15s;}
-.strands-tab.active{color:var(--indigo);border-bottom-color:var(--indigo);}
-.strands-tab:hover:not(.active){color:var(--text);}
+.strands-subnav{display:flex;align-items:flex-end;border-bottom:1px solid #A88060;background:#EDE0CC;padding:0 16px;flex-shrink:0;height:55px;gap:0;}
+.strands-tab{padding:0 18px;height:44px;font-size:16px;font-family:'DM Sans',sans-serif;font-weight:600;cursor:pointer;color:rgba(122,90,56,.75);border:1px solid transparent;border-bottom:none;border-radius:10px 10px 0 0;white-space:nowrap;display:flex;align-items:center;transition:all .15s;margin-right:2px;position:relative;bottom:0;}
+.strands-tab.active{background:#FDF8F0;color:#6B4A26;border-color:#A88060;border-bottom:2px solid #FDF8F0;margin-bottom:-1px;}
+.strands-tab:hover:not(.active){color:#7A5A38;background:rgba(253,248,240,.4);}
 .strands-layout{display:flex;flex:1;overflow:hidden;}
 .strands-left{width:256px;border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;background:var(--bg1);}
 .strands-list{flex:1;overflow-y:auto;padding:8px;}
@@ -524,38 +429,7 @@ function GlobalSaveIndicator(){
   return(<div style={{display:'flex',alignItems:'center',gap:4,opacity:.5}}><span style={{width:6,height:6,borderRadius:'50%',background:'var(--teal)',flexShrink:0}}/><span style={{fontSize:11,color:'var(--mid)'}}>Saved</span></div>);
 }
 
-// ── ArchiveConfirmModal ──
-function ArchiveConfirmModal({draft,allDrafts,onConfirm,onCancel}){
-  var children=(allDrafts||[]).filter(function(d){return d.parentId===draft.id&&!d.archived;});
-  var hasChildren=children.length>0;
-  return(
-<div className="modal-overlay">
-  <div className="modal-backdrop" onClick={onCancel}/>
-  <div className="modal-box" style={{maxWidth:420}}>
-    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
-      <span className="mi" style={{fontSize:28,color:'var(--indigo)'}}>inventory_2</span>
-      <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,color:'var(--text)'}}>Archive this draft?</div>
-    </div>
-    <div style={{fontSize:14,color:'var(--body-text)',lineHeight:1.6,marginBottom:12}}>
-      <strong style={{color:'var(--text)'}}>{draft.title||'Untitled'}</strong> will be hidden from all views and moved to your Archive.
-    </div>
-    {hasChildren&&(
-<div style={{background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:'var(--r)',padding:'10px 14px',fontSize:13,color:'var(--mid)',marginBottom:12}}>
-  <span className="mi" style={{fontSize:16,verticalAlign:'middle',marginRight:6}}>info</span>
-  This draft has {children.length} nested {children.length===1?'draft':'drafts'} — {children.length===1?'it':'they'} will also be archived.
-</div>
-    )}
-    <div style={{fontSize:13,color:'var(--mid)',marginBottom:20}}>You can restore it any time from <strong>Your Archive</strong> on the dashboard.</div>
-    <div style={{display:'flex',gap:8}}>
-      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onCancel}>Cancel</button>
-      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={onConfirm}>
-        <span className="mi" style={{fontSize:16}}>inventory_2</span>Archive
-      </button>
-    </div>
-  </div>
-</div>
-  );
-}
+// ArchiveConfirmModal now lives in ./SharedUI
 
 // ── ArchiveProjectConfirmModal ──
 function ArchiveProjectConfirmModal({proj,onConfirm,onCancel}){
@@ -602,33 +476,7 @@ function OverflowTooltip({label,names}){
   );
 }
 
-// ── StatusDot ──
-function StatusDot({status,onChange}){
-  var s=useState(false);var open=s[0];var setOpen=s[1];
-  var p=useState({top:0,left:0});var pos=p[0];var setPos=p[1];
-  var ref=useRef(null);
-  var info=STATUSES[status]||STATUSES.first_draft;
-  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
-  function handleClick(e){e.stopPropagation();var r=e.currentTarget.getBoundingClientRect();setPos({top:r.bottom+5,left:r.left});setOpen(!open);}
-  return(
-<div ref={ref} style={{display:'inline-flex',alignItems:'center'}}>
-  <div style={{width:10,height:10,borderRadius:'50%',background:info.color,cursor:'pointer',flexShrink:0}} onClick={handleClick} title={info.label}/>
-  {open&&<div style={{position:'fixed',top:pos.top,left:pos.left,zIndex:9999,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:8,overflow:'hidden',boxShadow:'0 8px 22px rgba(0,0,0,.5)',minWidth:170}}>
-    {Object.keys(STATUSES).map(function(k){var si=STATUSES[k];return(
-<div key={k} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',cursor:'pointer',background:k===status?'var(--bg3)':'transparent',fontSize:14}} onClick={function(){onChange(k);setOpen(false);}}>
-  <div style={{width:8,height:8,borderRadius:'50%',background:si.color,flexShrink:0}}/>
-  <span>{si.label}</span>
-</div>
-    );})}
-    <div style={{height:1,background:'var(--border)',margin:'3px 0'}}/>
-    <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',cursor:'pointer',fontSize:14,color:'var(--mid)'}} onClick={function(){onChange('archive');setOpen(false);}}>
-      <span className="mi" style={{fontSize:15,color:'var(--mid)'}}>inventory_2</span>
-      <span>Archive</span>
-    </div>
-  </div>}
-</div>
-  );
-}
+// StatusDot now lives in ./SharedUI
 
 // ── Panel (full overlay, doesn't cover nav) ──
 function Panel({open,onClose,title,children,footer}){
@@ -650,21 +498,14 @@ function Panel({open,onClose,title,children,footer}){
 
 // ── ViewSwitcher ──
 function ViewSwitcher({view,setView}){
-  var mainModes=VIEW_MODES.filter(function(m){return m.group==='main';});
-  var strandMode=VIEW_MODES.find(function(m){return m.group==='strands';});
   return(
 <div className="view-switcher">
-  {mainModes.map(function(m){return(
+  {VIEW_MODES.map(function(m){var seg=(
 <div key={m.key} className={'view-seg'+(view===m.key?' active':'')} onClick={function(){setView(m.key);}}>
-  <span className="mi">{m.icon}</span>
+  <span className="material-symbols-outlined" style={{fontSize:20}}>{m.icon}</span>
   <span className="view-seg-tip">{m.label}</span>
 </div>
-  );})}
-  <div className="view-sep"/>
-  <div className={'view-seg'+(view===strandMode.key?' active':'')} onClick={function(){setView(strandMode.key);}}>
-    <span className="mi">{strandMode.icon}</span>
-    <span className="view-seg-tip">{strandMode.label}</span>
-  </div>
+  );return m.group==='strands'?[<div key={m.key+'-sep'} className="view-sep"/>,seg]:seg;})}
 </div>
   );
 }
@@ -675,18 +516,28 @@ function StatsSection({app,onOpenProfile,greeting}){
   var todayWords=sessions.filter(function(s){return s.date===todayStr();}).reduce(function(sum,s){return sum+(s.words||0);},0);
   var pct=goal>0?Math.round(todayWords/goal*100):0;
   var weekData=[];
-  for(var i=6;i>=0;i--){var dd=new Date();dd.setDate(dd.getDate()-i);var ds=dd.toISOString().slice(0,10);var dw=sessions.filter(function(s){return s.date===ds;}).reduce(function(sum,s){return sum+(s.words||0);},0);weekData.push({date:ds,words:dw,isToday:i===0,label:dayLbl(i)});}
+  function localDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  for(var i=6;i>=0;i--){var dd=new Date();dd.setDate(dd.getDate()-i);var ds=localDateStr(dd);var dw=sessions.filter(function(s){return s.date===ds;}).reduce(function(sum,s){return sum+(s.words||0);},0);weekData.push({date:ds,words:dw,isToday:i===0,label:dayLbl(i)});}
   var maxW=weekData.reduce(function(m,d){return Math.max(m,d.words);},1);
   var streak=0;var sd=new Date();
-  function localDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
-  for(var j=0;j<60;j++){var sds=localDateStr(sd);if(sessions.filter(function(s){return s.date===sds;}).length>0){streak++;sd.setDate(sd.getDate()-1);}else if(j===0){sd.setDate(sd.getDate()-1);}else break;}
+  for(var j=0;j<60;j++){var sds=localDateStr(sd);if(sessions.filter(function(s){return s.date===sds&&(s.words||0)>0;}).length>0){streak++;sd.setDate(sd.getDate()-1);}else if(j===0){sd.setDate(sd.getDate()-1);}else break;}
   var weekStart=new Date();weekStart.setDate(weekStart.getDate()-6);weekStart.setHours(0,0,0,0);
-  var ltCount=0;Object.keys(app.allDrafts).forEach(function(pid){(app.allDrafts[pid]||[]).forEach(function(d){
+  var weekStartStr=localDateStr(weekStart);
+  var ltCount=0;
+  // Count project loose threads
+  Object.keys(app.allDrafts).forEach(function(pid){(app.allDrafts[pid]||[]).forEach(function(d){
     if(d.status==='loose_thread'&&!d.archived){
-      var created=new Date(d.createdAt||0);
-      if(created>=weekStart)ltCount++;
+      var createdStr=(d.createdAt||'').slice(0,10);
+      if(createdStr>=weekStartStr)ltCount++;
     }
   });});
+  // Count global loose threads
+  Object.values(app.globalLT||{}).forEach(function(lt){
+    if(!lt.archived){
+      var createdStr=(lt.createdAt||'').slice(0,10);
+      if(createdStr>=weekStartStr)ltCount++;
+    }
+  });
   return(
 <div>
   <div className="dash-greeting dash-greeting-mobile">{greeting||''}</div>
@@ -815,20 +666,17 @@ function GlobalLooseThreads({app}){
   return(
 <div style={{marginTop:24}}>
   <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Loose Threads</div>
-  <div className="cards-grid">
-    <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:6,display:'flex',flexDirection:'column',boxShadow:'none',height:'auto',minHeight:100}} onClick={handleAddLT}>
-      <span className="mi" style={{fontSize:22,color:'var(--placeholder)'}}>add_circle_outline</span>
-      <span style={{fontSize:12,color:'var(--placeholder)'}}>New loose thread</span>
+  <div style={{display:"flex",flexWrap:"nowrap",gap:10,overflowX:"auto",paddingBottom:4}}>
+    <div onClick={handleAddLT} style={{background:"transparent",border:"2px dashed #A88060",padding:"10px 15px",borderRadius:15,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,minWidth:120,flexShrink:0,minHeight:80}} onMouseEnter={function(e){e.currentTarget.style.borderColor="#c45e28";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#A88060";}}>
+      <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
     </div>
     {visibleLT.map(function(d){return(
-<div key={d.id} className="draft-card" style={{height:'auto',minHeight:140,cursor:'pointer'}} onClick={function(){setOpenLTId(d.id);}}>
-  <div className="card-body" style={{padding:'10px 12px'}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:d.title?'var(--text)':'var(--placeholder)',marginBottom:4,lineHeight:1.3}}>{d.title||'Untitled loose thread'}</div>
-    <div style={{fontSize:12,color:'var(--mid)',lineHeight:1.5,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:4,WebkitBoxOrient:'vertical'}}>{d.synopsis||''}</div>
-  </div>
-  <div className="card-footer" style={{justifyContent:'flex-end'}}>
-    <span style={{fontSize:11,color:'var(--placeholder)'}}>Click to edit</span>
-  </div>
+<div key={d.id} style={{background:'#FDF8F0',border:'1px solid #E2D0B8',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:150,maxWidth:150,flexShrink:0,transition:'border-color .2s,box-shadow .2s',outline:'1px solid transparent'}}
+  onClick={function(){setOpenLTId(d.id);}}
+  onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';e.currentTarget.style.boxShadow='0 4px 12px rgba(196,94,40,.12)';}}
+  onMouseLeave={function(e){e.currentTarget.style.borderColor='transparent';e.currentTarget.style.boxShadow='none';}}>
+  <div style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2A1F10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.title||'Untitled loose thread'}</div>
+  {d.synopsis&&<div style={{fontFamily:'DM Sans, sans-serif',fontSize:14,fontStyle:'italic',color:'#A88060',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.synopsis}</div>}
 </div>
     );})}
   </div>
@@ -840,7 +688,7 @@ function GlobalLooseThreads({app}){
 </div>
   )}
   {openLTId&&(
-<LTDrawer lt={app.globalLT[openLTId]} activeProjects={activeProjects} onUpdate={function(changes){updateLT(openLTId,changes);}} onMove={function(pid){moveToProject(openLTId,pid);setOpenLTId(null);}} onClose={function(){setOpenLTId(null);}} onDelete={function(){updateLT(openLTId,{archived:true});setOpenLTId(null);}}/>
+<LooseThreadDrawer lt={app.globalLT[openLTId]} activeProjects={activeProjects} open={true} variant="overlay" topOffset={54} onUpdate={function(changes){updateLT(openLTId,changes);}} onMove={function(pid){moveToProject(openLTId,pid);setOpenLTId(null);}} onClose={function(){setOpenLTId(null);}} onDelete={function(){updateLT(openLTId,{archived:true});setOpenLTId(null);}}/>
   )}
 </div>
   );
@@ -848,45 +696,7 @@ function GlobalLooseThreads({app}){
 
 
 // ── LTDrawer ──
-function LTDrawer({lt,activeProjects,onUpdate,onMove,onClose,onDelete}){
-  if(!lt)return null;
-  return(
-<div className="panel-overlay">
-  <div className="panel-backdrop" onClick={onClose}/>
-  <div className="panel-box">
-    <div className="panel-hdr">
-      <span className="panel-title" style={{fontFamily:'var(--serif)'}}>Loose Thread</span>
-      <div style={{display:'flex',gap:4}}>
-        <button className="btn-icon btn-danger" onClick={onDelete} title="Archive this thread"><span className="mi" style={{fontSize:18}}>delete</span></button>
-        <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-      </div>
-    </div>
-    <div className="panel-body" style={{display:'flex',flexDirection:'column',gap:14}}>
-      <div>
-        <span className="sect-lbl">Title</span>
-        <input key={lt.id+'-t'} defaultValue={lt.title||''} placeholder="Give this thread a name..." onBlur={function(e){onUpdate({title:e.target.value});}}/>
-      </div>
-      <div style={{flex:1,display:'flex',flexDirection:'column'}}>
-        <span className="sect-lbl">Notes</span>
-        <textarea key={lt.id+'-s'} defaultValue={lt.synopsis||''} placeholder="Write freely — capture the idea, explore it, let it breathe..." rows={12} style={{resize:'vertical',flex:1}} onBlur={function(e){onUpdate({synopsis:e.target.value});}}/>
-      </div>
-      {activeProjects.length>0&&(
-<div style={{paddingTop:14,borderTop:'1px solid var(--border)'}}>
-  <span className="sect-lbl">Move to a project</span>
-  <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
-    {activeProjects.map(function(p){return(
-<button key={p.id} className="btn btn-ghost" style={{justifyContent:'flex-start'}} onClick={function(){onMove(p.id);}}>
-  <span className="mi" style={{fontSize:16}}>arrow_forward</span>{p.title}
-</button>
-    );})}
-  </div>
-</div>
-      )}
-    </div>
-  </div>
-</div>
-  );
-}
+// LTDrawer now lives as LooseThreadDrawer in ./LooseThreadDrawer
 
 // ── Dashboard ──
 function Dashboard({app,onOpenProfile,onNewProject}){
@@ -904,8 +714,7 @@ function Dashboard({app,onOpenProfile,onNewProject}){
   <nav className="nav" style={{justifyContent:'space-between'}}>
     <WovenLogo size={26}/>
     <div style={{display:'flex',alignItems:'center',gap:8}}>
-      <button className="btn-icon" title="Sign out" onClick={function(){app.signOut();}}><span className="mi" style={{fontSize:20}}>logout</span></button>
-      <div className="avatar" onClick={function(){onOpenProfile(null);}}>{initials(firstName+' '+(profile.lastName||''))}</div>
+      <div className="avatar" onClick={function(){onOpenProfile(null);}}>{profile.headshot?<img src={profile.headshot} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:initials(firstName+' '+(profile.lastName||''))}</div>
     </div>
   </nav>
   <div className="dash-layout">
@@ -944,8 +753,13 @@ function Dashboard({app,onOpenProfile,onNewProject}){
         <span className="mi" style={{fontSize:20,color:'var(--border)'}}>chevron_right</span>
       </div>
     </div>
-    <div className="dash-sidebar">
-      <StatsSection app={app} onOpenProfile={onOpenProfile} greeting={greeting}/>
+    <div className="dash-sidebar" style={{display:'flex',flexDirection:'column'}}>
+      <div style={{flex:1}}><StatsSection app={app} onOpenProfile={onOpenProfile} greeting={greeting}/></div>
+      <div style={{paddingTop:16,borderTop:'1px solid var(--border)',marginTop:16}}>
+        <button className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}} onClick={function(){app.signOut();}}>
+          <span className="mi" style={{fontSize:16}}>logout</span>Sign out
+        </button>
+      </div>
     </div>
   </div>
   {editProj&&<ProjectEditPanel proj={editProj} app={app} onClose={function(){setEditingProjId(null);}}/>}
@@ -972,8 +786,7 @@ function ProjectNav({app,onOpenProfile}){
   <div style={{flex:1,display:'flex',justifyContent:'center'}}>
     <ViewSwitcher view={app.view} setView={app.setView}/>
   </div>
-  <GlobalSaveIndicator/>
-  <div className="avatar" onClick={function(){onOpenProfile(null);}}>{initials(((app.profile||{}).firstName||'')+' '+((app.profile||{}).lastName||''))}</div>
+  <div className="avatar" onClick={function(){onOpenProfile(null);}}>{(app.profile&&app.profile.headshot)?<img src={app.profile.headshot} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:initials(((app.profile||{}).firstName||'')+' '+((app.profile||{}).lastName||''))}</div>
 </nav>
   );
 }
@@ -1036,81 +849,115 @@ function SortDropdown({sort,setSort}){
 }
 
 // ── ViewHeader ──
-function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind}){
-  var s=useState(false);var filterOpen=s[0];var setFilterOpen=s[1];
-  var p=useState({top:0,left:0});var filterPos=p[0];var setFilterPos=p[1];
-  var filterRef=useRef(null);
+function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind,structureMode,onStructureToggle,searchQ,onSearch,hideStructure}){
+  var sf=useState(false);var filterOpen=sf[0];var setFilterOpen=sf[1];
+  var sp=useState({top:0,left:0});var filterPos=sp[0];var setFilterPos=sp[1];
+  var ss=useState(false);var searchOpen=ss[0];var setSearchOpen=ss[1];
+  var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
+  var st=useState(structureMode||false);var structureOn=st[0];var setStructureOn=st[1];
+  var sfs=useState('');var filterSearch=sfs[0];var setFilterSearch=sfs[1];
+  var filterRef=useRef(null);var searchRef=useRef(null);
   var projStrands=app.allStrands[app.projId]||{};
   useEffect(function(){if(!filterOpen)return;function onDown(e){
     if(filterRef.current&&filterRef.current.contains(e.target))return;
-    // Also allow clicks on the dropdown itself (it's fixed-position, outside filterRef)
     var drop=document.querySelector('.filter-dropdown');
     if(drop&&drop.contains(e.target))return;
     setFilterOpen(false);
   }document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[filterOpen]);
-  function openFilter(e){var r=e.currentTarget.getBoundingClientRect();setFilterPos({top:r.bottom+4,left:r.left});setFilterOpen(!filterOpen);}
+  useEffect(function(){if(searchOpen&&searchRef.current)searchRef.current.focus();},[searchOpen]);
   var hasFilter=!!filter;
+  var SEP=(<div style={{width:1,height:24,background:'#7A5A38',opacity:.5,margin:'0 10px',flexShrink:0}}/>);
   return(
 <div className="view-hdr">
-  <div style={{position:'relative',display:'inline-flex'}}>
-    <button ref={filterRef} className={'filter-btn'+(hasFilter?' active':'')} onClick={openFilter}>
-      <span className="mi" style={{fontSize:16}}>filter_alt</span>
-      <span>Refine Arc</span>
-    </button>
-    {hasFilter&&<span style={{position:'absolute',top:-6,right:-6,background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:16,height:16,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>1</span>}
-  </div>
-  {filterOpen&&(
-<div className="filter-dropdown" style={{top:filterPos.top,left:filterPos.left,minWidth:220,padding:0}}>
+  <div style={{display:'flex',alignItems:'center',flex:1}}>
+    <div style={{position:'relative'}}>
+      <button ref={filterRef} onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setFilterPos({top:r.bottom+4,left:r.left});setFilterOpen(!filterOpen);}} style={{display:'flex',alignItems:'center',gap:7,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer',position:'relative'}}>
+        <span className="material-symbols-outlined" style={{fontSize:20,color:'#6B4A26'}}>{hasFilter?'filter_alt_off':'filter_alt'}</span>
+        <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'#7A5A38'}}>Define</span>
+        {hasFilter&&<span style={{position:'absolute',top:10,right:6,background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:14,height:14,fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>1</span>}
+      </button>
+      {filterOpen&&(
+<div className="filter-dropdown" style={{top:filterPos.top,left:filterPos.left,minWidth:240,padding:0}}>
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px 4px'}}>
     <span style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em'}}>Filter by strand</span>
     {hasFilter&&<button className="btn btn-ghost btn-sm" style={{padding:'2px 8px',fontSize:11}} onClick={function(){setFilter(null);setFilterOpen(false);}}>Clear</button>}
   </div>
-  {Object.keys(projStrands).map(function(coll){var collStrands=projStrands[coll]||[];if(collStrands.length===0)return null;return(<CollFilterGroup key={coll} coll={coll} strands={collStrands} filter={filter} setFilter={setFilter} setFilterOpen={setFilterOpen}/>);})}
+  <div style={{padding:'4px 10px 8px'}}>
+    <input value={filterSearch} onChange={function(e){setFilterSearch(e.target.value);}} placeholder="Search spools…" style={{width:'100%',padding:'5px 10px',fontSize:12,border:'1px solid var(--border)',borderRadius:20,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',boxSizing:'border-box'}}/>
+  </div>
+  {(function(){
+    var pid=app.projId;
+    var savedOrder=null;try{var so=localStorage.getItem('woven:collOrder:'+pid);if(so)savedOrder=JSON.parse(so);}catch(e){}
+    var rawColl=Object.keys(projStrands);
+    var orderedColl=savedOrder?savedOrder.filter(function(c){return rawColl.includes(c);}).concat(rawColl.filter(function(c){return !savedOrder.includes(c);})):rawColl;
+    var projTemplates=app.allTemplates[pid]||[];
+    if(filterSearch){
+      // Flat results when searching
+      var flatResults=[];
+      orderedColl.forEach(function(coll){
+        var tpl=projTemplates.find(function(t){return t.name===coll;});
+        if(tpl&&tpl.showInFilter===false)return;
+        (projStrands[coll]||[]).forEach(function(s){
+          if((s.name||'').toLowerCase().includes(filterSearch.toLowerCase()))flatResults.push({st:s,coll:coll,tpl:tpl});
+        });
+      });
+      if(flatResults.length===0)return[<div key="no" style={{padding:'8px 12px',fontSize:12,color:'var(--mid)'}}>No matches.</div>];
+      return flatResults.map(function(r){var isActive=filter===r.st.id;return(
+<div key={r.st.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:'pointer',background:isActive?'rgba(196,94,40,.06)':'transparent'}}
+  onClick={function(){setFilter(isActive?null:r.st.id);setFilterOpen(false);}}>
+  <div style={{width:12,height:12,borderRadius:'50%',background:r.tpl&&r.tpl.color?r.tpl.color:'var(--indigo)',flexShrink:0}}/>
+  <span style={{fontSize:13,color:isActive?'var(--indigo)':'var(--text)',fontWeight:isActive?600:400}}>{r.st.name}</span>
+  <span style={{fontSize:11,color:'var(--mid)',marginLeft:'auto'}}>{r.coll}</span>
+</div>
+      );});
+    }
+    return orderedColl.map(function(coll){
+      var tpl=projTemplates.find(function(t){return t.name===coll;});
+      if(tpl&&tpl.showInFilter===false)return null;
+      var collStrands=projStrands[coll]||[];
+      if(collStrands.length===0)return null;
+      return(<CollFilterGroup key={coll} coll={coll} strands={collStrands} filter={filter} setFilter={setFilter} setFilterOpen={setFilterOpen}/>);
+    });
+  })()}
   {Object.values(projStrands).flat().length===0&&<div style={{padding:'8px 12px',fontSize:13,color:'var(--mid)'}}>No strands yet.</div>}
 </div>
-  )}
-  <SortDropdown sort={sort} setSort={setSort}/>
-  <div style={{flex:1}}/>
-  <button className="btn btn-ghost btn-sm" onClick={onBind}>Bind</button>
-  <button className="btn btn-primary btn-sm" onClick={onAddDraft}>
-    <span className="mi" style={{fontSize:16}}>add</span>New draft
-  </button>
+      )}
+    </div>
+    {!hideStructure&&SEP}
+    {!hideStructure&&<button onClick={function(){var nv=!structureOn;setStructureOn(nv);if(onStructureToggle)onStructureToggle(nv);}} style={{display:'flex',alignItems:'center',gap:8,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer'}}>
+      <div style={{width:34,height:18,borderRadius:9,background:structureOn?'#7A5A38':'#A88060',position:'relative',transition:'background .2s',flexShrink:0}}>
+        <div style={{position:'absolute',top:2,left:structureOn?16:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
+      </div>
+      <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'#7A5A38'}}>Structure</span>
+    </button>}
+    {SEP}
+    <div style={{display:'flex',alignItems:'center',padding:'0 12px',height:55}}>
+      {searchOpen?(
+<input ref={searchRef} value={searchQ||''} onChange={function(e){setSearchQ(e.target.value);if(onSearch)onSearch(e.target.value);}} placeholder="Search drafts…" onBlur={function(){if(!searchQ)setSearchOpen(false);}} style={{width:200,padding:'6px 10px',fontSize:14,border:'1px solid var(--border)',borderRadius:20,fontFamily:'DM Sans, sans-serif',background:'var(--bg1)',color:'var(--text)',outline:'none'}}/>
+      ):(
+<button onClick={function(){setSearchOpen(true);}} style={{display:'flex',alignItems:'center',background:'transparent',border:'none',cursor:'pointer',padding:0}}>
+  <span className="material-symbols-outlined" style={{fontSize:22,color:'#6B4A26'}}>search</span>
+</button>
+      )}
+    </div>
+  </div>
+  <div style={{display:'flex',alignItems:'center',gap:8}}>
+    <button onClick={onBind} title="Bind" style={{display:'flex',alignItems:'center',justifyContent:'center',width:38,height:38,borderRadius:8,background:'transparent',border:'1px solid var(--border)',cursor:'pointer',color:'var(--mid)',transition:'all .15s'}}
+      onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';e.currentTarget.style.color='var(--text)';}}
+      onMouseOut={function(e){e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--mid)';}}>
+      <span className="material-symbols-outlined" style={{fontSize:20}}>collections_bookmark</span>
+    </button>
+    <button onClick={onAddDraft} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:'var(--indigo)',color:'#fff',border:'none',borderRadius:8,fontSize:14,fontFamily:'DM Sans, sans-serif',fontWeight:600,cursor:'pointer',transition:'background .15s'}}
+      onMouseOver={function(e){e.currentTarget.style.background='#2A1F10';}}
+      onMouseOut={function(e){e.currentTarget.style.background='var(--indigo)';}}>
+      <span className="material-symbols-outlined" style={{fontSize:18}}>add</span>New draft
+    </button>
+  </div>
 </div>
   );
 }
-
-
 // ── StatusDotWithArchive ──
-function StatusDotWithArchive({draft,app,showLabel}){
-  var sac=useState(false);var showConfirm=sac[0];var setShowConfirm=sac[1];
-  var info=STATUSES[draft.status]||STATUSES.first_draft;
-  function handleChange(s){
-    if(s==='archive'){setShowConfirm(true);return;}
-    var ch={status:s};
-    if(s==='loose_thread'){ch.order=null;ch.parentId=null;}
-    else if(draft.status==='loose_thread'){
-      var seqCount=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).length;
-      ch.order=seqCount+1;
-    }
-    app.updateDraft(app.projId,draft.id,ch);
-  }
-  function doArchive(){
-    var allDr=app.allDrafts[app.projId]||[];
-    var children=allDr.filter(function(d){return d.parentId===draft.id&&!d.archived;});
-    app.updateDraft(app.projId,draft.id,{archived:true});
-    children.forEach(function(c){app.updateDraft(app.projId,c.id,{archived:true});});
-    setShowConfirm(false);
-  }
-  var dotRef=useRef(null);
-  return(
-<div style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}} onClick={function(e){if(dotRef.current)dotRef.current.querySelector('[title]').click();}}>
-  <div ref={dotRef}><StatusDot status={draft.status} onChange={handleChange}/></div>
-  {showLabel&&<span style={{fontSize:13,color:info.color,pointerEvents:'none'}}>{info.label}</span>}
-  {showConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[app.projId]||[]} onConfirm={doArchive} onCancel={function(){setShowConfirm(false);}}/>}
-</div>
-  );
-}
-
+// StatusDotWithArchive now lives in ./SharedUI
 
 // ── Export helpers ──
 function stripHtmlForExport(html){
@@ -1144,7 +991,7 @@ function cleanBodyForExport(html){
     .trim();
 }
 
-function doExport(format,drafts,project,isSingleDraft,authorName){
+window.doExport=function doExport(format,drafts,project,isSingleDraft,authorName){
   var isSingle=isSingleDraft||(drafts&&drafts.length===1);
   var projectTitle=(project&&project.title)||'Manuscript';
   var displayTitle=isSingle&&drafts&&drafts[0]?(drafts[0].title||'Untitled'):projectTitle;
@@ -1181,9 +1028,11 @@ function doExport(format,drafts,project,isSingleDraft,authorName){
       doc.setDrawColor(200,200,200);doc.line(margin,y,210-margin,y);y+=10;
       doc.setFontSize(12);doc.setFont('times','normal');
       var bodyParas=stripHtmlForExport(sorted[0].body||'');
-      if(bodyText){
-        bodyParas.forEach(function(para){var lines=doc.splitTextToSize(para,pageW);lines.forEach(function(line){if(y>275){doc.addPage();y=margin;}doc.text(line,margin,y);y+=lineH;});y+=lineH*0.7;});
-      }
+      bodyParas.forEach(function(para){
+        var lines=doc.splitTextToSize(para,pageW);
+        lines.forEach(function(line){if(y>275){doc.addPage();y=margin;}doc.text(line,margin,y);y+=lineH;});
+        y+=lineH*0.5;
+      });
     } else {
       // ── Bind: cover page + index + draft pages ──
       doc.setFontSize(11);doc.setFont('times','normal');
@@ -1215,13 +1064,11 @@ function doExport(format,drafts,project,isSingleDraft,authorName){
         doc.text(dTitle,margin,y);y+=dTitle.length*9+10;
         doc.setFontSize(12);doc.setFont('times','normal');
         var bodyParas=stripHtmlForExport(draft.body||'');
-        if(bodyText){
-          var lines=doc.splitTextToSize(bodyText,pageW);
-          lines.forEach(function(line){
-            if(y>275){doc.addPage();y=margin;}
-            doc.text(line,margin,y);y+=lineH;
-          });
-        }
+        bodyParas.forEach(function(para){
+          var lines=doc.splitTextToSize(para,pageW);
+          lines.forEach(function(line){if(y>275){doc.addPage();y=margin;}doc.text(line,margin,y);y+=lineH;});
+          y+=lineH*0.5;
+        });
       });
     }
     doc.save(displayTitle.replace(/\s+/g,'_')+'.pdf');
@@ -1290,217 +1137,9 @@ function doExport(format,drafts,project,isSingleDraft,authorName){
   }
 }
 
-// ── SharedDraftView ──
-function SharedDraftView({shareId}){
-  var sd=useState(null);var data=sd[0];var setData=sd[1];
-  var se=useState(true);var loading=se[0];var setLoading=se[1];
-  var sErr=useState('');var err=sErr[0];var setErr=sErr[1];
-  function fetchShare(){
-    var client=getSupabase();
-    if(!client){
-      // CDN not ready yet — retry after a short delay
-      setTimeout(fetchShare,300);
-      return;
-    }
-    client.from('shared_drafts').select('*').eq('id',shareId).maybeSingle().then(function(r){
-      if(r.data)setData(r.data);
-      else setErr('This link has expired or cannot be found.');
-      setLoading(false);
-    });
-  }
-  useEffect(function(){
-    if(!shareId)return;
-    fetchShare();
-  },[shareId]);
-  // Must be before any conditional returns — React hooks rules
-  useEffect(function(){
-    if(data&&data.title)document.title=data.title+' — Woven';
-    return function(){document.title='Woven';};
-  },[data]);
-  if(loading)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'var(--serif)',fontSize:20,color:'var(--mid)'}}>Loading...</div>);
-  if(err)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'var(--serif)',fontSize:20,color:'var(--mid)'}}>{err}</div>);
-  if(!data)return null;
-  var projectName=data.project_name||'';
-  var authorName=data.author_name||'';
-  var byline=authorName||'Your friendly neighbourhood novelist';
-  return(
-<div style={{minHeight:'100vh',background:'var(--bg0)',display:'flex',flexDirection:'column',overflowY:'auto'}}>
-  <style>{'::selection{background:rgba(240,192,80,0.4);color:inherit;}'}</style>
-  <div style={{flex:1,maxWidth:680,margin:'0 auto',width:'100%',padding:'48px 24px 80px'}}>
-    {/* Header */}
-    <div style={{marginBottom:40}}>
-      <div style={{fontSize:11,fontWeight:800,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.15em',fontFamily:'var(--ui)',marginBottom:40,textAlign:'center'}}>
-        WRITTEN & SHARED WITH{' '}
-        <a href="https://www.wovenwrite.com" target="_blank" rel="noopener noreferrer" style={{color:'var(--indigo)',textDecoration:'underline',fontWeight:800}}>WOVEN</a>
-      </div>
-      {projectName&&<div style={{fontSize:12,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.1em',fontFamily:'var(--ui)',marginBottom:16}}>{projectName}</div>}
-      <h1 style={{fontFamily:'var(--serif)',fontSize:42,fontWeight:600,color:'var(--text)',lineHeight:1.2,marginBottom:12,marginTop:8}}>{data.title||'Untitled'}</h1>
-      <h3 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:400,color:'var(--indigo)',fontStyle:'italic',marginBottom:24}}>By {byline}</h3>
-      <div style={{height:1,background:'var(--border)',width:'100%'}}/>
-    </div>
-    {/* Body */}
-    <div style={{fontFamily:'var(--serif)',fontSize:19,lineHeight:1.9,color:'var(--body-text)'}} dangerouslySetInnerHTML={{__html:data.body||''}}/>
-  </div>
-  {/* Footer */}
-  <div style={{borderTop:'1px solid var(--border)',padding:'20px 24px',display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--bg1)',flexShrink:0}}>
-    <WovenLogo size={22}/>
-    <div style={{fontSize:11,color:'var(--mid)',fontFamily:'var(--ui)',textAlign:'center',lineHeight:1.5}}>© {new Date().getFullYear()} Woven &nbsp;·&nbsp; All writing belongs to {data&&data.author_name?data.author_name:'the author'}.</div>
-    <a href="https://app.writewoven.com" style={{fontSize:12,color:'var(--indigo)',fontFamily:'var(--ui)',textDecoration:'none',fontWeight:500}}>Start writing free →</a>
-  </div>
-</div>
-  );
-}
-
 // ── BindPanel ──
-function BindPanel({app,open,onClose,activeFilter}){
-  var s=useState('PDF');var format=s[0];var setFormat=s[1];
-  var si=useState(false);var inclNested=si[0];var setInclNested=si[1];
-  var sex=useState({});var excluded=sex[0];var setExcluded=sex[1];
-  var sel=useState(false);var exporting=sel[0];var setExporting=sel[1];
-  // Share link state — one link per project stored in app state
-  var bindShareKey='woven:bind_share:'+app.projId;
-  var ssl=useState(function(){try{var v=localStorage.getItem(bindShareKey);return v?JSON.parse(v):null;}catch(e){return null;}});
-  var bindShare=ssl[0];var setBindShare=ssl[1];
-  var scp=useState(false);var linkCopied=scp[0];var setLinkCopied=scp[1];
-  var sll=useState(false);var linkLoading=sll[0];var setLinkLoading=sll[1];
-  // Get strand info for active filter label
-  var projStrands=app.allStrands[app.projId]||{};
-  var activeStrand=null;
-  if(activeFilter){Object.values(projStrands).flat().forEach(function(st){if(st.id===activeFilter)activeStrand=st;});}
-  var allDraftsList=app.allDrafts[app.projId]||[];
-  // Apply strand filter first, then nested/parent filter
-  var strandFiltered=activeFilter
-    ?allDraftsList.filter(function(d){return (d.strandTags||[]).includes(activeFilter);})
-    :allDraftsList;
-  var parents=strandFiltered.filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
-  var allSeq=inclNested
-    ?strandFiltered.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);})
-    :strandFiltered.filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).sort(function(a,b){return (a.order||0)-(b.order||0);});
-  var filtered=allSeq.filter(function(d){return !excluded[d.id];});
-  var totalWords=filtered.reduce(function(s,d){return s+(d.wordCount||0);},0);
-  function toggleExclude(id){setExcluded(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;});}
-  function handleExport(){
-    if(format==='link'){handlePublishLink();return;}
-    setExporting(true);
-    var profile=app.profile||{};
-    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
-    setTimeout(function(){
-      doExport(format,filtered,app.currentProject,false,authorName);
-      setExporting(false);
-    },100);
-  }
-  async function handlePublishLink(){
-    if(filtered.length===0)return;
-    setLinkLoading(true);
-    var profile=app.profile||{};
-    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
-    var projName=(app.currentProject&&app.currentProject.title)||'';
-    var combinedBody=filtered.map(function(d){
-      return '<h2 style="margin-top:32px;margin-bottom:8px;font-family:serif;">'+(d.title||'Untitled')+'</h2>'+(d.body||'');
-    }).join('');
-    var linkTitle=activeStrand?activeStrand.name+' — '+projName:projName;
-    // Delete old link if exists
-    if(bindShare&&bindShare.id){
-      await supabase.from('shared_drafts').delete().eq('id',bindShare.id);
-    }
-    var sid=genId();
-    var res=await supabase.from('shared_drafts').insert({id:sid,title:linkTitle,body:combinedBody,project_name:projName,author_name:authorName});
-    if(res.error){setLinkLoading(false);return;}
-    var link=window.location.origin+window.location.pathname+'?share='+sid;
-    var shareData={id:sid,link:link,enabled:true,created:new Date().toISOString()};
-    setBindShare(shareData);
-    try{localStorage.setItem(bindShareKey,JSON.stringify(shareData));}catch(e){}
-    setLinkLoading(false);
-  }
-  async function handleUnpublishLink(){
-    if(!bindShare)return;
-    await supabase.from('shared_drafts').delete().eq('id',bindShare.id);
-    setBindShare(null);
-    try{localStorage.removeItem(bindShareKey);}catch(e){}
-  }
-  function copyLink(){
-    if(!bindShare||!bindShare.link)return;
-    navigator.clipboard&&navigator.clipboard.writeText(bindShare.link);
-    setLinkCopied(true);setTimeout(function(){setLinkCopied(false);},2500);
-  }
-  return(
-<Panel open={open} onClose={onClose} title="Bind your drafts"
-  footer={<div style={{display:'flex',flexDirection:'column',gap:0,width:'100%'}}>
-    {/* Share link UI */}
-    {bindShare&&(
-<div style={{marginBottom:10,padding:10,background:'var(--bg2)',borderRadius:'var(--r)',border:'1px solid var(--border)'}}>
-  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-    <span style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.06em'}}>Read-only link</span>
-    <button style={{fontSize:11,color:'var(--danger)',background:'none',border:'none',cursor:'pointer',padding:0}} onClick={handleUnpublishLink}>Unpublish</button>
-  </div>
-  <div style={{fontSize:11,color:'var(--mid)',wordBreak:'break-all',marginBottom:6,fontFamily:'var(--mono)',lineHeight:1.4}}>{bindShare.link}</div>
-  <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={copyLink}>
-    {linkCopied?<><span className="mi" style={{fontSize:14}}>check_circle</span>Copied!</>:<><span className="mi" style={{fontSize:14}}>content_copy</span>Copy link</>}
-  </button>
-</div>
-    )}
-    {/* Format dropdown */}
-    <div style={{marginBottom:8}}>
-      <select style={{width:'100%',padding:'9px 12px',fontSize:13,color:'var(--text)',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--r)'}} value={format} onChange={function(e){setFormat(e.target.value);}}>
-        <option value="PDF">PDF — best for sharing & printing</option>
-        <option value="Word (.docx)">Word Document — edit in Word or Google Docs</option>
-        <option value="link">Read-only link — share in browser</option>
-      </select>
-    </div>
-    <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={handleExport} disabled={exporting||linkLoading||filtered.length===0}>
-      {(exporting||linkLoading)?<span style={{display:'flex',alignItems:'center',gap:8}}><span style={{width:14,height:14,borderRadius:'50%',border:'2px solid rgba(255,255,255,.3)',borderTopColor:'#fff',animation:'spin .7s linear infinite',display:'inline-block'}}/>{format==='link'?'Publishing...':'Preparing...'}</span>:format==='link'?'Publish link':'Export'}
-    </button>
-  </div>}>
-  {activeStrand&&(
-<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,padding:'8px 12px',background:'var(--bg2)',borderRadius:'var(--r)',border:'1px solid var(--border)'}}>
-  <div style={{width:8,height:8,borderRadius:'50%',background:activeStrand.color,flexShrink:0}}/>
-  <span style={{fontSize:13,color:'var(--text)',flex:1}}>Filtered to <strong>{activeStrand.name}</strong></span>
-  <span style={{fontSize:11,color:'var(--mid)'}}>Arc filter active</span>
-</div>
-  )}
-  <div style={{marginBottom:16}}>
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-      <span className="sect-lbl" style={{margin:0}}>Sequence</span>
-      <span style={{fontSize:12,color:'var(--mid)'}}>{filtered.length}{' draft'+(filtered.length!==1?'s':'')}{' · '}{totalWords}{' words'}</span>
-    </div>
-    <div className="bind-draft-list">
-      {parents.map(function(d,i){var info=STATUSES[d.status]||STATUSES.first_draft;var children=(app.allDrafts[app.projId]||[]).filter(function(c){return c.parentId===d.id;});return(
-<div key={d.id}>
-  <div className="bind-draft-row" style={{opacity:excluded[d.id]?.45:1,cursor:'pointer'}} onClick={function(){toggleExclude(d.id);}}>
-    <span style={{width:16,height:16,borderRadius:4,border:'1px solid '+(excluded[d.id]?'var(--border)':'var(--indigo)'),background:excluded[d.id]?'transparent':'var(--indigo)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
-      {!excluded[d.id]&&<span className="mi" style={{fontSize:12,color:'#fff'}}>check</span>}
-    </span>
-    <span style={{fontSize:11,color:'var(--mid)',width:24}}>{i+1}</span>
-    <div style={{width:9,height:9,borderRadius:'50%',background:info.color,flexShrink:0}}/>
-    <span style={{flex:1,textDecoration:excluded[d.id]?'line-through':'none',color:excluded[d.id]?'var(--mid)':'var(--text)'}}>{d.title||'Untitled'}</span>
-  </div>
-  {inclNested&&children.filter(function(c){return !c.archived;}).map(function(c,ci){var ci2=STATUSES[c.status]||STATUSES.first_draft;return(
-<div key={c.id} className="bind-draft-row" style={{paddingLeft:24,background:'rgba(42,31,16,.02)',opacity:excluded[c.id]?.45:1,cursor:'pointer'}} onClick={function(){toggleExclude(c.id);}}>
-  <span style={{width:16,height:16,borderRadius:4,border:'1px solid '+(excluded[c.id]?'var(--border)':'var(--indigo)'),background:excluded[c.id]?'transparent':'var(--indigo)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
-    {!excluded[c.id]&&<span className="mi" style={{fontSize:12,color:'#fff'}}>check</span>}
-  </span>
-  <span style={{fontSize:11,color:'var(--mid)',width:28}}>{(i+1)+'.'+(ci+1)}</span>
-  <div style={{width:9,height:9,borderRadius:'50%',background:ci2.color,flexShrink:0}}/>
-  <span style={{flex:1,fontSize:12,color:excluded[c.id]?'var(--mid)':'var(--body-text)',textDecoration:excluded[c.id]?'line-through':'none'}}>{c.title||'Untitled'}</span>
-</div>
-  );})}
-</div>
-      );})}
-      {parents.length===0&&<div style={{padding:'12px',fontSize:13,color:'var(--mid)'}}>No drafts to bind.</div>}
-    </div>
-    <div style={{fontSize:12,color:'var(--mid)',marginTop:6}}>Loose Threads are always excluded.</div>
-  </div>
-  <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderTop:'1px solid var(--border)',borderBottom:'1px solid var(--border)',marginBottom:14,cursor:'pointer'}} onClick={function(){setInclNested(!inclNested);}}>
-    <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(inclNested?'var(--indigo)':'var(--border)'),background:inclNested?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
-      {inclNested&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
-    </span>
-    <span style={{fontSize:13,color:'var(--text)'}}>Include nested drafts</span>
-  </div>
-
-</Panel>
-  );
-}
-// ── applyFS ──
+// BindPanel now lives as BindDrawer in ./BindDrawer
+// ── applyFS ──// ── applyFS ──
 function applyFS(drafts,filter,sort){
   // drafts here are tree nodes (with .children). Filter matches parent or any child.
   var d=filter?drafts.filter(function(x){
@@ -1517,111 +1156,293 @@ function applyFS(drafts,filter,sort){
 }
 
 // ── DraftCard ──
-function DraftCard({draft,label,childCount,app,isNested,onMoveUp,onMoveDown,seqCount}){
-  var isMobile=useIsMobile();
-  var so=useState(false);var over=so[0];var setOver=so[1];
-  var sn=useState(false);var nestTarget=sn[0];var setNestTarget=sn[1];
-  var nestTargetRef=useRef(false);
+function StrandCircle({strand,spoolColor,size}){
+  var sz=size||25;
+  var color=spoolColor||'#c45e28';
+  var sr=useRef(null);var tt=useRef(null);
+  function show(){if(!sr.current||!tt.current)return;var r=sr.current.getBoundingClientRect();tt.current.style.left=(r.left+r.width/2)+'px';tt.current.style.top=(r.top-6)+'px';tt.current.style.opacity='1';}
+  function hide(){if(tt.current)tt.current.style.opacity='0';}
+  return(
+<div ref={sr} onMouseEnter={show} onMouseLeave={hide} style={{width:sz,height:sz,borderRadius:'50%',background:strand.color||color,border:'2px solid '+color,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:sr.current?-8:0,cursor:'default',boxSizing:'border-box'}}>
+  {strand.image?<img src={strand.image} alt={strand.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:strand.emoji?<span style={{fontSize:sz*0.5}}>{strand.emoji}</span>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:sz*0.36,fontWeight:700,color:'#fff'}}>{initials(strand.name)}</span>}
+  <span ref={tt} className="tooltip-text" style={{position:'fixed',opacity:0,transition:'opacity .1s'}}>{strand.name}</span>
+</div>
+  );
+}
+
+
+// ── StrandTagPicker ──
+function StrandTagPicker({draft,app,pid,tagged}){
+  var so=useState(false);var open=so[0];var setOpen=so[1];
+  var sq=useState('');var q=sq[0];var setQ=sq[1];
+  var ref=useRef(null);
+  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
+
+  var projStrands=app.allStrands[pid]||{};
+  var projTemplates=app.allTemplates[pid]||[];
+  var taggedIds=(draft.strandTags||[]);
+
+  // All strands not yet tagged, optionally filtered by q
+  var available=[];
+  Object.keys(projStrands).forEach(function(coll){
+    (projStrands[coll]||[]).forEach(function(st){
+      if(taggedIds.includes(st.id))return;
+      if(q&&!(st.name||'').toLowerCase().includes(q.toLowerCase()))return;
+      var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
+      available.push(Object.assign({},st,{collName:coll,spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));
+    });
+  });
+
+  function tag(strandId){
+    app.updateDraft(pid,draft.id,{strandTags:taggedIds.concat([strandId])});
+    setQ('');setOpen(false);
+  }
+
+  return(
+<div ref={ref} style={{position:'relative',display:'inline-block'}}>
+  <button onClick={function(e){e.stopPropagation();setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:12,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',fontSize:11,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>
+    <span className="material-symbols-outlined" style={{fontSize:14,color:'var(--teal)'}}>add</span>
+    Tag spool
+  </button>
+  {open&&available.length===0&&!q&&(
+<div style={{position:'absolute',bottom:'calc(100% + 6px)',left:0,zIndex:600,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--mid)',whiteSpace:'nowrap',boxShadow:'0 4px 16px rgba(42,31,16,.12)'}}>All strands are already tagged.</div>
+  )}
+  {open&&(available.length>0||q)&&(
+<div style={{position:'absolute',bottom:'calc(100% + 6px)',left:0,zIndex:600,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:10,boxShadow:'0 4px 16px rgba(42,31,16,.12)',minWidth:200,overflow:'hidden'}}>
+  <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)'}}>
+    <input autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search strands…" style={{width:'100%',padding:'4px 8px',fontSize:12,border:'1px solid var(--border)',borderRadius:6,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',boxSizing:'border-box'}}/>
+  </div>
+  <div style={{maxHeight:180,overflowY:'auto'}}>
+    {available.map(function(st){return(
+<div key={st.id} onClick={function(e){e.stopPropagation();tag(st.id);}} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid var(--bg2)'}}
+  onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
+  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  <div style={{width:16,height:16,borderRadius:'50%',background:st.spoolColor,flexShrink:0}}/>
+  <div>
+    <div style={{fontSize:12,fontWeight:600,color:'var(--text)',fontFamily:'DM Sans, sans-serif'}}>{st.name}</div>
+    <div style={{fontSize:10,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>{st.collName}</div>
+  </div>
+</div>
+    );})}
+    {available.length===0&&q&&<div style={{padding:'10px 12px',fontSize:12,color:'var(--mid)'}}>No matches.</div>}
+  </div>
+</div>
+  )}
+</div>
+  );
+}
+
+
+function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
+  var so=useState(false);var dragOver=so[0];var setDragOver=so[1];
   var sac=useState(false);var archiveConfirm=sac[0];var setArchiveConfirm=sac[1];
-  var nestTimer=useRef(null);
-  var projStrands=app.allStrands[app.projId]||{};
+  var set=useState(false);var editTitle=set[0];var setEditTitle=set[1];
+  var ses=useState(false);var editSyn=ses[0];var setEditSyn=ses[1];
+  var stv=useState(draft.title||'');var titleVal=stv[0];var setTitleVal=stv[1];
+  var ssv=useState(draft.synopsis||'');var synVal=ssv[0];var setSynVal=ssv[1];
+  var sth=useState(false);var thumbHover=sth[0];var setThumbHover=sth[1];
+  var ssc=useState(false);var strandConfirm=ssc[0];var setStrandConfirm=ssc[1];
+  var ssi=useState(null);var strandConfirmId=ssi[0];var setStrandConfirmId=ssi[1];
+  var sdrag=useRef(false);var smouse=useRef({x:0,y:0});
+  var fileRef=useRef(null);
+  var pid=app.projId;
+  var projStrands=app.allStrands[pid]||{};
+  var projTemplates=app.allTemplates[pid]||[];
+
   var tagged=[];
-  Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id))tagged.push(st);});});
-  function update(changes){app.updateDraft(app.projId,draft.id,changes);}
+  Object.keys(projStrands).forEach(function(coll){
+    (projStrands[coll]||[]).forEach(function(st){
+      if((draft.strandTags||[]).includes(st.id)){
+        var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
+        tagged.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28',collName:coll}));
+      }
+    });
+  });
+
+  var info=STATUSES[draft.status]||STATUSES.first_draft;
+
   function onStatusChange(s){
     if(s==='archive'){setArchiveConfirm(true);return;}
     var ch={status:s};
     if(s==='loose_thread'){ch.order=null;ch.parentId=null;}
-    else if(draft.status==='loose_thread'){ch.order=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length+1;}
-    update(ch);
+    else if(draft.status==='loose_thread'){ch.order=(app.allDrafts[pid]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length+1;}
+    app.updateDraft(pid,draft.id,ch);
   }
-  function doArchive(){
-    var allDr=app.allDrafts[app.projId]||[];
-    var children=allDr.filter(function(d){return d.parentId===draft.id&&!d.archived;});
-    app.updateDraft(app.projId,draft.id,{archived:true});
-    children.forEach(function(c){app.updateDraft(app.projId,c.id,{archived:true});});
-    setArchiveConfirm(false);
-  }
-  function handleDragOver(e){
-    e.preventDefault();setOver(true);
-    if(!nestTimer.current){
-      nestTimer.current=setTimeout(function(){setNestTarget(true);nestTargetRef.current=true;},1200);
+  function doArchive(){var allDr=app.allDrafts[pid]||[];var children=allDr.filter(function(d){return d.parentId===draft.id&&!d.archived;});app.updateDraft(pid,draft.id,{archived:true});children.forEach(function(c){app.updateDraft(pid,c.id,{archived:true});});setArchiveConfirm(false);}
+  function removeStrand(strandId){app.updateDraft(pid,draft.id,{strandTags:(draft.strandTags||[]).filter(function(id){return id!==strandId;})});setStrandConfirm(false);setStrandConfirmId(null);}
+
+  function handleMouseDown(e){smouse.current={x:e.clientX,y:e.clientY};sdrag.current=false;}
+  function handleMouseMove(e){var dx=e.clientX-smouse.current.x;var dy=e.clientY-smouse.current.y;if(Math.sqrt(dx*dx+dy*dy)>4)sdrag.current=true;}
+  function handleMouseUp(e){
+    if(!sdrag.current&&!structureMode){
+      if(!e.target.closest('.status-dot-wrap'))app.openDraft(draft.id);
     }
   }
-  function handleDragLeave(){
-    setOver(false);setNestTarget(false);nestTargetRef.current=false;
-    if(nestTimer.current){clearTimeout(nestTimer.current);nestTimer.current=null;}
+  function handleThumbnailUpload(e){
+    var file=e.target.files&&e.target.files[0];if(!file)return;
+    if(file.size>3*1024*1024){alert('Please use an image under 3 MB.');return;}
+    uploadImage(file).then(function(url){if(url)app.updateDraft(pid,draft.id,{thumbnail:url});});
   }
-  function handleDrop(e){
-    e.preventDefault();
-    var fromId=e.dataTransfer.getData('draftId');
-    if(fromId&&fromId!==draft.id){
-      var fromDraft=(app.allDrafts[app.projId]||[]).find(function(d){return d.id===fromId;});
-      var isLT=fromDraft&&fromDraft.status==='loose_thread';
-      var isNesting=nestTargetRef.current&&!draft.parentId&&!isLT&&!fromDraft.parentId;
-      if(isNesting){
-        app.nestDraft(app.projId,fromId,draft.id);
-      } else if(isLT){
-        var seqCount=(app.allDrafts[app.projId]||[]).filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;
-        app.updateDraft(app.projId,fromId,{status:'first_draft',order:draft.order||seqCount+1,parentId:null});
-      } else {
-        app.reorderDraft(app.projId,fromId,draft.order||0);
-      }
-    }
-    setOver(false);setNestTarget(false);nestTargetRef.current=false;
-    if(nestTimer.current){clearTimeout(nestTimer.current);nestTimer.current=null;}
-  }
-  var chips=tagged.slice(0,2);
-  var cardCls='draft-card'+(over?' drag-over':'')+(nestTarget?' nest-target':'');
-  var cardEl=(
-<div className={cardCls} draggable={true}
-  onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}}
-  onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
-  <div className="card-hdr" style={{backgroundImage:draft.thumbnail?'url('+draft.thumbnail+')':undefined,backgroundSize:'cover',backgroundPosition:'center'}}>
-    <div style={{display:'flex',alignItems:'center',gap:5,background:draft.thumbnail?'rgba(253,248,240,.75)':'transparent',borderRadius:4,padding:'2px 5px'}}>
-      <span className="card-seq" style={{color:'var(--text)',background:draft.thumbnail?'rgba(253,248,240,.8)':'transparent',borderRadius:4,padding:draft.thumbnail?'1px 6px':undefined}}>{label}</span>
-      {childCount>0&&(
-<div style={{display:'flex',alignItems:'center',gap:2,cursor:'pointer'}}
-  onClick={function(e){e.stopPropagation();app.setView('table');app.updateDraft(app.projId,draft.id,{nestExpanded:true});}}>
-  <span className="mi" style={{fontSize:13,color:'var(--indigo)'}}>account_tree</span>
-  <span style={{fontSize:10,color:'var(--indigo)',fontWeight:600}}>{childCount}</span>
+
+  var bodyPreview=draft.body?stripHtml(draft.body).slice(0,300):'';
+  var visibleStrands=structureMode?tagged:tagged.slice(0,3);
+  var overflow=structureMode?0:tagged.length-3;
+  var overflowRef=useRef(null);var overflowTt=useRef(null);
+  function showOverflow(){if(!overflowRef.current||!overflowTt.current)return;var r=overflowRef.current.getBoundingClientRect();overflowTt.current.style.left=(r.left+r.width/2)+'px';overflowTt.current.style.top=(r.bottom+6)+'px';overflowTt.current.style.opacity='1';}
+  function hideOverflow(){if(overflowTt.current)overflowTt.current.style.opacity='0';}
+
+  var AMBER='#c45e28';
+
+  return(
+<div
+  style={{width:270,borderRadius:15,overflow:'visible',background:'var(--bg1)',border:'2px solid transparent',display:'flex',flexDirection:'column',cursor:structureMode?'default':'pointer',boxShadow:'0 2px 8px rgba(42,31,16,.06)',transition:'box-shadow .2s,border-color .2s',flexShrink:0,position:'relative',height:structureMode?'auto':400}}
+  draggable={structureMode}
+  onDragStart={structureMode?function(e){e.dataTransfer.setData('draftId',draft.id);}:undefined}
+  onDragOver={structureMode?function(e){e.preventDefault();setDragOver(true);}:undefined}
+  onDragLeave={structureMode?function(){setDragOver(false);}:undefined}
+  onDrop={structureMode?function(e){e.preventDefault();setDragOver(false);var fromId=e.dataTransfer.getData('draftId');if(fromId&&fromId!==draft.id){var isLT=(app.allDrafts[pid]||[]).find(function(d){return d.id===fromId;});if(isLT&&isLT.status==='loose_thread'){app.updateDraft(pid,fromId,{status:'first_draft',order:draft.order||0,parentId:null});}else{app.reorderDraft(pid,fromId,draft.order||0);}}}:undefined}
+  onMouseDown={handleMouseDown}
+  onMouseMove={handleMouseMove}
+  onMouseUp={handleMouseUp}
+  onMouseEnter={function(e){e.currentTarget.style.boxShadow='0 4px 16px rgba(42,31,16,.12)';if(!structureMode)e.currentTarget.style.borderColor=AMBER;}}
+  onMouseLeave={function(e){e.currentTarget.style.boxShadow='0 2px 8px rgba(42,31,16,.06)';e.currentTarget.style.borderColor='transparent';}}
+>
+  {/* Thumbnail */}
+  <div
+    style={{height:150,background:'#E2D0B8',flexShrink:0,backgroundImage:draft.thumbnail?'url('+draft.thumbnail+')':undefined,backgroundSize:'cover',backgroundPosition:'center',position:'relative',borderRadius:'13px 13px 0 0',overflow:'hidden',cursor:structureMode?'pointer':'inherit'}}
+    onMouseEnter={function(){if(structureMode)setThumbHover(true);}}
+    onMouseLeave={function(){setThumbHover(false);}}
+    onClick={function(){if(structureMode&&fileRef.current)fileRef.current.click();}}
+  >
+    {dragOver&&<div style={{position:'absolute',inset:0,background:'rgba(196,94,40,.15)'}}/>}
+    {structureMode&&thumbHover&&(
+<div style={{position:'absolute',inset:0,background:'rgba(196,94,40,.75)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+  <span className="material-symbols-outlined" style={{fontSize:32,color:'#fff'}}>edit</span>
+</div>
+    )}
+    {structureMode&&<input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleThumbnailUpload}/>}
+    {structureMode&&(
+<div draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}} onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:8,right:8,width:28,height:28,background:'rgba(253,248,240,.85)',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:'grab',zIndex:2}}>
+  <span className="material-symbols-outlined" style={{fontSize:18,color:'#7A5A38'}}>drag_indicator</span>
+</div>
+    )}
+  </div>
+
+  {/* Content */}
+  <div style={{flex:1,background:'#F5EDE0',padding:'10px 15px',display:'flex',flexDirection:'column',gap:10,minHeight:0,borderRadius:'0 0 13px 13px',overflow:'hidden'}}>
+
+    {/* Title */}
+    {structureMode&&editTitle?(
+<textarea autoFocus rows={2} value={titleVal} onChange={function(e){setTitleVal(e.target.value);}} onBlur={function(){app.updateDraft(pid,draft.id,{title:titleVal});setEditTitle(false);}} style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,background:'transparent',border:'2px solid '+AMBER,borderRadius:8,outline:'none',resize:'none',padding:'4px 8px',width:'100%',boxSizing:'border-box'}}/>
+    ):(
+<div
+  style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',flexShrink:0,borderRadius:6,padding:'2px 4px',transition:'background .15s',cursor:structureMode?'text':'inherit',border:'2px solid transparent'}}
+  onClick={function(){if(structureMode){setTitleVal(draft.title||'');setEditTitle(true);}}}
+  onMouseEnter={function(e){if(structureMode)e.currentTarget.style.background='rgba(196,94,40,.06)';}}
+  onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+  {label}- {draft.title||'Untitled'}
+</div>
+    )}
+
+    {/* Synopsis / preview */}
+    {structureMode&&editSyn?(
+<textarea autoFocus rows={4} value={synVal} onChange={function(e){setSynVal(e.target.value);}} onBlur={function(){app.updateDraft(pid,draft.id,{synopsis:synVal});setEditSyn(false);}} placeholder="Add a synopsis…" style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',lineHeight:1.45,background:'transparent',border:'2px solid '+AMBER,borderRadius:8,outline:'none',resize:'none',padding:'2px 4px',flex:1,boxSizing:'border-box'}}/>
+    ):(
+<div
+  style={{flex:1,minHeight:0,overflow:'hidden',position:'relative',borderRadius:6,padding:'2px 4px',transition:'background .15s',cursor:structureMode?'text':'inherit',border:'2px solid transparent'}}
+  onClick={function(){if(structureMode){setSynVal(draft.synopsis||'');setEditSyn(true);}}}
+  onMouseEnter={function(e){if(structureMode)e.currentTarget.style.background='rgba(196,94,40,.06)';}}
+  onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+  {draft.synopsis?(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',lineHeight:1.45,display:'-webkit-box',WebkitLineClamp:5,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{draft.synopsis}</div>
+  ):bodyPreview?(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'rgba(122,90,56,.75)',fontStyle:'italic',lineHeight:1.45,display:'-webkit-box',WebkitLineClamp:5,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{bodyPreview}</div>
+  ):(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'rgba(122,90,56,.4)',fontStyle:'italic',lineHeight:1.45}}>{structureMode?'Click to add synopsis…':'Start writing…'}</div>
+  )}
+</div>
+    )}
+
+    {/* Strand chips + tag button — expanded in structure mode */}
+    {structureMode&&(
+<div>
+  <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:tagged.length>0?6:0}}>
+    {tagged.map(function(st){return(
+<div key={st.id} style={{display:'flex',alignItems:'center',gap:5,padding:'3px 8px',borderRadius:12,background:st.spoolColor+'22',border:'1px solid '+st.spoolColor}}>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:11,color:st.spoolColor,fontWeight:600}}>{st.name}</span>
+  <button onClick={function(e){e.stopPropagation();setStrandConfirmId(st.id);setStrandConfirm(true);}} style={{background:'none',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',color:st.spoolColor,opacity:.7}}>
+    <span className="material-symbols-outlined" style={{fontSize:14}}>close</span>
+  </button>
+</div>
+    );})}
+  </div>
+  {/* Tag new strand */}
+  <StrandTagPicker draft={draft} app={app} pid={pid} tagged={tagged}/>
+</div>
+    )}
+
+    {/* Bottom row */}
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,marginTop:'auto'}}>
+      {/* Left: strand circles (standard mode only) */}
+      {!structureMode&&(
+<div style={{display:'flex',alignItems:'center'}}>
+  {visibleStrands.map(function(st,i){return(
+<div key={st.id} style={{width:25,height:25,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||AMBER),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-8:0,boxSizing:'border-box',position:'relative',zIndex:visibleStrands.length-i,cursor:'default'}}
+  onMouseEnter={function(e){var tt=document.getElementById('woven-tt');if(tt){var r=e.currentTarget.getBoundingClientRect();tt.textContent=st.name;tt.style.display='block';tt.style.left=(r.left+r.width/2)+'px';tt.style.top=(r.bottom+6)+'px';}}}
+  onMouseLeave={function(){var tt=document.getElementById('woven-tt');if(tt)tt.style.display='none';}}>
+  {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:11}}>{st.emoji}</span>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
+</div>
+  );})}
+  {overflow>0&&(
+<div ref={overflowRef} onMouseEnter={showOverflow} onMouseLeave={hideOverflow} style={{width:25,height:25,borderRadius:'50%',background:'#E2D0B8',border:'1px solid #A88060',display:'flex',alignItems:'center',justifyContent:'center',marginLeft:-8,flexShrink:0,cursor:'default',zIndex:0}}>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:10,color:'#7A5A38',fontWeight:600}}>+{overflow}</span>
+  <div ref={overflowTt} style={{position:'fixed',opacity:0,transition:'opacity .15s',background:'#7A5A38',color:'#fdf8f0',fontSize:11,padding:'5px 10px',borderRadius:6,pointerEvents:'none',zIndex:9999,whiteSpace:'pre',lineHeight:1.6}}>{tagged.slice(3).map(function(s){return s.name;}).join('\n')}</div>
+</div>
+  )}
 </div>
       )}
+      {/* Left: arrows in structure mode */}
+      {structureMode&&(
+<div style={{display:'flex',alignItems:'center',gap:4}}>
+  <button onClick={function(e){e.stopPropagation();if(onMoveUp)onMoveUp(draft.id);}} title="Move left" style={{width:26,height:26,borderRadius:6,border:'1px solid var(--border)',background:'var(--bg2)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
+    <span className="material-symbols-outlined" style={{fontSize:16,color:'var(--mid)'}}>arrow_back</span>
+  </button>
+  <button onClick={function(e){e.stopPropagation();if(onMoveDown)onMoveDown(draft.id);}} title="Move right" style={{width:26,height:26,borderRadius:6,border:'1px solid var(--border)',background:'var(--bg2)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
+    <span className="material-symbols-outlined" style={{fontSize:16,color:'var(--mid)'}}>arrow_forward</span>
+  </button>
+</div>
+      )}
+      {!structureMode&&<div/>}
+      {/* Right: status dot + word count */}
+      <div className="status-dot-wrap" style={{display:'flex',alignItems:'center',gap:8}} onClick={function(e){e.stopPropagation();}}>
+        <StatusDotWithArchive draft={draft} app={app} showLabel={false} dotSize={15}/>
+        <span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#a88060'}}>{(draft.wordCount||0)}w</span>
+      </div>
     </div>
-    {nestTarget&&<span style={{fontSize:10,color:'var(--teal)',fontWeight:600}}>nest here</span>}
-    {isMobile&&!draft.parentId?(
-<div style={{display:'flex',gap:2}}>
-  <button className="arrow-btn" onClick={function(){onMoveUp&&onMoveUp(draft.id);}}><span className="mi" style={{fontSize:16}}>keyboard_arrow_up</span></button>
-  <button className="arrow-btn" onClick={function(){onMoveDown&&onMoveDown(draft.id);}}><span className="mi" style={{fontSize:16}}>keyboard_arrow_down</span></button>
+  </div>
+
+  {archiveConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[pid]||[]} onConfirm={doArchive} onCancel={function(){setArchiveConfirm(false);}}/>}
+  {strandConfirm&&(function(){
+    var confirmSt=tagged.find(function(t){return t.id===strandConfirmId;});
+    var spoolName=confirmSt?confirmSt.collName:'Spool';
+    var strandName=confirmSt?confirmSt.name:'this item';
+    return(
+<div style={{position:'fixed',inset:0,zIndex:600,display:'flex',alignItems:'center',justifyContent:'center'}}>
+  <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={function(){setStrandConfirm(false);}}/>
+  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:12,padding:24,width:300,boxShadow:'0 12px 40px rgba(42,31,16,.15)'}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:8,color:'var(--text)'}}>Remove {strandName} from {spoolName}?</div>
+    <div style={{fontSize:13,color:'var(--mid)',marginBottom:16}}>This removes the tag from this draft. The {strandName} entry in your {spoolName} spool won't be deleted.</div>
+    <div style={{display:'flex',gap:8}}>
+      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={function(){setStrandConfirm(false);}}>Cancel</button>
+      <button className="btn btn-primary" style={{flex:1,justifyContent:'center',background:'var(--danger)'}} onClick={function(){removeStrand(strandConfirmId);}}>Remove</button>
+    </div>
+  </div>
 </div>
-    ):<span style={{color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:16}}>drag_indicator</span></span>}
-  </div>
-  <div className="card-body">
-    <textarea className="card-title-f" title={draft.title||''} defaultValue={draft.title} placeholder="Untitled draft" rows={1} ref={function(el){if(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,52)+'px';}}} onInput={function(e){e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,52)+'px';}} onBlur={function(e){update({title:e.target.value});}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}} onKeyDown={function(e){if(e.key==='Enter')e.preventDefault();}}/>
-    {draft.synopsis?(
-<textarea className="card-syn-f" defaultValue={draft.synopsis} rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
-    ):(
-<SynopsisPreview draft={draft} onUpdate={update}/>
-    )}
-    {tagged.length>0&&(
-<div className="strand-chips" style={{marginTop:2,flexWrap:'nowrap',overflow:'hidden'}}>
-  {tagged.slice(0,2).map(function(st){return <span key={st.id} className="chip" style={{background:'rgba(196,94,40,.1)',color:'var(--indigo)',borderColor:'rgba(196,94,40,.25)',borderWidth:1,borderStyle:'solid',fontSize:10,padding:'2px 6px',flexShrink:0}}>{st.name}</span>;})}
-  {tagged.length>2&&<OverflowTooltip label={'+'+(tagged.length-2)} names={tagged.slice(2).map(function(s){return s.name;})}/>}
-</div>
-    )}
-  </div>
-  <div className="card-footer" style={{flexWrap:'wrap',gap:4}}>
-    <StatusDot status={draft.status} onChange={onStatusChange}/>
-    <span className="card-wc" style={{marginLeft:4}}>{(draft.wordCount||0)+'w'}</span>
-    <button className="card-open" style={{marginLeft:'auto'}} onClick={function(){app.openDraft(draft.id);}}>Open</button>
-    <button className="card-open" title="Duplicate as nested draft" onClick={function(e){e.stopPropagation();app.duplicateDraft(app.projId,draft.id);}}>⧉</button>
-  </div>
+    );
+  })()}
 </div>
   );
-  return(<div>{cardEl}{archiveConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[app.projId]||[]} onConfirm={doArchive} onCancel={function(){setArchiveConfirm(false);}}/>}</div>);
 }
-
-
 // ── SynopsisPreview ──
 function SynopsisPreview({draft,onUpdate}){
   var sh=useState(false);var hovered=sh[0];var setHovered=sh[1];
@@ -1650,74 +1471,107 @@ function SynopsisPreview({draft,onUpdate}){
 
 // ── LooseThreadsSection ──
 function LooseThreadsSection({threads,app,view}){
-  var s=useState(true);var open=s[0];var setOpen=s[1];
-  // threads prop already comes in; sort newest first
   var sortedThreads=threads.slice().sort(function(a,b){return (b.createdAt||'').localeCompare(a.createdAt||'');});
+  var sex=useState(false);var expanded=sex[0];var setExpanded=sex[1];
   function addLT(){app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
-  var isTile=view==='tiles';var isTable=view==='table';
-  return(
-<div className="lt-section"
-  onDragOver={function(e){e.preventDefault();}}
-  onDrop={function(e){
-    e.preventDefault();
-    var fromId=e.dataTransfer.getData('draftId');
-    if(!fromId) return;
-    var allDr=app.allDrafts[app.projId]||[];
-    var fromDraft=allDr.find(function(d){return d.id===fromId;});
-    if(!fromDraft) return;
-    // If seq draft dropped on LT section → demote to loose thread
-    if(fromDraft.status!=='loose_thread'){
-      app.updateDraft(app.projId,fromId,{status:'loose_thread',order:null,parentId:null});
-    }
-  }}>
-  <div className="lt-hdr" onClick={function(){setOpen(!open);}}>
-    <span className="lt-tilde">~</span>
-    <span className="lt-label">Loose Threads</span>
-    {threads.length>0&&<span style={{fontSize:13,color:'var(--mid)'}}>{threads.length}</span>}
-    <span className={'lt-chevron mi'+(open?' open':'')}>chevron_right</span>
+
+  if(view==='table'){return(
+<div style={{padding:'0 0 12px'}}>
+  <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderTop:'1px solid var(--border)'}}>
+    <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:13,color:'var(--mid)'}}>Loose Threads</span>
+    {threads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:18,height:18,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{threads.length}</span>}
   </div>
-  {open&&(
-<div>
-  {isTable?(
-<div>
   {sortedThreads.map(function(d){return(
-<div key={d.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderBottom:'1px solid var(--bg2)'}}
-  draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',d.id);}}>
-  <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab'}}>drag_indicator</span>
-  <span style={{color:'var(--teal)',fontSize:16,fontWeight:600,width:24}}>~</span>
+<div key={d.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderBottom:'1px solid var(--bg2)'}}>
   <input className="tbl-inp" defaultValue={d.title} placeholder="Untitled loose thread" onBlur={function(e){app.updateDraft(app.projId,d.id,{title:e.target.value});}} style={{maxWidth:180}}/>
   <input className="tbl-inp syn" defaultValue={d.synopsis} placeholder="Note..." onBlur={function(e){app.updateDraft(app.projId,d.id,{synopsis:e.target.value});}} style={{flex:1}}/>
   <button className="card-open" onClick={function(){app.openDraft(d.id);}}>Draft</button>
 </div>
   );})}
 </div>
-  ):isTile?(
-<div className="tiles-grid">
-  {threads.map(function(d){return(
-<div key={d.id} className="tile" draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',d.id);}}
-  onDragOver={function(e){e.preventDefault();}} onClick={function(){app.openDraft(d.id);}}>
-  <div className="tile-top"><span style={{color:'var(--teal)',fontWeight:700,fontSize:14}}>~</span></div>
-  <div className="tile-title">{d.title||'Untitled'}</div>
-  <div className="tile-syn">{d.synopsis||''}</div>
+  );}
+
+  // How many tiles fit in one row (approx based on tile width 220+10gap)
+  // Approximate how many 230px tiles fit in the section (minus ~32px padding each side)
+  var ONE_ROW=Math.max(3,Math.floor((window.innerWidth-64)/(230+10)));
+  var displayedThreads=expanded?sortedThreads:sortedThreads.slice(0,ONE_ROW);
+
+  return(
+<div
+  style={{background:'#F5EDE0',padding:'16px 16px 24px',marginTop:0}}
+  onDragOver={function(e){e.preventDefault();}}
+  onDrop={function(e){
+    e.preventDefault();var fromId=e.dataTransfer.getData('draftId');if(!fromId)return;
+    var allDr=app.allDrafts[app.projId]||[];var fromDraft=allDr.find(function(d){return d.id===fromId;});
+    if(fromDraft&&fromDraft.status!=='loose_thread')app.updateDraft(app.projId,fromId,{status:'loose_thread',order:null,parentId:null});
+  }}>
+  {/* Section header */}
+  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
+    <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'var(--text)'}}>Loose Threads</span>
+    {threads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:22,height:22,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{threads.length}</span>}
+    {threads.length>ONE_ROW&&(
+<button onClick={function(){setExpanded(!expanded);}} title={expanded?'Collapse':'Expand all'} style={{marginLeft:'auto',display:'flex',alignItems:'center',background:'transparent',border:'none',cursor:'pointer',color:'var(--mid)',padding:4}}>
+  <span className="material-symbols-outlined" style={{fontSize:22}}>{expanded?'collapse_all':'expand_all'}</span>
+</button>
+    )}
+  </div>
+  {/* Tile grid */}
+  <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
+    {/* Ghost add tile */}
+    <div onClick={addLT} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
+      onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';}}
+      onMouseLeave={function(e){e.currentTarget.style.borderColor='#A88060';}}>
+      <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
+    </div>
+    {displayedThreads.map(function(d){
+      var bodyPreview=d.body?stripHtml(d.body).slice(0,200):'';
+      var pid=app.projId;
+      var projStrands=app.allStrands[pid]||{};
+      var projTemplates=app.allTemplates[pid]||[];
+      var tagged=[];
+      Object.keys(projStrands).forEach(function(coll){
+        (projStrands[coll]||[]).forEach(function(st){
+          if((d.strandTags||[]).includes(st.id)){
+            var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
+            tagged.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));
+          }
+        });
+      });
+      return(
+<div key={d.id} style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:'grab',display:'flex',flexDirection:'column',gap:8,width:220,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
+  draggable={true}
+  onDragStart={function(e){e.dataTransfer.setData('draftId',d.id);}}
+  onClick={function(){app.openDraft(d.id);}}
+  onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';e.currentTarget.style.boxShadow='0 4px 12px rgba(196,94,40,.12)';}}
+  onMouseLeave={function(e){e.currentTarget.style.borderColor='transparent';e.currentTarget.style.boxShadow='none';}}>
+  <div style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2A1F10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
+    {d.title||'Untitled loose thread'}
+  </div>
+  {bodyPreview&&(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,fontStyle:'italic',color:'#A88060',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:4,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
+  {bodyPreview}
+</div>
+  )}
+  {tagged.length>0&&(
+<div style={{display:'flex',alignItems:'center',gap:-4,overflow:'hidden'}}>
+  {tagged.slice(0,4).map(function(st,i){return(
+<div key={st.id} title={st.name} style={{width:22,height:22,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-6:0,boxSizing:'border-box'}}>
+  {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:11}}>{st.emoji}</span>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
 </div>
   );})}
+  {tagged.length>4&&<span style={{fontSize:11,color:'var(--mid)',marginLeft:4}}>+{tagged.length-4}</span>}
 </div>
-  ):(
-<div className="cards-grid">
-  <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:8,display:'flex',flexDirection:'column',boxShadow:'none'}} onClick={addLT}>
-    <span className="mi" style={{fontSize:22,color:'var(--placeholder)'}}>add_circle_outline</span>
-    <span style={{fontSize:12,color:'var(--placeholder)'}}>New loose thread</span>
+  )}
+</div>
+      );
+    })}
+    {sortedThreads.length===0&&(
+<div style={{fontSize:13,color:'var(--placeholder)',fontStyle:'italic',padding:'8px 0'}}>No loose threads yet. Drag a draft here or click + to add one.</div>
+    )}
   </div>
-  {sortedThreads.map(function(d){return <DraftCard key={d.id} draft={d} label="~" app={app}/>;} )}
-</div>
-  )}
-
-</div>
-  )}
 </div>
   );
 }
-
 // ── Empty state ──
 
 function DraftLoadingSpinner(){
@@ -1739,6 +1593,8 @@ function CardsView({app}){
   var sf=useState(null);var filter=sf[0];var setFilter=sf[1];
   var ss=useState('order');var sort=ss[0];var setSort=ss[1];
   var sb=useState(false);var bindOpen=sb[0];var setBindOpen=sb[1];
+  var sst=useState(false);var structureMode=sst[0];var setStructureMode=sst[1];
+  var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
   var allDrafts=app.allDrafts[app.projId]||[];
   var seqDrafts=allDrafts.filter(function(d){return !d.archived&&d.status!=='loose_thread'&&!d.parentId;});
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
@@ -1746,28 +1602,43 @@ function CardsView({app}){
   function addDraft(){var nid=genId();app.addDraft(app.projId,{id:nid,projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqDrafts.length+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});app.openDraft(nid);}
   function moveUp(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<=0)return;app.reorderDraft(app.projId,did,sorted[idx-1].order||0);}
   function moveDown(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<0||idx>=sorted.length-1)return;app.reorderDraft(app.projId,did,sorted[idx+1].order||0);}
-  var displayed=applyFS(tree,filter,sort);
+  var displayed=applyFS(tree,filter,sort).filter(function(p){
+    if(!searchQ.trim())return true;
+    var q=searchQ.toLowerCase();
+    var matchTitle=(p.title||'').toLowerCase().includes(q);
+    var matchSyn=(p.synopsis||'').toLowerCase().includes(q);
+    var matchBody=p.body?stripHtml(p.body).toLowerCase().includes(q):false;
+    return matchTitle||matchSyn||matchBody;
+  });
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} structureMode={structureMode} onStructureToggle={function(v){setStructureMode(v);}} searchQ={searchQ} onSearch={setSearchQ}/>
   <div className="view-area dot-grid">
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
-<div className="cards-grid">
+<div className="cards-grid"
+  onDragOver={function(e){e.preventDefault();}}
+  onDrop={function(e){
+    e.preventDefault();
+    var fromId=e.dataTransfer.getData('draftId');if(!fromId)return;
+    var allDr=app.allDrafts[pid]||[];
+    var fromDraft=allDr.find(function(d){return d.id===fromId;});
+    if(fromDraft&&fromDraft.status==='loose_thread'){
+      var seqCount=allDr.filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).length;
+      app.updateDraft(pid,fromId,{status:'first_draft',order:seqCount+1,parentId:null});
+    }
+  }}>
   {displayed.map(function(parent){
     var childCount=parent.children?parent.children.length:0;
     var sortedSeq=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
     var seqIdx=sortedSeq.findIndex(function(d){return d.id===parent.id;});
-    return <DraftCard key={parent.id} draft={parent} label={''+(seqIdx>=0?seqIdx+1:'?')} childCount={childCount} app={app} onMoveUp={moveUp} onMoveDown={moveDown}/>;
+    return <DraftCard key={parent.id} draft={parent} label={''+(seqIdx>=0?seqIdx+1:'?')} app={app} onMoveUp={moveUp} onMoveDown={moveDown} structureMode={structureMode}/>;
   })}
-  <div className="draft-card" style={{border:'2px dashed var(--border)',background:'transparent',cursor:'pointer',alignItems:'center',justifyContent:'center',gap:8,display:'flex',flexDirection:'column',boxShadow:'none'}} onClick={addDraft}>
-    <span className="mi" style={{fontSize:28,color:'var(--placeholder)'}}>add_circle_outline</span>
-    <span style={{fontSize:13,color:'var(--placeholder)'}}>New draft</span>
-  </div>
 </div>
     )}
     <LooseThreadsSection threads={ltDrafts} app={app} view="cards"/>
+    <div style={{height:50,background:'#A88060',flexShrink:0,marginTop:'auto'}}/>
   </div>
-  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
+  <BindDrawer app={app} open={bindOpen} variant="overlay" topOffset={54} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
 </div>
   );
 }
@@ -1821,7 +1692,7 @@ function TilesView({app}){
 </div>
     )}
   </div>
-  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
+  <BindDrawer app={app} open={bindOpen} variant="overlay" topOffset={54} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
 </div>
   );
 }
@@ -1831,6 +1702,7 @@ function TableView({app}){
   var sf=useState(null);var filter=sf[0];var setFilter=sf[1];
   var ss=useState('order');var sort=ss[0];var setSort=ss[1];
   var sb=useState(false);var bindOpen=sb[0];var setBindOpen=sb[1];
+  var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
   var so2=useState(null);var dragOver=so2[0];var setDragOver=so2[1];
   var sco=useState(false);var colOpen=sco[0];var setColOpen=sco[1];
   var scp=useState({top:0,left:0,right:0});var colPos=scp[0];var setColPos=scp[1];
@@ -1869,21 +1741,43 @@ function TableView({app}){
   var allDrafts=app.allDrafts[app.projId]||[];
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
-  var displayed=applyFS(tree,filter,sort);
+  var displayed=applyFS(tree,filter,sort).filter(function(p){
+    if(!searchQ.trim())return true;
+    var q=searchQ.toLowerCase();
+    return (p.title||'').toLowerCase().includes(q)||(p.synopsis||'').toLowerCase().includes(q)||(p.body?stripHtml(p.body).toLowerCase().includes(q):false);
+  });
   function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
+  var tblProjStrands=app.allStrands[app.projId]||{};
+  var tblProjTemplates=app.allTemplates[app.projId]||[];
   function renderCell(col,draft){
-    if(col==='title')return <input className="tbl-inp" style={{fontFamily:'var(--serif)',fontWeight:600,fontSize:14,textOverflow:'ellipsis',overflow:'hidden',whiteSpace:'nowrap'}} title={draft.title||''} defaultValue={draft.title} placeholder="Untitled" onBlur={function(e){app.updateDraft(app.projId,draft.id,{title:e.target.value});}}/>;
-    if(col==='status'){return <StatusDotWithArchive draft={draft} app={app} showLabel={true}/>;}
-    if(col==='wordCount')return <span style={{fontSize:12,color:'var(--mid)'}}>{draft.wordCount||0}</span>;
-    if(col==='synopsis')return <input className="tbl-inp syn" defaultValue={draft.synopsis} placeholder="Synopsis..." onBlur={function(e){app.updateDraft(app.projId,draft.id,{synopsis:e.target.value});}} style={{width:'100%'}}/>;
-    if(col==='strandTags'){var ps2=app.allStrands[app.projId]||{};var ts2=[];Object.keys(ps2).forEach(function(c){(ps2[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id))ts2.push(st);});});return(<div style={{display:'flex',flexWrap:'nowrap',gap:3,overflow:'hidden'}}>{ts2.slice(0,2).map(function(st){return <span key={st.id} className="chip" style={{background:'rgba(196,94,40,.1)',color:'var(--indigo)',borderColor:'rgba(196,94,40,.25)',borderWidth:1,borderStyle:'solid',fontSize:11,flexShrink:0}}>{st.name}</span>;})} {ts2.length>2&&<OverflowTooltip label={'+'+(ts2.length-2)} names={ts2.slice(2).map(function(s){return s.name;})}/>}</div>);}
+    if(col==='title')return <input className="tbl-inp" style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2a1f10',textOverflow:'ellipsis',overflow:'hidden',whiteSpace:'nowrap'}} title={draft.title||''} defaultValue={draft.title} placeholder="Untitled" onBlur={function(e){app.updateDraft(app.projId,draft.id,{title:e.target.value});}}/>;
+    if(col==='status'){var si=STATUSES[draft.status]||STATUSES.first_draft;return(
+<div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'4px 10px',borderRadius:12,background:si.color+'18'}}>
+  <StatusDotWithArchive draft={draft} app={app} showLabel={false} dotSize={12}/>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,color:si.color,fontWeight:500,whiteSpace:'nowrap'}}>{si.label}</span>
+</div>
+    );}
+    if(col==='wordCount')return <span style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38'}}>{draft.wordCount||0}</span>;
+    if(col==='synopsis')return <input className="tbl-inp" defaultValue={draft.synopsis} placeholder="No synopsis…" onBlur={function(e){app.updateDraft(app.projId,draft.id,{synopsis:e.target.value});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',fontStyle:draft.synopsis?'normal':'italic',opacity:draft.synopsis?1:.75}}/>;
+    if(col==='strandTags'){var ts2=[];Object.keys(tblProjStrands).forEach(function(c){(tblProjStrands[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id)){var tpl=tblProjTemplates.find(function(t){return t.name===c||t.id===st.templateId;});ts2.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));}});});return(
+<div style={{display:'flex',alignItems:'center',gap:-4,overflow:'hidden'}}>
+  {ts2.slice(0,4).map(function(st,i){return(
+<div key={st.id} title={st.name} style={{width:24,height:24,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-6:0,boxSizing:'border-box',cursor:'default'}}
+  onMouseEnter={function(e){var tt=document.getElementById('woven-tt');if(tt){var r=e.currentTarget.getBoundingClientRect();tt.textContent=st.name;tt.style.display='block';tt.style.left=(r.left+r.width/2)+'px';tt.style.top=(r.bottom+6)+'px';}}}
+  onMouseLeave={function(){var tt=document.getElementById('woven-tt');if(tt)tt.style.display='none';}}>
+  {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:8,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
+</div>
+  );})}
+  {ts2.length>4&&<span style={{marginLeft:2,fontSize:11,color:'#7A5A38'}}>+{ts2.length-4}</span>}
+</div>
+    );}
     if(col==='pov'){var projStrands=app.allStrands[app.projId]||{};var taggedStrands=[];Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id))taggedStrands.push(st);});});return(
 <select style={{background:'transparent',border:'none',padding:0,fontSize:12,color:'var(--mid)',width:90}} value={draft.pov||''} onChange={function(e){app.updateDraft(app.projId,draft.id,{pov:e.target.value});}}>
   <option value="">—</option>
   {taggedStrands.map(function(st){return <option key={st.id} value={st.id}>{st.name}</option>;})}
 </select>
     );}
-    if(col.startsWith('cf_')){var fid=col.slice(3);return <input className="tbl-inp syn" defaultValue={draft.customFields&&draft.customFields[fid]?draft.customFields[fid]:''} placeholder="—" onBlur={function(e){var cf=Object.assign({},draft.customFields||{});cf[fid]=e.target.value;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{width:90}}/>;}
+    if(col.startsWith('cf_')){var fid=col.slice(3);var cfVal=draft.customFields&&draft.customFields[fid]?draft.customFields[fid]:'';return <input className="tbl-inp" defaultValue={cfVal} placeholder="—" onBlur={function(e){var cf=Object.assign({},draft.customFields||{});cf[fid]=e.target.value;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',fontStyle:cfVal?'normal':'italic',opacity:cfVal?1:.75}}/>;}
     return null;
   }
   function renderRow(draft,label,isNested,parentIdx,childIdx,hasChildren,isExpanded){return(
@@ -1903,27 +1797,33 @@ function TableView({app}){
     </div>
   </td>
   {visCols.map(function(col){return <td key={col}>{renderCell(col,draft)}</td>;})}
-  <td><button className="card-open" onClick={function(){app.openDraft(draft.id);}}>Draft</button></td>
+  <td><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
+    <span className="material-symbols-outlined" style={{fontSize:20}}>arrow_forward</span>
+  </button></td>
 </tr>
   );}
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
-  <div className="table-wrap dot-grid" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto'}}>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} hideStructure={true} searchQ={searchQ} onSearch={setSearchQ}/>
+  <div className="table-wrap" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto',padding:20}}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>
   <table className="wt">
     <thead>
-      <tr>
-        <th style={{width:32}}/>
-        <th style={{width:48}}>#</th>
-        {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});return(
-<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160}} className="resizable">
+      <tr style={{background:'#E2D0B8'}}>
+        <th style={{width:28,background:'#E2D0B8'}}/>
+        <th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>
+        {visCols.map(function(col,ci){var av=allAvailCols.find(function(c){return c.id===col;});return(
+<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600,cursor:'grab',userSelect:'none'}} className="resizable"
+  draggable={true}
+  onDragStart={function(e){e.dataTransfer.setData('colIdx',''+ci);}}
+  onDragOver={function(e){e.preventDefault();}}
+  onDrop={function(e){e.preventDefault();var from=parseInt(e.dataTransfer.getData('colIdx'),10);if(isNaN(from)||from===ci)return;var nc=visCols.slice();var item=nc.splice(from,1)[0];nc.splice(ci,0,item);setVisCols(nc);try{localStorage.setItem(projKey,JSON.stringify(nc));}catch(e){}}} >
   {av?av.label:col}
-  <div className="col-resize-handle" onMouseDown={function(e){startResize(col,e);}}/>
+  <div className="col-resize-handle" onMouseDown={function(e){e.stopPropagation();startResize(col,e);}}/>
 </th>
         );})}
-        <th style={{width:54}}>
+        <th style={{width:46,background:'#E2D0B8'}}>
           <button ref={colRef} className="btn-icon" style={{padding:2,color:'var(--mid)'}} onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setColPos({top:r.bottom+4,right:window.innerWidth-r.right});setColOpen(!colOpen);}} title="Edit columns">
             <span className="mi" style={{fontSize:18}}>settings</span>
           </button>
@@ -1943,7 +1843,7 @@ function TableView({app}){
     </tbody>
   </table>
   <div style={{padding:'9px 12px'}}><button className="btn btn-ghost btn-sm" onClick={addDraft}>+ Add draft</button></div>
-  <div style={{padding:'0 16px'}}><LooseThreadsSection threads={ltDrafts} app={app} view="table"/></div>
+
 </div>
     )}
   </div>
@@ -1960,195 +1860,16 @@ function TableView({app}){
   );})}
 </div>
   )}
-  <BindPanel app={app} open={bindOpen} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
+  <BindDrawer app={app} open={bindOpen} variant="overlay" topOffset={54} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
 </div>
   );
 }
 
 
-// ── AddFieldInline ──
-function AddFieldInline({onAdd}){
-  var ss=useState(false);var show=ss[0];var setShow=ss[1];
-  var sv=useState('');var val=sv[0];var setVal=sv[1];
-  var st=useState('short_text');var fieldType=st[0];var setFieldType=st[1];
-  if(!show)return(
-<button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={function(){setShow(true);}}>
-  <span className="mi" style={{fontSize:14}}>add</span> Add field
-</button>
-  );
-  return(
-<div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
-  <div style={{display:'flex',gap:6}}>
-    <input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} placeholder="Field name" style={{flex:1,fontSize:13}} onKeyDown={function(e){if(e.key==='Enter'&&val.trim()){onAdd(val,fieldType);setVal('');setShow(false);}if(e.key==='Escape'){setShow(false);setVal('');}}}/>
-    <select value={fieldType} onChange={function(e){setFieldType(e.target.value);}} style={{fontSize:12,width:110}}>
-      {FIELD_TYPES.map(function(ft){return <option key={ft.id} value={ft.id}>{ft.label}</option>;})}
-    </select>
-  </div>
-  <div style={{display:'flex',gap:6}}>
-    <button className="btn btn-primary btn-sm" style={{flex:1,justifyContent:'center'}} onClick={function(){if(val.trim()){onAdd(val,fieldType);setVal('');setShow(false);}}}>Add field</button>
-    <button className="btn btn-ghost btn-sm" onClick={function(){setShow(false);setVal('');}}>Cancel</button>
-  </div>
-</div>
-  );
-}
+// AddFieldInline, PropertiesDrawer, EditorStrandsPanel, StrandDetailDrawer, and
+// VersionHistoryPanel now live in ./SharedUI, ./PropertiesDrawer, ./StrandsDrawer, ./VersionsDrawer
 
-// ── Editor ──
-function PropertiesDrawer({draft,app,onClose,onOpenStrandDetail}){
-  var s1=useState(false);var advOpen=s1[0];var setAdvOpen=s1[1];
-  var s2=useState(false);var addChipOpen=s2[0];var setAddChipOpen=s2[1];
-  if(!draft)return null;
-  var projStrands=app.allStrands[app.projId]||{};
-  var allStrandsList=[];
-  Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){allStrandsList.push(Object.assign({},st,{collectionName:c}));});});
-  var taggedStrands=allStrandsList.filter(function(st){return (draft.strandTags||[]).includes(st.id);});
-  var untaggedStrands=allStrandsList.filter(function(st){return !(draft.strandTags||[]).includes(st.id);});
-  function update(changes){app.updateDraft(app.projId,draft.id,changes);}
-  function removeStrand(sid){update({strandTags:(draft.strandTags||[]).filter(function(t){return t!==sid;})});}
-  function addStrand(sid){update({strandTags:(draft.strandTags||[]).concat([sid])});setAddChipOpen(false);}
-  var allDrafts=app.allDrafts[app.projId]||[];
-  var parentOptions=allDrafts.filter(function(d){return d.status!=='loose_thread'&&d.id!==draft.id&&!d.parentId;});
-  var project=app.currentProject||{};
-  var draftFieldDefs=project.draftFieldDefs||[];
-  return(
-<div className="editor-drawer">
-  <div className="edrawer-hdr">
-    <span className="edrawer-title">Properties</span>
-    <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-  </div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">Title</span>
-    <input key={draft.id+'-pt'} defaultValue={draft.title||''} placeholder="Untitled draft" onBlur={function(e){update({title:e.target.value});app.updateDraft(app.projId,draft.id,{title:e.target.value,updatedAt:new Date().toISOString()});}}/>
-  </div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">Synopsis</span>
-    <textarea key={draft.id+'-ps'} defaultValue={draft.synopsis} placeholder="Brief synopsis..." rows={3} onBlur={function(e){update({synopsis:e.target.value});}}/>
-  </div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">Thumbnail</span>
-    <div style={{display:'flex',alignItems:'center',gap:10}}>
-      {draft.thumbnail&&<img src={draft.thumbnail} alt="" style={{width:56,height:40,objectFit:'cover',borderRadius:6,flexShrink:0}}/>}
-      <label style={{cursor:'pointer'}}>
-        <span className="btn btn-ghost btn-sm">{draft.thumbnail?'Change image':'Upload image'}</span>
-        <input type="file" accept="image/*" style={{display:'none'}} onChange={function(e){
-          var file=e.target.files&&e.target.files[0];
-          if(!file)return;
-          if(file.size>2*1024*1024){alert('Image must be under 2 MB.');return;}
-          uploadImage(file).then(function(url){if(url)update({thumbnail:url});});
-        }}/>
-      </label>
-      {draft.thumbnail&&<button className="btn-icon" onClick={function(){update({thumbnail:null});}}><span className="mi" style={{fontSize:16}}>delete</span></button>}
-    </div>
-  </div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">Status</span>
-    <div style={{display:'flex',alignItems:'center',gap:10}}>
-      <StatusDotWithArchive draft={draft} app={app} showLabel={true}/>
-    </div>
-  </div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">Nested under</span>
-    <select value={draft.parentId||''} onChange={function(e){update({parentId:e.target.value||null});}}>
-      <option value="">None (top level)</option>
-      {parentOptions.map(function(d){return <option key={d.id} value={d.id}>{d.title||'Untitled'}</option>;})}
-    </select>
-  </div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">Tagged Strands</span>
-    <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:8}}>
-      {taggedStrands.map(function(st){var bg=st.color+'26';return(
-<span key={st.id} className="chip" style={{background:bg,color:st.color,borderColor:st.color+'55',borderWidth:1,borderStyle:'solid',cursor:'pointer'}} onClick={function(){onOpenStrandDetail&&onOpenStrandDetail(st.id);}}>
-  {st.name}
-  <span style={{marginLeft:3,opacity:.6,fontSize:11}} onClick={function(e){e.stopPropagation();removeStrand(st.id);}}>×</span>
-</span>
-      );})}
-      <div style={{position:'relative'}}>
-        <span className="chip" style={{background:'var(--bg3)',color:'var(--mid)',borderColor:'var(--border)',borderWidth:1,borderStyle:'solid',cursor:'pointer'}} onClick={function(){setAddChipOpen(!addChipOpen);}}>
-          <span className="mi" style={{fontSize:14}}>add</span>
-        </span>
-        {addChipOpen&&untaggedStrands.length>0&&(
-<div style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:50,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:'var(--r)',boxShadow:'0 4px 16px rgba(0,0,0,.4)',minWidth:180,maxHeight:200,overflowY:'auto'}}>
-  {untaggedStrands.map(function(st){return(
-<div key={st.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',cursor:'pointer',fontSize:13}} onClick={function(){addStrand(st.id);}} onMouseOver={function(e){e.currentTarget.style.background='var(--bg3)';}} onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
-  <div style={{width:8,height:8,borderRadius:'50%',background:st.color}}/>
-  <span>{st.name}</span>
-  <span style={{fontSize:11,color:'var(--mid)',marginLeft:'auto'}}>{st.collectionName}</span>
-</div>
-  );})}
-  {untaggedStrands.length===0&&<div style={{padding:'8px 10px',fontSize:13,color:'var(--mid)'}}>All strands tagged.</div>}
-</div>
-        )}
-        {addChipOpen&&untaggedStrands.length===0&&<div/>}
-      </div>
-    </div>
-    {allStrandsList.length===0&&<span style={{fontSize:12,color:'var(--mid)'}}>No strands yet. Go to the Strands view.</span>}
-  </div>
-  <div className="adv-toggle" onClick={function(){setAdvOpen(!advOpen);}}>
-    <span className="mi" style={{fontSize:16}}>{advOpen?'expand_less':'expand_more'}</span>
-    <span>Advanced</span>
-  </div>
-  {advOpen&&(
-<div>
-  <div className="edrawer-section">
-    <span className="edrawer-lbl">POV</span>
-    <select value={draft.pov||''} onChange={function(e){update({pov:e.target.value});}}>
-      <option value="">None</option>
-      {taggedStrands.map(function(st){return <option key={st.id} value={st.id}>{st.name}</option>;})}
-    </select>
-    {taggedStrands.length===0&&<div style={{fontSize:12,color:'var(--mid)',marginTop:4}}>Tag strands above to set POV.</div>}
-  </div>
-  {draftFieldDefs.map(function(f){var val=draft.customFields&&draft.customFields[f.id]?draft.customFields[f.id]:'';return(
-<div key={f.id} className="edrawer-section">
-  <span className="edrawer-lbl">{f.label}</span>
-  <input defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} onBlur={function(e){var cf=Object.assign({},draft.customFields||{});cf[f.id]=e.target.value;update({customFields:cf});}}/>
-</div>
-  );})}
-  <div className="edrawer-section">
-    <span className="edrawer-lbl" style={{marginBottom:8}}>Custom draft fields</span>
-    <AddFieldInline onAdd={function(name,type){app.addDraftFieldDef(app.projId,{id:genId(),label:name.trim(),type:type||'short_text'});}}/>
-  </div>
-</div>
-  )}
-</div>
-  );
-}
-
-function StrandDetailDrawer({strandId,app,onClose}){
-  var pid=app.projId;
-  var projStrands=app.allStrands[pid]||{};
-  var strand=null;var collName='';
-  Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){if(st.id===strandId){strand=st;collName=c;}});});
-  if(!strand)return null;
-  var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.id===strand.templateId;})||null;
-  var fields=tpl?tpl.fields:[];
-  function updateField(fieldId,val){
-    var nf=Object.assign({},strand.fields||{});nf[fieldId]=val;
-    app.updateStrand(pid,collName,strandId,{fields:nf});
-  }
-  return(
-<div className="editor-drawer">
-  <div className="edrawer-hdr">
-    <div style={{display:'flex',alignItems:'center',gap:8}}>
-      <div style={{width:24,height:24,borderRadius:'50%',background:strand.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600,color:'#fff',flexShrink:0}}>{initials(strand.name)}</div>
-      <input style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,background:'transparent',border:'none',flex:1,padding:0,outline:'none',color:'var(--text)'}} defaultValue={strand.name} placeholder="Strand name" onBlur={function(e){if(e.target.value.trim())app.updateStrand(pid,collName,selectedStrandId,{name:e.target.value.trim()});}} onFocus={function(e){e.target.style.borderBottom='1px solid var(--indigo)';}} onBlurCapture={function(e){e.target.style.borderBottom='none';}}/>
-    </div>
-    <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-  </div>
-  <div style={{padding:'12px 14px',flex:1,overflowY:'auto'}}>
-    <div style={{fontSize:11,color:'var(--mid)',marginBottom:12,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}>{collName}</div>
-    {fields.map(function(f){var val=(strand.fields&&strand.fields[f.id])||'';return(
-<div key={f.id} style={{marginBottom:12}}>
-  <span className="edrawer-lbl">{f.label}</span>
-  {f.type==='long_text'
-    ?<textarea defaultValue={val} rows={3} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
-    :<input defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
-  }
-</div>
-    );})}
-  </div>
-</div>
-  );
-}
-
+// ── StrandsDropdown ──
 function StrandsDropdown({allStrandsList,onSelect,onCreateNew}){
   return(
 <div className="float-strand-drop" style={{display:'flex',flexDirection:'column'}}>
@@ -2166,127 +1887,6 @@ function StrandsDropdown({allStrandsList,onSelect,onCreateNew}){
     <span className="mi" style={{fontSize:16}}>add</span>New strand...
   </div>
 </div>
-  );
-}
-
-function EditorStrandsPanel({draft,app,onClose,onOpenStrand}){
-  var projStrands=app.allStrands[app.projId]||{};
-  var taggedIds=draft.strandTags||[];
-  var tagged=[];var untagged=[];
-  Object.keys(projStrands).forEach(function(c){
-    (projStrands[c]||[]).forEach(function(st){
-      if(taggedIds.includes(st.id)) tagged.push(Object.assign({},st,{collectionName:c}));
-      else untagged.push(Object.assign({},st,{collectionName:c}));
-    });
-  });
-  var ssi=useState(null);var selectedStrandId=ssi[0];var setSelectedStrandId=ssi[1];
-  var ssa=useState(false);var showAvatarEdit=ssa[0];var setShowAvatarEdit=ssa[1];
-  // If a strand is selected, show its detail inline
-  if(selectedStrandId){
-    var pid=app.projId;
-    var projS=app.allStrands[pid]||{};
-    var strand=null;var collName='';
-    Object.keys(projS).forEach(function(c){(projS[c]||[]).forEach(function(st){if(st.id===selectedStrandId){strand=st;collName=c;}});});
-    if(!strand){setSelectedStrandId(null);return null;}
-    var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.id===strand.templateId;})||(app.allTemplates[pid]||[]).find(function(t){return t.name===collName;})||null;
-    var fields=tpl&&tpl.fields&&tpl.fields.length>0?tpl.fields:defaultFields(collName);
-    function updateField(fid,val){var nf=Object.assign({},strand.fields||{});nf[fid]=val;app.updateStrand(pid,collName,selectedStrandId,{fields:nf});}
-    return(
-<div className="editor-drawer">
-  <div className="edrawer-hdr">
-    <div style={{display:'flex',alignItems:'center',gap:6}}>
-      <button className="btn-icon" onClick={function(){setSelectedStrandId(null);setShowAvatarEdit(false);}}><span className="mi" style={{fontSize:18}}>arrow_back</span></button>
-      <div style={{width:24,height:24,borderRadius:'50%',background:strand.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:600,color:'#fff',flexShrink:0,cursor:'pointer',overflow:'hidden'}} onClick={function(){setShowAvatarEdit(true);}}>
-        {strand.image?<img src={strand.image} alt={strand.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:strand.emoji?<span style={{fontSize:14}}>{strand.emoji}</span>:initials(strand.name)}
-      </div>
-      <span className="edrawer-title" spellCheck={false}>{strand.name}</span>
-    </div>
-    <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-  </div>
-  <div style={{padding:'12px 14px',flex:1,overflowY:'auto'}}>
-    <div style={{fontSize:11,color:'var(--mid)',marginBottom:12,textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}>{collName}</div>
-    {fields.map(function(f){var val=(strand.fields&&strand.fields[f.id])||'';return(
-<div key={f.id} style={{marginBottom:12}}>
-  <span className="edrawer-lbl">{f.label}</span>
-  {f.type==='long_text'
-    ?<textarea defaultValue={val} rows={3} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
-    :<input defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(f.id,e.target.value);}} style={{fontSize:13}}/>
-  }
-</div>
-    );})}
-  </div>
-  {showAvatarEdit&&<AvatarEditModal strand={strand} onClose={function(){setShowAvatarEdit(false);}} onSave={function(updates){app.updateStrand(pid,collName,selectedStrandId,updates);setShowAvatarEdit(false);}}/>}
-</div>
-    );
-  }
-  return(
-<div className="editor-drawer">
-  <div className="edrawer-hdr">
-    <span className="edrawer-title">Strands</span>
-    <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-  </div>
-  {tagged.length===0&&(
-<div style={{padding:'12px 14px',fontSize:13,color:'var(--mid)'}}>
-  No strands tagged yet. Tap a strand below to add it to this draft.
-</div>
-  )}
-  {tagged.map(function(st){return(
-<div key={st.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--border)',cursor:'pointer'}} onClick={function(){setSelectedStrandId(st.id);}}>
-  <div style={{width:28,height:28,borderRadius:'50%',background:st.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#fff',flexShrink:0,overflow:'hidden'}}>
-    {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:16}}>{st.emoji}</span>:initials(st.name)}
-  </div>
-  <div style={{flex:1,minWidth:0}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>{st.name}</div>
-    <div style={{fontSize:11,color:'var(--mid)'}}>{st.collectionName}</div>
-  </div>
-  <span className="mi" style={{fontSize:16,color:'var(--border)'}}>chevron_right</span>
-</div>
-  );})}
-  {untagged.length>0&&(
-<div>
-  <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.06em',borderTop:'1px solid var(--border)'}}>Add strands</div>
-  {untagged.map(function(st){return(
-<div key={st.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderBottom:'1px solid var(--border)',cursor:'pointer'}} onClick={function(){var tags=draft.strandTags||[];if(!tags.includes(st.id))app.updateDraft(app.projId,draft.id,{strandTags:tags.concat([st.id])});}}>
-  <div style={{width:28,height:28,borderRadius:'50%',background:st.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#fff',flexShrink:0,overflow:'hidden'}}>
-    {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:16}}>{st.emoji}</span>:initials(st.name)}
-  </div>
-  <div style={{flex:1,minWidth:0}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:14,color:'var(--mid)'}}>{st.name}</div>
-    <div style={{fontSize:11,color:'var(--placeholder)'}}>{st.collectionName}</div>
-  </div>
-  <span className="mi" style={{fontSize:16,color:'var(--teal)'}}>add_circle_outline</span>
-</div>
-  );})}
-</div>
-  )}
-</div>
-  );
-}
-
-
-
-// ── VersionHistoryPanel ──
-function VersionHistoryPanel({draftId,onRestore,onClose}){
-  var snapshots=loadSnapshots(draftId);
-  var sp=useState(null);var preview=sp[0];var setPreview=sp[1];
-  return(
-<Panel open={true} onClose={onClose} title="Version History">
-  <div>
-    {snapshots.length===0&&<div style={{padding:16,fontSize:13,color:'var(--mid)',textAlign:'center'}}>No history yet — saves hourly while you write.</div>}
-    {snapshots.map(function(snap){var labelMap={'session-end':'Session end','auto':'Autosave'};var isStatus=snap.label&&snap.label.startsWith('status:');var labelText=isStatus?'Status change':labelMap[snap.label]||snap.label;var isActive=preview&&preview.id===snap.id;return(
-<div key={snap.id} style={{borderBottom:'1px solid var(--border)'}}>
-  <div onClick={function(){setPreview(isActive?null:snap);}} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 0',cursor:'pointer'}}>
-    <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{formatSnapshotTime(snap.ts)}</div><div style={{fontSize:11,color:'var(--mid)'}}>{labelText} · {snap.wordCount||0}w</div></div>
-    <span className="mi" style={{fontSize:16,color:isActive?'var(--indigo)':'var(--mid)',transform:isActive?'rotate(90deg)':'none',transition:'transform .15s'}}>chevron_right</span>
-  </div>
-  {isActive&&(<div style={{paddingBottom:12}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:15,lineHeight:1.8,color:'var(--body-text)',maxHeight:200,overflowY:'auto',padding:'8px 0',borderTop:'1px solid var(--border)',marginBottom:8,borderBottom:'2px solid var(--bg3)',WebkitMaskImage:'linear-gradient(to bottom, black 80%, transparent 100%)',maskImage:'linear-gradient(to bottom, black 80%, transparent 100%)'}} dangerouslySetInnerHTML={{__html:snap.body}}/>
-    <button className="btn btn-primary btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={function(){if(window.confirm('Restore this version?'))onRestore(snap.body);}}>Restore this version</button>
-  </div>)}
-</div>
-    );})}
-  </div>
-</Panel>
   );
 }
 
@@ -2403,348 +2003,7 @@ function ShareExportDropdown({pos,draft,app,editorRef,flushSave,onClose}){
   );
 }
 
-function EditorView({app}){
-  var pid=app.projId;var did=app.draftId;
-  var draft=(app.allDrafts[pid]||[]).find(function(d){return d.id===did;})||null;
-  var mode=(app.profile&&app.profile.editorMode)||'rt';
-  var sp=useState(false);var showProps=sp[0];var setShowProps=sp[1];
-  var ssd=useState(null);var strandDetailId=ssd[0];var setStrandDetailId=ssd[1];
-  var sstr=useState(false);var showStrands=sstr[0];var setShowStrands=sstr[1];
-  var swc=useState(draft?(draft.wordCount||0):0);var wc=swc[0];var setWc=swc[1];
-  var sz=useState(100);var zoom=sz[0];var setZoom=sz[1];
-  var sft=useState(null);var floatToolbar=sft[0];var setFloatToolbar=sft[1];
-  var ssd2=useState(false);var showStrandDrop=ssd2[0];var setShowStrandDrop=ssd2[1];
-  var editorRef=useRef(null);var saveTimer=useRef(null);var lastDraftId=useRef(null);var sessionStartWc=useRef(0);
-  var sst=useState('saved');var saveState=sst[0];var setSaveState=sst[1];
-  var svh=useState(false);var showHistory=svh[0];var setShowHistory=svh[1];
-  function handleRestoreVersion(body){if(editorRef.current)editorRef.current.innerHTML=body;setShowHistory(false);setSaveState('saving');scheduleSave(body,countWords(body));}
-  var sst=useState('saved');var saveState=sst[0];var setSaveState=sst[1];
-  var isMobile=useIsMobile();
-  useEffect(function(){if(!draft)return;if(lastDraftId.current===draft.id)return;lastDraftId.current=draft.id;sessionStartWc.current=draft.wordCount||0;setWc(draft.wordCount||0);if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';},[did]);
-  // Only reset editor when mode changes (not on re-renders)
-  var lastMode=useRef(mode);
-  useEffect(function(){
-    if(!draft)return;
-    if(lastMode.current===mode)return;
-    lastMode.current=mode;
-    if(mode==='rt'&&editorRef.current)editorRef.current.innerHTML=draft.body||'';
-  },[mode]);
-  function flushSave(){
-    if(!editorRef.current)return;
-    if(saveTimer.current)clearTimeout(saveTimer.current);
-    var html=editorRef.current.innerHTML;
-    var newWc=countWords(editorRef.current.innerText||'');
-    app.updateDraft(pid,did,{body:html,wordCount:newWc,updatedAt:new Date().toISOString()});
-    var added=Math.max(0,newWc-sessionStartWc.current);
-    if(added>0&&added<500){app.recordSession(pid,added);sessionStartWc.current=newWc;}
-  }
-  function scheduleSave(html,newWc){
-    setSaveState('saving');
-    if(saveTimer.current)clearTimeout(saveTimer.current);
-    saveTimer.current=setTimeout(function(){
-      app.updateDraft(pid,did,{body:html,wordCount:newWc,updatedAt:new Date().toISOString()});
-      var added=Math.max(0,newWc-sessionStartWc.current);
-      if(added>0&&added<500){app.recordSession(pid,added);sessionStartWc.current=newWc;}
-      setSaveState('saved');
-      saveSnapshot(did,html,newWc,'auto');
-    },600);
-  }
-  function flushSave(){if(!editorRef.current)return;if(saveTimer.current)clearTimeout(saveTimer.current);var html=editorRef.current.innerHTML;var wc2=countWords(editorRef.current.innerText||'');app.updateDraft(pid,did,{body:html,wordCount:wc2,updatedAt:new Date().toISOString()});}
-  function handleRTInput(){if(!editorRef.current)return;var text=editorRef.current.innerText||editorRef.current.textContent||'';var newWc=countWords(text);setWc(newWc);scheduleSave(editorRef.current.innerHTML,newWc);}
-  function handlePaste(e){
-    e.preventDefault();
-    var html=e.clipboardData.getData('text/html');
-    if(html){
-      var cleaned=html
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'')
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'')
-        .replace(/(<[a-z][^>]*?)\s+style="[^"]*"/gi,'$1')
-        .replace(/(<[a-z][^>]*?)\s+class="[^"]*"/gi,'$1')
-        .replace(/<font[^>]*>/gi,'').replace(/<\/font>/gi,'')
-        .replace(/<span[^>]*>/gi,'').replace(/<\/span>/gi,'')
-        .replace(/<div[^>]*>/gi,'<p>').replace(/<\/div>/gi,'</p>')
-        .replace(/<!--[\s\S]*?-->/g,'');
-      document.execCommand('insertHTML',false,cleaned);
-      return;
-    }
-    var text=e.clipboardData.getData('text/plain');
-    if(!text)return;
-    var out=text.split('\n\n').map(function(para){
-      return '<p>'+para.split('\n').join('<br>')+'</p>';
-    }).join('');
-    document.execCommand('insertHTML',false,out);
-  }
-  function handleMDChange(e){var newWc=countWords(e.target.value);setWc(newWc);scheduleSave(e.target.value,newWc);}
-  function fmt(cmd,val){if(editorRef.current){editorRef.current.focus();document.execCommand(cmd,false,val||null);}}
-  // Markdown shortcuts: "- " → bullet list, "1. " → numbered list
-  function handleKeyDown(e){
-    if(e.key==='Tab'){e.preventDefault();document.execCommand('insertText',false,'    ');return;}
-    if(e.key!==' ')return;
-    if(!editorRef.current)return;
-    var sel=window.getSelection();
-    if(!sel||!sel.rangeCount)return;
-    var range=sel.getRangeAt(0);
-    var node=range.startContainer;
-    if(node.nodeType!==3)return;
-    // Only trigger at very start of a block (entire text node is just the trigger)
-    var fullText=node.textContent;
-    var offset=range.startOffset;
-    if(offset===1&&fullText==='-'){
-      e.preventDefault();node.textContent='';document.execCommand('insertUnorderedList',false,null);
-    } else if(offset===2&&fullText==='1.'){
-      e.preventDefault();node.textContent='';document.execCommand('insertOrderedList',false,null);
-    }
-  }
-  var sshare=useState(false);var shareOpen=sshare[0];var setShareOpen=sshare[1];
-  var ssc=useState(null);var shareCopied=ssc[0];var setShareCopied=ssc[1];
-  var ssharePos=useState({top:0,left:0});var sharePos=ssharePos[0];var setSharePos=ssharePos[1];
-
-  var shareRef=useRef(null);
-  useEffect(function(){if(!shareOpen)return;function onDown(e){if(shareRef.current&&!shareRef.current.contains(e.target))setShareOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[shareOpen]);
-  function handleSelectionChange(){var sel=window.getSelection();if(!sel||sel.isCollapsed||!sel.rangeCount||!editorRef.current){setFloatToolbar(null);return;}try{var range=sel.getRangeAt(0);if(!editorRef.current.contains(range.commonAncestorContainer)){setFloatToolbar(null);return;}var rect=range.getBoundingClientRect();setFloatToolbar({top:rect.top-46,left:Math.max(4,rect.left+rect.width/2-100)});setShowStrandDrop(false);}catch(e){setFloatToolbar(null);}}
-  useEffect(function(){document.addEventListener('selectionchange',handleSelectionChange);return function(){document.removeEventListener('selectionchange',handleSelectionChange);};},[]);
-  var projStrands=app.allStrands[pid]||{};
-  var allStrandsList=[];
-  Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){allStrandsList.push(Object.assign({},st,{collectionName:c}));});});
-  function tagStrand(st){var sel=window.getSelection();if(sel&&!sel.isCollapsed&&sel.rangeCount>0){var range=sel.getRangeAt(0);var mark=document.createElement('mark');mark.style.background=st.color+'33';mark.style.color=st.color;mark.style.borderRadius='3px';mark.style.padding='0 2px';mark.dataset.strandId=st.id;try{range.surroundContents(mark);}catch(e){}}var tags=draft.strandTags||[];if(!tags.includes(st.id))app.updateDraft(pid,did,{strandTags:tags.concat([st.id])});setShowStrandDrop(false);setFloatToolbar(null);}
-  var sncp=useState(null);var newStrandPending=sncp[0];var setNewStrandPending=sncp[1];
-  function createNewStrand(){
-    var sel=window.getSelection();
-    var selectedText=sel&&!sel.isCollapsed?sel.toString().trim():'';
-    if(sel)sel.removeAllRanges();
-    setNewStrandPending({name:selectedText||''});
-    setShowStrandDrop(false);setFloatToolbar(null);
-  }
-  function confirmCreateStrand(coll,name){
-    var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.name===coll;})||null;
-    var ns={id:genId(),templateId:tpl?tpl.id:'',collectionName:coll,name:name||'New Strand',color:PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};
-    app.addStrand(pid,coll,ns);
-    // Auto-tag the current draft
-    var tags=draft.strandTags||[];
-    if(!tags.includes(ns.id))app.updateDraft(pid,did,{strandTags:tags.concat([ns.id])});
-    setNewStrandPending(null);
-    setStrandDetailId(ns.id);setShowProps(false);
-  }
-  if(!draft){
-    if(app.dataLoading){
-      return(
-<div style={{display:'flex',flexDirection:'column',flex:1,alignItems:'center',justifyContent:'center',gap:12}}>
-  <div style={{width:40,height:40,borderRadius:'50%',border:'3px solid var(--border)',borderTopColor:'var(--indigo)',animation:'spin 0.8s linear infinite'}}/>
-  <div style={{color:'var(--mid)',fontSize:14}}>Loading your draft...</div>
-  <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
-</div>
-      );
-    }
-    return(
-<div style={{display:'flex',flexDirection:'column',flex:1,alignItems:'center',justifyContent:'center'}}>
-  <div style={{color:'var(--mid)',marginBottom:12}}>This draft could not be loaded.</div>
-  <button className="btn btn-ghost" onClick={function(){app.loadProjectData(app.projId);app.setView('cards');}}>Back to sequence</button>
-</div>
-    );
-  }
-  var bodyFontSize=Math.round(19*zoom/100);
-  // Both props and strands can be open simultaneously on wide screens
-  return(
-<div className="editor-layout">
-  <div className="editor-topbar">
-    <div className="editor-topbar-row1">
-      <button className="editor-back" onClick={function(){if(saveTimer.current)clearTimeout(saveTimer.current);if(editorRef.current){var html=editorRef.current.innerHTML;var wc=countWords(editorRef.current.innerText||'');app.updateDraft(pid,did,{body:html,wordCount:wc,updatedAt:new Date().toISOString()});}if(editorRef.current){var _html=editorRef.current.innerHTML;saveSnapshot(did,_html,countWords(editorRef.current.innerText||''),'session-end');}if(app.projId){app.setView('cards');app.setDraftId(null);}else{app.goBack();}}}><span className="mi">arrow_back</span></button>
-      <input key={draft.id+'-et-'+draft.title} className="editor-title-inp" defaultValue={draft.title} placeholder="Untitled draft" onBlur={function(e){app.updateDraft(pid,did,{title:e.target.value,updatedAt:new Date().toISOString()});}}/>
-    </div>
-    <div className="editor-topbar-row2">
-    <button className="btn btn-ghost btn-sm" title="Duplicate as nested draft" onClick={function(){app.duplicateDraft(pid,did);}}>
-      <span className="mi" style={{fontSize:16}}>content_copy</span>
-    </button>
-    <button className="btn btn-ghost btn-sm" style={showProps?{borderColor:'var(--indigo)',color:'var(--indigo)'}:{}} onClick={function(){setShowProps(!showProps);setStrandDetailId(null);}}>Properties</button>
-    <button className="btn btn-ghost btn-sm" onClick={function(){setShowHistory(true);}} title="Version history"><span className="mi" style={{fontSize:16}}>history</span></button>
-    <button className="btn btn-ghost btn-sm" style={showStrands?{borderColor:'var(--indigo)',color:'var(--indigo)'}:{}} onClick={function(){setShowStrands(!showStrands);setStrandDetailId(null);}}>Strands</button>
-    <div ref={shareRef} style={{position:'relative'}}>
-      <button className="btn btn-ghost btn-sm" onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setSharePos({top:r.bottom+4,left:r.right-280});setShareOpen(!shareOpen);}}>
-        Share<span className="mi" style={{fontSize:14,marginLeft:2}}>arrow_drop_down</span>
-      </button>
-      {shareOpen&&(
-<ShareExportDropdown
-  pos={sharePos}
-  draft={draft}
-  app={app}
-  editorRef={editorRef}
-  flushSave={flushSave}
-  onClose={function(){setShareOpen(false);}}
-/>
-      )}
-    </div>
-    </div>
-  </div>
-  <div className="editor-main">
-    <div className="editor-center">
-      {mode==='rt'?(
-<div ref={editorRef} className="editor-body" contentEditable={true} suppressContentEditableWarning={true} data-placeholder="Start writing..." style={{fontSize:bodyFontSize,lineHeight:1.9}} onInput={handleRTInput} onKeyDown={handleKeyDown} onPaste={handlePaste} onFocus={function(){if(editorRef.current)editorRef.current.style.outline='none';}} onTouchEnd={function(e){e.currentTarget.focus();}}/>
-      ):(
-<textarea className="editor-md" defaultValue={stripHtml(draft.body||'')} onChange={handleMDChange} placeholder="Write in Markdown..."/>
-      )}
-    </div>
-    {showProps&&!strandDetailId&&<PropertiesDrawer draft={draft} app={app} onClose={function(){setShowProps(false);}} onOpenStrandDetail={function(sid){setStrandDetailId(sid);}}/>}
-    {strandDetailId&&<StrandDetailDrawer strandId={strandDetailId} app={app} onClose={function(){setStrandDetailId(null);}}/>}
-    {showStrands&&!strandDetailId&&<EditorStrandsPanel draft={draft} app={app} onClose={function(){setShowStrands(false);}} onOpenStrand={function(sid){setStrandDetailId(sid);}}/>}
-  </div>
-  <div className="editor-bottombar">
-    <div style={{display:'flex',alignItems:'center',gap:10}}>
-      <span>{wc} words</span>
-      <span style={{display:'flex',alignItems:'center',gap:4,opacity:.7,transition:'opacity .3s'}}>
-        {saveState==='saving'
-          ?<><span style={{width:6,height:6,borderRadius:'50%',background:'var(--indigoL)',display:'inline-block',animation:'pulse 1s infinite'}}/>
-            <span style={{fontSize:11}}>Saving...</span></>
-          :<><span style={{width:6,height:6,borderRadius:'50%',background:'var(--teal)',display:'inline-block'}}/>
-            <span style={{fontSize:11}}>Saved</span></>
-        }
-      </span>
-    </div>
-    <div style={{display:'flex',alignItems:'center',gap:8}}>
-      <span style={{fontSize:12}}>{zoom}%</span>
-      <input type="range" min={70} max={150} step={10} value={zoom} onChange={function(e){setZoom(parseInt(e.target.value,10));}} style={{width:72}}/>
-    </div>
-  </div>
-  {floatToolbar&&mode==='rt'&&(
-<div className="float-toolbar" style={{top:floatToolbar.top,left:floatToolbar.left}}>
-  <button className="float-btn" title="Bold" onMouseDown={function(e){e.preventDefault();fmt('bold');}}>B</button>
-  <button className="float-btn" title="Italic" onMouseDown={function(e){e.preventDefault();fmt('italic');}} style={{fontStyle:'italic'}}>I</button>
-  <button className="float-btn" title="Underline" onMouseDown={function(e){e.preventDefault();fmt('underline');}} style={{textDecoration:'underline'}}>U</button>
-  <div className="float-sep"/>
-  <button className="float-btn" onMouseDown={function(e){e.preventDefault();fmt('formatBlock','h1');}}>H1</button>
-  <button className="float-btn" onMouseDown={function(e){e.preventDefault();fmt('formatBlock','h2');}}>H2</button>
-  <button className="float-btn mi-btn" title="Link" onMouseDown={function(e){e.preventDefault();var url=prompt('Enter URL:');if(url)fmt('createLink',url);}}>link</button>
-  <div className="float-sep"/>
-  <button className="float-btn mi-btn" title="Bullet list" onMouseDown={function(e){e.preventDefault();document.execCommand('insertUnorderedList',false,null);}}>format_list_bulleted</button>
-  <button className="float-btn mi-btn" title="Numbered list" onMouseDown={function(e){e.preventDefault();document.execCommand('insertOrderedList',false,null);}}>format_list_numbered</button>
-  <div className="float-sep"/>
-  <div style={{position:'relative'}}>
-    <button className="float-btn mi-btn" title="Tag strand" onMouseDown={function(e){e.preventDefault();setShowStrandDrop(!showStrandDrop);}}>share</button>
-    {showStrandDrop&&<StrandsDropdown allStrandsList={allStrandsList} onSelect={tagStrand} onCreateNew={createNewStrand}/>}
-  </div>
-</div>
-  )}
-  {showHistory&&<VersionHistoryPanel draftId={did} onClose={function(){setShowHistory(false);}} onRestore={handleRestoreVersion}/>}
-  {newStrandPending&&(
-<div className="modal-overlay">
-  <div className="modal-backdrop" onClick={function(){setNewStrandPending(null);}}/>
-  <div className="modal-box" style={{maxWidth:360}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600,marginBottom:16}}>Add to which collection?</div>
-    <div style={{marginBottom:14}}>
-      <span className="sect-lbl">Name</span>
-      <input defaultValue={newStrandPending.name} placeholder="Strand name" id="new-strand-name-input" autoFocus style={{marginBottom:8}}/>
-    </div>
-    <div style={{display:'flex',flexDirection:'column',gap:6}}>
-      {Object.keys(app.allStrands[pid]||{}).map(function(coll){return(
-<button key={coll} className="btn btn-ghost" style={{justifyContent:'flex-start',gap:10}} onClick={function(){var nameEl=document.getElementById('new-strand-name-input');confirmCreateStrand(coll,nameEl?nameEl.value:newStrandPending.name);}}>
-  <span className="mi" style={{fontSize:16,color:'var(--indigo)'}}>add</span>{coll}
-</button>
-      );})}
-    </div>
-    <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center',marginTop:12}} onClick={function(){setNewStrandPending(null);}}>Cancel</button>
-  </div>
-</div>
-  )}
-</div>
-  );
-}
-
-
-
-// ── CustomColorPicker ──
-var SYSTEM_COLORS=['#c45e28','#e8a030','#2f9966','#2f76e0','#ce2fe0','#e02f79','#64e02f','#2fe07f'];
-function CustomColorPicker({color,onSelect}){
-  var sc=useState(false);var showCustom=sc[0];var setShowCustom=sc[1];
-  var sh=useState('');var hexVal=sh[0];var setHexVal=sh[1];
-  return(
-<div>
-  <div style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
-    {SYSTEM_COLORS.map(function(c){return(<div key={c} onClick={function(){onSelect(c);}} style={{width:28,height:28,borderRadius:'50%',background:c,cursor:'pointer',transform:color===c?'scale(1.2)':'scale(1)',boxShadow:color===c?'0 0 0 2px var(--bg1),0 0 0 4px '+c:'none',flexShrink:0,transition:'transform .15s'}}/>);})}
-    <div style={{width:28,height:28,borderRadius:'50%',background:'var(--bg2)',border:'2px dashed var(--border)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}} onClick={function(){setShowCustom(!showCustom);}}>
-      <span className="mi" style={{fontSize:14,color:'var(--mid)'}}>add</span>
-    </div>
-  </div>
-  {showCustom&&(<div style={{marginTop:10,display:'flex',gap:6,alignItems:'center'}}>
-    <input value={hexVal} onChange={function(e){setHexVal(e.target.value);}} placeholder="#3a7bd5" style={{flex:1,fontSize:13,fontFamily:'var(--mono)'}}/>
-    <div style={{width:24,height:24,borderRadius:'50%',background:hexVal.match(/^#[0-9a-f]{6}$/i)?hexVal:'var(--bg3)',border:'1px solid var(--border)'}}/>
-    <button className="btn btn-primary btn-sm" onClick={function(){if(hexVal.match(/^#[0-9a-f]{6}$/i)){onSelect(hexVal);setShowCustom(false);}}}>Apply</button>
-  </div>)}
-</div>
-  );
-}
-// ── EmojiPicker ──
-var EMOJI_ROW=['👩','👨','🧑','🧙','🦸','🐉','👑','🔮','⚔️','🌲','🔥','💀','🌙','⭐','❄️','🌊','🗡️','📖','🎭','🌹'];
-function EmojiPicker({emoji,onSelect}){
-  var ss=useState(false);var showAll=ss[0];var setShowAll=ss[1];
-  var sq=useState('');var query=sq[0];var setQuery=sq[1];
-  var ALL=['👩','👨','🧑','👧','👦','🧓','👴','👵','🧙','🧚','🧛','🧜','🧝','🦸','🦹','🧟','👮','🤴','👸','🐉','🐺','🦅','⚔️','🗡️','🏰','🌲','🔥','💀','👑','🗺️','📜','🌙','⭐','🔮','💎','🌊','🌹','🕯️','⚡','🛡️','🗝️','🎭','📖','🌿','❄️'];
-  return(
-<div>
-  <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'nowrap'}}>
-    {EMOJI_ROW.map(function(em){return(<span key={em} onClick={function(){onSelect(em===emoji?null:em);}} style={{width:30,height:30,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer',background:emoji===em?'var(--bg4)':'var(--bg2)',border:emoji===em?'1px solid var(--indigo)':'1px solid var(--border)',flexShrink:0}}>{em}</span>);})}
-    <span onClick={function(){setShowAll(!showAll);}} style={{width:30,height:30,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,cursor:'pointer',background:'var(--bg2)',border:'1px solid var(--border)',color:'var(--mid)',flexShrink:0}}>{showAll?'↑':'···'}</span>
-    {emoji&&<button className="btn-icon" style={{padding:2}} onClick={function(){onSelect(null);}}><span className="mi" style={{fontSize:14}}>close</span></button>}
-  </div>
-  {showAll&&(<div style={{marginTop:8,background:'var(--bg2)',borderRadius:'var(--r)',padding:8}}>
-    <input value={query} onChange={function(e){setQuery(e.target.value);}} placeholder="Type any emoji..." style={{marginBottom:8,fontSize:18}} autoFocus/>
-    <div style={{display:'flex',flexWrap:'wrap',gap:3,maxHeight:100,overflowY:'auto'}}>
-      {(query?[]:ALL).map(function(em){return(<span key={em} onClick={function(){onSelect(em);setShowAll(false);}} style={{width:30,height:30,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer',background:emoji===em?'var(--bg4)':'transparent'}}>{em}</span>);})}
-      {query&&<span style={{fontSize:20,cursor:'pointer',padding:4}} onClick={function(){onSelect(query);setShowAll(false);}}>{query}</span>}
-    </div>
-  </div>)}
-</div>
-  );
-}
-
-// ── AvatarEditModal ──
-var QUICK_EMOJIS=['👩','👨','🧑','👧','👦','🧓','👴','👵','🧙','🧚','🧛','🧜','🧝','🦸','🦹','🧟','👮','🕵️','💂','🧑‍⚕️','🧑‍🎓','🧑‍🏫','🧑‍🌾','🧑‍🍳','🧑‍🔧','🧑‍🎨','🧑‍✈️','🧑‍🚀','🤴','👸','🐉','🐺','🦅','⚔️','🗡️','🏰','🌲','🔥','💀','👑','🗺️','📜','🌙','⭐','🔮','💎','🌊','🌹','🕯️','⚡','🛡️','🗝️','🎭','📖','🌿','❄️'];
-
-function AvatarEditModal({strand,onSave,onClose}){
-  var sc=useState(strand.color||PRESET_COLORS[0]);var color=sc[0];var setColor=sc[1];
-  var si=useState(strand.image||null);var image=si[0];var setImage=si[1];
-  var se=useState(strand.emoji||null);var emoji=se[0];var setEmoji=se[1];
-  function handleFile(e){var file=e.target.files&&e.target.files[0];if(!file)return;if(file.size>5*1024*1024){alert('Image must be under 5 MB.');return;}uploadImage(file).then(function(url){if(url)setImage(url);});}
-  function handleSave(){onSave({color:color,image:image,emoji:emoji});}
-  function autoSaveColor(c){setColor(c);onSave({color:c,image:image,emoji:emoji});}
-  var sectionLbl={fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8,display:'block'};
-  return(
-<div className="modal-overlay">
-  <div className="modal-backdrop" onClick={onClose}/>
-  <div className="modal-box" style={{width:380}}>
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-      <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600}}>Edit appearance</div>
-      <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-    </div>
-    {/* Avatar circle with camera overlay */}
-    <div style={{position:'relative',width:72,margin:'0 auto 16px',display:'flex',justifyContent:'center'}}>
-      <div style={{width:72,height:72,borderRadius:'50%',background:color,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',boxShadow:'0 4px 12px rgba(0,0,0,.25)'}}>
-        {image?<img src={image} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:emoji?<span style={{fontSize:30}}>{emoji}</span>:<span style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,color:'#fff'}}>{initials(strand.name)}</span>}
-      </div>
-      <label style={{position:'absolute',bottom:0,right:0,cursor:'pointer'}}>
-        <div style={{width:22,height:22,borderRadius:'50%',background:'var(--bg1)',border:'2px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <span className="mi" style={{fontSize:13,color:'var(--mid)'}}>photo_camera</span>
-        </div>
-        <input type="file" accept="image/*" style={{display:'none'}} onChange={handleFile}/>
-      </label>
-    </div>
-    {image&&<div style={{textAlign:'center',marginBottom:10}}><button className="btn btn-ghost btn-sm" onClick={function(){setImage(null);}}><span className="mi" style={{fontSize:13}}>delete</span>Remove photo</button></div>}
-    <div style={{marginBottom:14}}>
-      <span style={sectionLbl}>Colour</span>
-      <CustomColorPicker color={color} onSelect={autoSaveColor}/>
-    </div>
-    <div style={{marginBottom:14,paddingTop:12,borderTop:'1px solid var(--border)'}}>
-      <span style={sectionLbl}>Emoji</span>
-      <EmojiPicker emoji={emoji} onSelect={setEmoji}/>
-    </div>
-    <div style={{display:'flex',gap:8,paddingTop:12,borderTop:'1px solid var(--border)'}}>
-      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={handleSave}>Save</button>
-      <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-    </div>
-  </div>
-</div>
-  );
-}
-
-
+// EditorView was dead code (never rendered — DraftEditor.jsx is the real editor screen). Removed.
 
 // ── StrandSortFilter ──
 function StrandSortFilter({sort,setSort,strandFilter,setStrandFilter,fields}){
@@ -2784,7 +2043,262 @@ function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrand
     else{setVal(coll);}setEditing(false);
   }
   if(editing)return(<div className="strands-tab active" style={{padding:'0 4px'}}><input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commitRename} onKeyDown={function(e){if(e.key==='Enter')commitRename();if(e.key==='Escape'){setVal(coll);setEditing(false);}}} style={{width:90,height:24,fontSize:13,padding:'2px 6px',borderRadius:4}}/></div>);
-  return(<div className={'strands-tab'+(isActive?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){setEditing(true);}}>{coll}</div>);
+  var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.name===coll;});
+  var tabIcon=tpl&&tpl.icon?tpl.icon:null;
+  var tabColor=tpl&&tpl.color?tpl.color:'#7A5A38';
+  return(<div className={'strands-tab'+(isActive?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){setEditing(true);}} style={{display:'flex',alignItems:'center',gap:6}}>
+    {tabIcon&&<span className="material-symbols-outlined" style={{fontSize:16,color:isActive?tabColor:'rgba(122,90,56,.75)'}}>{tabIcon}</span>}
+    {coll}
+  </div>);
+}
+
+
+
+// ── IconSearchPopup ──
+// Uses full Material Symbols library — no hardcoded list
+var ICON_CATEGORIES={
+  'Narrative & Writing':['auto_stories','book_ribbon','edit_note','history_edu','create','draw','stylus_note','ink_highlighter','quill','ink_pen','description','article','library_books','menu_book','local_library','sticky_note_2','assignment','topic','newsstand','feed','drafts'],
+  'People':['person','group','diversity_3','family_restroom','child_care','elderly','face','waving_hand','handshake','supervisor_account','manage_accounts','badge','contacts','emoji_people','social_distance','connect_without_contact'],
+  'Places':['location_on','map','home','apartment','castle','cottage','cabin','park','forest','beach_access','landscape','terrain','public','travel_explore','flight','train','directions_car','anchor','explore','near_me'],
+  'Nature & World':['nature','water','fire','water_drop','air','eco','recycling','sunny','storm','cloud','wb_sunny','nights_stay','ac_unit','tsunami','volcano','energy_savings_leaf','solar_power','wind_power','grass','flower'],
+  'Objects & Items':['key','lock','shield','sword','diamond','crown','trophy','flag','bookmark','label','tag','star','favorite','gift','cake','coffee','restaurant','local_pizza','wine_bar','sports_bar'],
+  'Science & Tech':['science','biotech','experiment','microbiology','telescope','microscope','satellite_alt','psychology','lightbulb','hub','code','terminal','database','computer','phone_android','watch','rocket_launch','smart_toy'],
+  'Arts & Culture':['palette','brush','photo_camera','music_note','headphones','piano','mic','theater_comedy','movie','sports_esports','casino','sports','emoji_objects','gesture','animation','casino'],
+  'Health & Body':['medical_services','stethoscope','vaccines','medication','monitor_heart','bloodtype','fitness_center','self_improvement','spa','yoga','emergency','biotech'],
+  'Symbols':['bolt','warning','info','help','check_circle','cancel','add_circle','verified','military_tech','workspace_premium','grade','celebration','emoji_events','trending_up','analytics','savings','account_balance','gavel','campaign']
+};
+var ALL_PRESET_ICONS=Object.values(ICON_CATEGORIES).flat();
+
+function IconSearchPopup({current,onSelect,onClose}){
+  var sq=useState('');var q=sq[0];var setQ=sq[1];
+  var showAll=!q.trim();
+  var iconStyle={fontFamily:"'Material Symbols Outlined'",fontStyle:'normal',fontSize:24,lineHeight:1,display:'flex',alignItems:'center',justifyContent:'center',letterSpacing:'normal',textTransform:'none',direction:'ltr',WebkitFontSmoothing:'antialiased'};
+
+  // When typing, try to show any valid icon name — material symbols accepts any string
+  // Show curated categories when no search, or filtered presets + the raw typed name
+  var results=showAll?ALL_PRESET_ICONS:ALL_PRESET_ICONS.filter(function(ic){return ic.includes(q.toLowerCase().replace(/\s+/g,'_'));});
+  var typedName=q.trim().toLowerCase().replace(/\s+/g,'_');
+  var showTyped=typedName&&!results.includes(typedName);
+
+  return(
+<div style={{position:'fixed',inset:0,zIndex:700,display:'flex',alignItems:'center',justifyContent:'center'}}>
+  <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={onClose}/>
+  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:14,padding:24,width:560,maxWidth:'94vw',maxHeight:'82vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(42,31,16,.2)'}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600,marginBottom:6,color:'var(--text)'}}>Choose icon</div>
+    <div style={{fontSize:12,color:'var(--mid)',marginBottom:12}}>Search by name, or type any <a href="https://fonts.google.com/icons" target="_blank" rel="noopener" style={{color:'var(--indigo)'}}>Material Symbol</a> name directly.</div>
+    <input autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search icons (e.g. dragon, mountain, crystal)…" style={{padding:'8px 12px',fontSize:14,border:'1px solid var(--border)',borderRadius:8,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',marginBottom:12}}/>
+    <div style={{overflowY:'auto',flex:1}}>
+      {/* Typed custom name — always show if it could be a valid icon */}
+      {showTyped&&(
+<div style={{marginBottom:14}}>
+  <div style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>Use custom icon name</div>
+  <button onClick={function(){onSelect(typedName);onClose();}} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderRadius:8,border:'1.5px solid var(--indigo)',background:'rgba(196,94,40,.06)',cursor:'pointer',width:'100%',textAlign:'left'}}>
+    <span style={Object.assign({},iconStyle,{fontSize:28,color:'var(--indigo)',width:36,height:36})}>{typedName}</span>
+    <div>
+      <div style={{fontFamily:'DM Sans,sans-serif',fontSize:13,fontWeight:600,color:'var(--indigo)'}}>{typedName}</div>
+      <div style={{fontFamily:'DM Sans,sans-serif',fontSize:11,color:'var(--mid)'}}>If this is a valid Material Symbol name, it will render as an icon.</div>
+    </div>
+  </button>
+</div>
+      )}
+      {/* Category sections when not searching */}
+      {showAll?Object.keys(ICON_CATEGORIES).map(function(cat){return(
+<div key={cat} style={{marginBottom:16}}>
+  <div style={{fontSize:11,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>{cat}</div>
+  <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+    {ICON_CATEGORIES[cat].map(function(ic){var isActive=current===ic;return(
+<button key={ic} onClick={function(){onSelect(ic);onClose();}} title={ic.replace(/_/g,' ')} style={{width:40,height:40,borderRadius:8,border:'1.5px solid '+(isActive?'#c45e28':'var(--border)'),background:isActive?'rgba(196,94,40,.1)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
+  onMouseOver={function(e){if(!isActive)e.currentTarget.style.background='var(--bg2)';}}
+  onMouseOut={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
+  <span style={Object.assign({},iconStyle,{fontSize:20,color:isActive?'#c45e28':'var(--mid)'})}>{ic}</span>
+</button>
+    );})}
+  </div>
+</div>
+      )}):(
+<div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+  {results.map(function(ic){var isActive=current===ic;return(
+<button key={ic} onClick={function(){onSelect(ic);onClose();}} title={ic.replace(/_/g,' ')} style={{width:40,height:40,borderRadius:8,border:'1.5px solid '+(isActive?'#c45e28':'var(--border)'),background:isActive?'rgba(196,94,40,.1)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
+  onMouseOver={function(e){if(!isActive)e.currentTarget.style.background='var(--bg2)';}}
+  onMouseOut={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
+  <span style={Object.assign({},iconStyle,{fontSize:20,color:isActive?'#c45e28':'var(--mid)'})}>{ic}</span>
+</button>
+  );})}
+  {results.length===0&&!showTyped&&<div style={{fontSize:13,color:'var(--mid)',padding:8}}>No presets match. Type any Material Symbol name above to use it directly.</div>}
+</div>
+      )}
+    </div>
+    <button className="btn btn-ghost" style={{marginTop:14,width:'100%',justifyContent:'center'}} onClick={onClose}>Cancel</button>
+  </div>
+</div>
+  );
+}
+
+// ── NewSpoolModal ──
+var SPOOL_ICONS=['auto_stories','gesture','hub','lightbulb','book_ribbon','favorite','star','location_on','person','group','explore','psychology','edit_note','campaign','local_library','history_edu','science','palette','music_note','sports_esports'];
+var SPOOL_COLORS=['#c45e28','#2f76e0','#2f9966','#ce2fe0','#e02f79','#e8a030','#b83220','#2fe07f','#64e02f','#f0c050'];
+function NewSpoolModal({onConfirm,onCancel}){
+  var sn=useState('');var name=sn[0];var setName=sn[1];
+  var si=useState('auto_stories');var icon=si[0];var setIcon=si[1];
+  var sc=useState('#c45e28');var color=sc[0];var setColor=sc[1];
+  var ssif=useState(true);var showInFilter=ssif[0];var setShowInFilter=ssif[1];
+  var smis=useState(false);var showModalIconSearch=smis[0];var setShowModalIconSearch=smis[1];
+  var ref=useRef(null);
+  useEffect(function(){if(ref.current)ref.current.focus();},[]);
+  return(
+<div style={{position:'fixed',inset:0,zIndex:500,display:'flex',alignItems:'center',justifyContent:'center'}}>
+  <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={onCancel}/>
+  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:24,width:380,maxWidth:'92vw',boxShadow:'0 20px 60px rgba(42,31,16,.15)'}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600,marginBottom:16,color:'var(--text)'}}>Create Spool</div>
+    {/* Preview */}
+    <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16,padding:'10px 14px',background:'var(--bg2)',borderRadius:8}}>
+      <div style={{width:36,height:36,borderRadius:8,background:color,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+        <span className="material-symbols-outlined" style={{fontSize:20,color:'#fff'}}>{icon}</span>
+      </div>
+      <span style={{fontFamily:'var(--serif)',fontSize:15,fontWeight:600,color:'var(--text)'}}>{name||'Spool name'}</span>
+    </div>
+    {/* Name */}
+    <div style={{marginBottom:14}}>
+      <span className="sect-lbl">Name</span>
+      <input ref={ref} value={name} onChange={function(e){setName(e.target.value);}} placeholder="e.g. Characters, Locations…" onKeyDown={function(e){if(e.key==='Enter'&&name.trim())onConfirm(name,icon,color);if(e.key==='Escape')onCancel();}}/>
+    </div>
+    {/* Colour */}
+    <div style={{marginBottom:14}}>
+      <span className="sect-lbl">Colour</span>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:6}}>
+        {SPOOL_COLORS.map(function(c){return(
+<div key={c} onClick={function(){setColor(c);}} style={{width:24,height:24,borderRadius:'50%',background:c,cursor:'pointer',transform:color===c?'scale(1.25)':'scale(1)',boxShadow:color===c?'0 0 0 2px var(--bg1),0 0 0 4px '+c:'none',transition:'transform .15s',flexShrink:0}}/>
+        );})}
+      </div>
+    </div>
+    {/* Icon */}
+    <div style={{marginBottom:20}}>
+      <span className="sect-lbl">Icon</span>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
+        {SPOOL_ICONS.slice(0,10).map(function(ic){return(
+<button key={ic} onClick={function(){setIcon(ic);}} style={{width:36,height:36,borderRadius:6,border:'1px solid '+(icon===ic?color:'var(--border)'),background:icon===ic?color+'22':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}}>
+  <span className="material-symbols-outlined" style={{fontSize:18,color:icon===ic?color:'var(--mid)'}}>{ic}</span>
+</button>
+        );})}
+
+        <button onClick={function(){setShowModalIconSearch(true);}} style={{padding:'0 10px',height:36,borderRadius:6,border:'1px solid var(--border)',background:'transparent',cursor:'pointer',fontSize:11,fontFamily:'DM Sans, sans-serif',color:'var(--mid)',whiteSpace:'nowrap'}}>
+          Search more
+        </button>
+        {showModalIconSearch&&<IconSearchPopup current={icon} onSelect={function(ic){setIcon(ic);}} onClose={function(){setShowModalIconSearch(false);}}/> }      </div>
+    </div>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+      <div>
+        <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,fontWeight:600,color:'var(--text)'}}>Show in Define filter</span>
+        <div style={{fontSize:11,color:'var(--mid)'}}>Include in sequence filter dropdown</div>
+      </div>
+      <div onClick={function(){setShowInFilter(!showInFilter);}} style={{width:36,height:20,borderRadius:10,background:showInFilter?'#7A5A38':'#A88060',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
+        <div style={{position:'absolute',top:2,left:showInFilter?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
+      </div>
+    </div>
+    <div style={{display:'flex',gap:8}}>
+      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onCancel}>Cancel</button>
+      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={function(){if(name.trim())onConfirm(name,icon,color,showInFilter);}} disabled={!name.trim()}>Create Spool</button>
+    </div>
+  </div>
+</div>
+  );
+}
+
+
+// ── StrandRefField ──
+// Stores an array of {id, label} objects as JSON string
+function StrandRefField({f,sid,val,pid,app,onUpdate}){
+  var refCollName=f.refSpool||'';
+  var refStrands=refCollName?(app.allStrands[pid]&&app.allStrands[pid][refCollName]||[]):[];
+  var projTemplates=app.allTemplates[pid]||[];
+
+  // Parse stored value — supports both legacy comma string and new JSON format
+  function parseRefs(v){
+    if(!v)return[];
+    try{var parsed=JSON.parse(v);if(Array.isArray(parsed))return parsed;}catch(e){}
+    // Legacy: plain comma-separated IDs
+    return v.split(',').filter(Boolean).map(function(id){return{id:id,label:''};});
+  }
+  function saveRefs(refs){onUpdate(refs.length?JSON.stringify(refs):'');}
+
+  var srl=useState(parseRefs(val));var refs=srl[0];var setRefs=srl[1];
+  var sss=useState('');var selId=sss[0];var setSelId=sss[1];
+  var slb=useState('');var newLabel=slb[0];var setNewLabel=slb[1];
+  var ssq=useState('');var searchQ=ssq[0];var setSearchQ=ssq[1];
+
+  if(!refCollName)return(<span style={{fontSize:13,color:'var(--mid)',fontStyle:'italic'}}>No spool linked — edit field settings.</span>);
+
+  var selectedIds=refs.map(function(r){return r.id;});
+  var available=refStrands.filter(function(st){
+    if(!f.refMultiple&&refs.length>=1)return false;
+    if(selectedIds.includes(st.id))return false;
+    if(searchQ&&!(st.name||'').toLowerCase().includes(searchQ.toLowerCase()))return false;
+    return true;
+  });
+  var tpl=projTemplates.find(function(t){return t.name===refCollName;});
+  var spoolColor=(tpl&&tpl.color)||'#c45e28';
+
+  function addRef(){
+    if(!selId)return;
+    var st=refStrands.find(function(s){return s.id===selId;});if(!st)return;
+    var newRefs=refs.concat([{id:selId,label:newLabel.trim()}]);
+    setRefs(newRefs);saveRefs(newRefs);setSelId('');setNewLabel('');setSearchQ('');
+  }
+  function removeRef(idx){var nr=refs.filter(function(_,i){return i!==idx;});setRefs(nr);saveRefs(nr);}
+  function updateLabel(idx,lbl){var nr=refs.map(function(r,i){return i===idx?Object.assign({},r,{label:lbl}):r;});setRefs(nr);saveRefs(nr);}
+
+  return(
+<div style={{display:'flex',flexDirection:'column',gap:8}}>
+  {/* Existing refs */}
+  {refs.map(function(r,i){
+    var st=refStrands.find(function(s){return s.id===r.id;});
+    if(!st)return null;
+    return(
+<div key={r.id+i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:10,background:spoolColor+'14',border:'1px solid '+spoolColor+'44'}}>
+  {/* Circle avatar */}
+  <div style={{width:24,height:24,borderRadius:'50%',background:st.color||spoolColor,border:'2px solid '+spoolColor,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,boxSizing:'border-box'}}>
+    {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontFamily:'DM Sans,sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
+  </div>
+  <div style={{flex:1,minWidth:0}}>
+    <div style={{fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:600,color:spoolColor}}>{st.name}</div>
+    {/* Inline label edit */}
+    <input value={r.label} onChange={function(e){updateLabel(i,e.target.value);}} placeholder="Add relationship label…" style={{fontFamily:'DM Sans,sans-serif',fontSize:11,color:'var(--mid)',background:'transparent',border:'none',outline:'none',padding:0,width:'100%',fontStyle:r.label?'normal':'italic'}}/>
+  </div>
+  <button onClick={function(){removeRef(i);}} style={{background:'none',border:'none',cursor:'pointer',padding:2,color:spoolColor,opacity:.6,display:'flex',alignItems:'center'}}>
+    <span className="material-symbols-outlined" style={{fontSize:14}}>close</span>
+  </button>
+</div>
+    );
+  })}
+
+  {/* Add new ref — show if multiple allowed or no refs yet */}
+  {(f.refMultiple||refs.length===0)&&(
+<div style={{display:'flex',flexDirection:'column',gap:6,padding:'8px 10px',borderRadius:10,background:'var(--bg2)',border:'1px dashed var(--border)'}}>
+  {/* Search + select */}
+  <input value={searchQ} onChange={function(e){setSearchQ(e.target.value);setSelId('');}} placeholder={'Search '+refCollName+'…'} style={{fontFamily:'DM Sans,sans-serif',fontSize:12,padding:'4px 8px',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg1)',color:'var(--text)',outline:'none'}}/>
+  {searchQ&&available.length>0&&(
+<div style={{maxHeight:120,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg1)'}}>
+  {available.map(function(st){return(
+<div key={st.id} onClick={function(){setSelId(st.id);setSearchQ(st.name);}} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',cursor:'pointer',borderBottom:'1px solid var(--bg2)'}}
+  onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
+  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  <div style={{width:18,height:18,borderRadius:'50%',background:st.color||spoolColor,flexShrink:0}}/>
+  <span style={{fontSize:12,fontFamily:'DM Sans,sans-serif',color:'var(--text)'}}>{st.name}</span>
+</div>
+  );})}
+</div>
+  )}
+  {searchQ&&available.length===0&&<span style={{fontSize:11,color:'var(--mid)',fontStyle:'italic'}}>No matches.</span>}
+  {selId&&(
+<input value={newLabel} onChange={function(e){setNewLabel(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')addRef();}} placeholder="Relationship label (e.g. Mother, Mentor)…" style={{fontFamily:'DM Sans,sans-serif',fontSize:12,padding:'4px 8px',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg1)',color:'var(--text)',outline:'none'}}/>
+  )}
+  {selId&&(
+<button onClick={addRef} style={{alignSelf:'flex-start',padding:'4px 12px',borderRadius:6,background:spoolColor,color:'#fff',border:'none',cursor:'pointer',fontSize:12,fontFamily:'DM Sans,sans-serif',fontWeight:600}}>Add</button>
+  )}
+</div>
+  )}
+</div>
+  );
 }
 
 // ── StrandsPage ──
@@ -2792,8 +2306,12 @@ function StrandsPage({app,allProjects}){
   var pid=app.projId;
   var projStrands=app.allStrands[pid]||{};
   var projTemplates=app.allTemplates[pid]||[];
-  var collNames=Object.keys(projStrands);if(collNames.length===0)collNames=['Characters'];
-  var sac=useState(collNames[0]);var activeColl=sac[0];var setActiveColl=sac[1];
+  // Restore saved tab order if available
+  var savedOrder=null;try{var so=localStorage.getItem('woven:collOrder:'+pid);if(so)savedOrder=JSON.parse(so);}catch(e){}
+  var rawColl=Object.keys(projStrands);
+  var collNames=savedOrder?savedOrder.filter(function(c){return rawColl.includes(c);}).concat(rawColl.filter(function(c){return !savedOrder.includes(c);})):rawColl;
+  if(collNames.length===0)collNames=['Characters'];
+  var sac=useState(function(){ return app.strandsFocusColl && collNames.includes(app.strandsFocusColl) ? app.strandsFocusColl : collNames[0]; });var activeColl=sac[0];var setActiveColl=sac[1];
   var sasi=useState(null);var activeStrandId=sasi[0];var setActiveStrandId=sasi[1];
   var ssc=useState('');var search=ssc[0];var setSearch=ssc[1];
   var sss=useState('name');var strandSort=sss[0];var setStrandSort=sss[1];
@@ -2819,7 +2337,7 @@ function StrandsPage({app,allProjects}){
   function handleImageUpload(e,sid){var file=e.target.files&&e.target.files[0];if(!file)return;uploadImage(file).then(function(url){if(url)updateStrand(sid,{image:url});});}
   function getDraftAppearances(sid){return(app.allDrafts[pid]||[]).filter(function(d){return(d.strandTags||[]).includes(sid);});}
   function renderFieldInput(f,sid,val){
-    if(f.type==='long_text')return <textarea key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} rows={3} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
+    if(f.type==='long_text')return <textarea key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} rows={3} onBlur={function(e){updateField(sid,f.id,e.target.value);}} style={{resize:'vertical',minHeight:72,cursor:'default'}}/>;
     if(f.type==='boolean')return(
 <div style={{display:'flex',gap:14}}>
   {['Yes','No'].map(function(opt){return(
@@ -2830,14 +2348,27 @@ function StrandsPage({app,allProjects}){
 </div>
     );
     if(f.type==='select')return(<select key={sid+'-'+f.id} defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}><option value="">Select...</option>{(f.options||[]).map(function(o){return <option key={o} value={o}>{o}</option>;})}</select>);
+    if(f.type==='strand_ref'){
+      return <StrandRefField key={sid+'-'+f.id} f={f} sid={sid} val={val} pid={pid} app={app} onUpdate={function(newVal){updateField(sid,f.id,newVal);}}/>;
+    }
     return <input key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} type={f.type==='number'?'number':'text'} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
+
   }
   // Collection settings editing
   var sef=useState(null);var editingFields=sef[0];var setEditingFields=sef[1];
+  var sesc=useState(null);var editingSpoolColor=sesc[0];var setEditingSpoolColor=sesc[1];
+  var sesi=useState(null);var editingSpoolIcon=sesi[0];var setEditingSpoolIcon=sesi[1];
+  var ssis=useState(false);var showIconSearch=ssis[0];var setShowIconSearch=ssis[1];
   var snfn=useState('');var newFieldName=snfn[0];var setNewFieldName=snfn[1];
   var snft=useState('short_text');var newFieldType=snft[0];var setNewFieldType=snft[1];
   var ssw=useState([]);var sharedWith=ssw[0];var setSharedWith=ssw[1];
-  function openCollSettings(){setEditingFields(activeTpl?[...activeTpl.fields]:[]);setSharedWith(activeTpl?activeTpl.sharedWith||[]:[]);setShowCollSettings(true);}
+  function openCollSettings(){setEditingFields(activeTpl?[...activeTpl.fields]:[]);setSharedWith(activeTpl?activeTpl.sharedWith||[]:[]);setEditingSpoolColor(activeTpl?activeTpl.color||null:null);setEditingSpoolIcon(activeTpl?activeTpl.icon||null:null);setShowCollSettings(true);}
+  useEffect(function(){
+    if(app.strandsFocusColl){
+      openCollSettings();
+      if(app.setStrandsFocusColl)app.setStrandsFocusColl(null);
+    }
+  },[]);
   var sdc=useState(false);var deleteCollConfirm=sdc[0];var setDeleteCollConfirm=sdc[1];
   function deleteCollection(){
     if(!activeTpl)return;
@@ -2848,7 +2379,14 @@ function StrandsPage({app,allProjects}){
     if(remaining.length>0)setActiveColl(remaining[0]);
     setShowCollSettings(false);setDeleteCollConfirm(false);
   }
-  function saveCollSettings(){if(!activeTpl)return;app.updateTemplate(pid,activeTpl.id,{fields:editingFields,sharedWith:sharedWith});setShowCollSettings(false);}
+  function saveCollSettings(){
+    // Save colour and icon to template
+    if(activeTpl&&(editingSpoolColor||editingSpoolIcon)){
+      var tplUpdates={};
+      if(editingSpoolColor)tplUpdates.color=editingSpoolColor;
+      if(editingSpoolIcon)tplUpdates.icon=editingSpoolIcon;
+      app.updateTemplate(pid,activeTpl.id,tplUpdates);
+    }if(!activeTpl)return;app.updateTemplate(pid,activeTpl.id,{fields:editingFields,sharedWith:sharedWith});setShowCollSettings(false);}
   function addFieldToSettings(){if(!newFieldName.trim()||!editingFields)return;setEditingFields(editingFields.concat([{id:genId(),label:newFieldName.trim(),type:newFieldType}]));setNewFieldName('');}
   var otherProjects=allProjects.filter(function(p){return p.id!==pid;});
   var sco2=useState(null);var dragOverColl=sco2[0];var setDragOverColl=sco2[1];
@@ -2861,19 +2399,70 @@ function StrandsPage({app,allProjects}){
       if(fi<0||ti<0)return prev;
       keys.splice(fi,1);keys.splice(ti,0,fromColl);
       var reordered={};keys.forEach(function(k){reordered[k]=ps[k];});
-      n[pid]=reordered;saveDB('woven:strands:'+pid,reordered);return n;
+      n[pid]=reordered;
+      // Persist the new order — saveDB writes the whole strands object
+      // which preserves key order in JS objects and JSON
+      saveDB('woven:strands:'+pid,reordered);
+      return n;
     });
+    // Save new order immediately (setAllStrands is async so we compute from current keys)
+    var currentKeys=Object.keys((app&&app.allStrands&&app.allStrands[pid])||{});
+    var fi2=currentKeys.indexOf(fromColl);var ti2=currentKeys.indexOf(toColl);
+    if(fi2>=0&&ti2>=0){
+      var newOrder=currentKeys.slice();newOrder.splice(fi2,1);newOrder.splice(ti2,0,fromColl);
+      try{localStorage.setItem('woven:collOrder:'+pid,JSON.stringify(newOrder));}catch(e){}
+    }
   }
   var detailContent=showCollSettings&&editingFields?(
 <div style={{padding:24}}>
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>{activeColl} — Fields</div>
+    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>{activeColl} — Settings</div>
     <div style={{display:'flex',gap:8}}>
       <button className="btn btn-danger btn-sm" onClick={function(){setDeleteCollConfirm(true);}}><span className="mi" style={{fontSize:14}}>delete</span>Delete</button>
       <button className="btn btn-ghost btn-sm" onClick={function(){setShowCollSettings(false);}}>Cancel</button>
       <button className="btn btn-primary btn-sm" onClick={saveCollSettings}>Save</button>
     </div>
   </div>
+  {/* Spool colour + icon */}
+  {/* Preview */}
+  <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
+    <div style={{width:40,height:40,borderRadius:10,background:editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+      <span className="material-symbols-outlined" style={{fontSize:22,color:'#fff'}}>{editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'}</span>
+    </div>
+    <span style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,color:'var(--text)'}}>{activeColl}</span>
+  </div>
+  {/* Colour */}
+  <div style={{marginBottom:16}}>
+    <span className="sect-lbl">Colour</span>
+    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
+      {SPOOL_COLORS.map(function(c){var isActive=(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')===c;return(
+<div key={c} onClick={function(){setEditingSpoolColor(c);}} style={{width:22,height:22,borderRadius:'50%',background:c,cursor:'pointer',flexShrink:0,transform:isActive?'scale(1.25)':'scale(1)',boxShadow:isActive?'0 0 0 2px var(--bg1),0 0 0 3.5px '+c:'none',transition:'transform .15s'}}/>
+      );})}
+    </div>
+  </div>
+  {/* Icon */}
+  <div style={{marginBottom:16}}>
+    <span className="sect-lbl">Icon</span>
+    <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:6}}>
+      {SPOOL_ICONS.slice(0,10).map(function(ic){var isActive=(editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories')===ic;return(
+<button key={ic} onClick={function(){setEditingSpoolIcon(ic);}} style={{width:32,height:32,borderRadius:6,border:'1.5px solid '+(isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--border)'),background:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')+'22':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+  <span className="material-symbols-outlined" style={{fontSize:16,color:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--mid)'}}>{ic}</span>
+</button>
+      );})}
+      <button onClick={function(){setShowIconSearch(true);}} style={{padding:'0 10px',height:32,borderRadius:6,border:'1px solid var(--border)',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontFamily:'DM Sans, sans-serif',color:'var(--mid)',whiteSpace:'nowrap'}}>
+        Search more
+      </button>
+    </div>
+    {showIconSearch&&<IconSearchPopup current={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onSelect={function(ic){setEditingSpoolIcon(ic);}} onClose={function(){setShowIconSearch(false);}}/>}
+  </div>
+  {/* Use as filter toggle */}
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+    <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,color:'var(--text)',fontWeight:600}}>Use as a filter?</span>
+    <div onClick={function(){var cur=activeTpl?activeTpl.showInFilter!==false:true;app.updateTemplate(pid,activeTpl&&activeTpl.id,{showInFilter:!cur});}} style={{width:36,height:20,borderRadius:10,background:(activeTpl?activeTpl.showInFilter!==false:true)?'#7A5A38':'#A88060',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
+      <div style={{position:'absolute',top:2,left:(activeTpl?activeTpl.showInFilter!==false:true)?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
+    </div>
+  </div>
+  <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:12,color:'var(--text)'}}>Fields</div>
   {deleteCollConfirm&&(
 <div className="modal-overlay">
   <div className="modal-backdrop" onClick={function(){setDeleteCollConfirm(false);}}/>
@@ -2895,9 +2484,20 @@ function StrandsPage({app,allProjects}){
   onDrop={function(e){e.preventDefault();var from=parseInt(e.dataTransfer.getData('fieldIdx'),10);if(isNaN(from)||from===i)return;var nf=editingFields.slice();var item=nf.splice(from,1)[0];nf.splice(i,0,item);setEditingFields(nf);}}>
   <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab',flexShrink:0}}>drag_indicator</span>
   <input defaultValue={f.label} style={{maxWidth:160,fontSize:13}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});setEditingFields(nf);}}/>
-  <select value={f.type} style={{width:110,fontSize:13}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value});setEditingFields(nf);}}>
+  <select value={f.type} style={{width:110,fontSize:13}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value,refSpool:null,refMultiple:false});setEditingFields(nf);}}>
     {FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}
   </select>
+  {f.type==='strand_ref'&&(
+<div style={{display:'flex',gap:4,alignItems:'center',marginTop:4}}>
+  <select value={f.refSpool||''} style={{fontSize:11,flex:1}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refSpool:e.target.value});setEditingFields(nf);}}>
+    <option value="">Pick spool…</option>
+    {Object.keys(app.allStrands[pid]||{}).map(function(c){return <option key={c} value={c}>{c}</option>;})}
+  </select>
+  <label style={{fontSize:11,display:'flex',alignItems:'center',gap:3,whiteSpace:'nowrap',cursor:'pointer'}}>
+    <input type="checkbox" checked={!!f.refMultiple} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refMultiple:e.target.checked});setEditingFields(nf);}}/> Multiple
+  </label>
+</div>
+  )}
   <button className="btn-icon" onClick={function(){setEditingFields(editingFields.filter(function(_,j){return j!==i;}));}}><span className="mi" style={{fontSize:18}}>delete</span></button>
 </div>
   );})}
@@ -2961,6 +2561,22 @@ function StrandsPage({app,allProjects}){
   <button className="btn btn-primary" onClick={addStrand}>+ Add {activeColl.replace(/s$/,'')}</button>
 </div>
   );
+  var findSelectIcon=function(collName){var t=projTemplates.find(function(t){return t.name===collName;});return (t&&t.icon)||'auto_stories';};
+  var findSelectPanel=(
+<Drawer variant="inline" title={activeColl}
+  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<StrandSortFilter sort={strandSort} setSort={setStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>}/>}
+  footer={<PrimaryButton icon="add" onClick={addStrand}>Add to {activeColl}</PrimaryButton>}>
+  {filtered.length===0?(
+    <HelpText>{collStrands.length===0?'No entries yet.':'No results for "'+search+'".'}</HelpText>
+  ):(
+    <div>
+      {filtered.map(function(st){return(
+        <StrandResultRow key={st.id} strand={st} spoolIcon={findSelectIcon(activeColl)} onClick={function(){setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}/>
+      );})}
+    </div>
+  )}
+</Drawer>
+  );
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
   <div className="strands-subnav">
@@ -2981,42 +2597,24 @@ function StrandsPage({app,allProjects}){
 </div>
     ):(
 <div style={{display:'flex',alignItems:'center',gap:4,marginLeft:'auto'}}>
-  <button className="btn-icon" onClick={openCollSettings} title="Collection settings"><span className="mi" style={{fontSize:18}}>settings</span></button>
-  <button className="btn btn-ghost btn-sm" onClick={function(){setNewColl(true);}}>+ Add collection</button>
+  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+    <button className="btn-icon" onClick={openCollSettings} title="Spool settings"><span className="mi" style={{fontSize:18}}>settings</span></button>
+    <button className="btn btn-ghost btn-sm" onClick={function(){setNewColl(true);}}>+ Create Spool</button>
+  {newColl&&<NewSpoolModal onConfirm={function(name,icon,color,sif){
+    if(!name.trim())return;
+    var nt={id:genId(),projectId:pid,name:name.trim(),icon:icon,color:color,showInFilter:sif!==false,fields:defaultFields(name.trim()),sharedWith:[]};
+    app.addTemplate(pid,nt);
+    app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name.trim()]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});
+    setActiveColl(name.trim());setNewColl(false);
+  }} onCancel={function(){setNewColl(false);}}/>}
+  </div>
 </div>
     )}
   </div>
   <div className="strands-layout">
-    <div className="strands-left">
-      <div className="strands-list">
-        <div style={{marginBottom:8,display:'flex',gap:4}}>
-          <input placeholder={'Search '+activeColl+'...'} value={search} onChange={function(e){setSearch(e.target.value);}} style={{flex:1}}/>
-          <StrandSortFilter sort={strandSort} setSort={setStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>
-        </div>
-        
-        {filtered.map(function(st){var isAct=activeStrand&&st.id===activeStrand.id;return(
-<div key={st.id} className={'strand-item'+(isAct?' active':'')} style={{justifyContent:'space-between'}}>
-  <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0,cursor:'pointer'}} onClick={function(){setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}>
-    <div className="strand-av" style={{background:st.color,flexShrink:0}}>
-      {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:14}}>{st.emoji}</span>:<span>{initials(st.name)}</span>}
-    </div>
-    <span style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{st.name||'Unnamed'}</span>
-  </div>
-  <button className="btn-icon" style={{padding:2,opacity:0,flexShrink:0}} title="Delete strand"
-    onMouseOver={function(e){e.currentTarget.style.opacity='1';}}
-    onMouseOut={function(e){e.currentTarget.style.opacity='0';}}
-    onClick={function(e){e.stopPropagation();if(window.confirm('Delete "'+( st.name||'Unnamed')+'"? This cannot be undone.')){
-      app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[activeColl]=(ps[activeColl]||[]).filter(function(s){return s.id!==st.id;});n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});
-      if(activeStrandId===st.id)setActiveStrandId(null);
-    }}}>
-    <span className="mi" style={{fontSize:15,color:'var(--danger)'}}>delete</span>
-  </button>
-</div>
-        );})}
-        <div className="strands-add-btn" onClick={addStrand}><span className="mi" style={{fontSize:18}}>add</span><span>Add to {activeColl}</span></div>
-      </div>
-    </div>
     {!isMobile&&<div style={{flex:1,overflowY:'auto'}}>{detailContent}</div>}
+    {!isMobile&&!showCollSettings&&findSelectPanel}
+    {isMobile&&!mobileDetailOpen&&!showCollSettings&&findSelectPanel}
     {isMobile&&mobileDetailOpen&&(
 <div style={{position:'fixed',inset:0,zIndex:50,background:'var(--bg1)',overflow:'auto'}}>
   <div style={{display:'flex',alignItems:'center',gap:8,padding:'14px 16px',borderBottom:'1px solid var(--border)'}}>
@@ -3172,85 +2770,7 @@ function ProjectWizard({app,onClose}){
 }
 
 // ── Profile Panel ──
-function ProfilePanel({app,focusField,open,onClose}){
-  var profile=app.profile||{};
-  var sf=useState(profile.firstName||'');var firstName=sf[0];var setFirstName=sf[1];
-  var sl=useState(profile.lastName||'');var lastName=sl[0];var setLastName=sl[1];
-  var authEmail=(app.currentUser&&app.currentUser.email)||profile.email||'';
-  var se=useState(authEmail);var email=se[0];var setEmail=se[1];
-  var sg=useState(app.goal||500);var goalVal=sg[0];var setGoalVal=sg[1];
-  var goalRef=useRef(null);
-  useEffect(function(){if(open&&focusField==='goal'&&goalRef.current){setTimeout(function(){goalRef.current&&goalRef.current.focus();},200);};}, [open,focusField]);
-  var sem=useState(profile.editorMode||'rt');var editorMode=sem[0];var setEditorMode=sem[1];
-  var srm=useState(profile.reminderEnabled||false);var reminderEnabled=srm[0];var setReminderEnabled=srm[1];
-  var srt=useState(profile.reminderTime||'9:00 PM');var reminderTime=srt[0];var setReminderTime=srt[1];
-  var reminderRef=useRef(null);
-  useEffect(function(){if(open&&focusField==='reminder'&&reminderRef.current){setTimeout(function(){reminderRef.current&&reminderRef.current.scrollIntoView({behavior:'smooth'});},200);};},[open,focusField]);
-  function autoSave(overrides){
-    var updated=Object.assign({firstName:firstName,lastName:lastName,email:email,plan:profile.plan||'Free',editorMode:editorMode,reminderEnabled:reminderEnabled,reminderTime:reminderTime},overrides);
-    app.setProfile(updated);
-  }
-  return(
-<Panel open={open} onClose={onClose} title="Your Profile"
-  footer={<button className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}} onClick={function(){app.signOut();}}>
-    <span className="mi" style={{fontSize:18}}>logout</span>Sign out
-  </button>}>
-  <div style={{marginBottom:16}}><span className="sect-lbl">First name</span><input value={firstName} onChange={function(e){setFirstName(e.target.value);}} onBlur={function(e){autoSave({firstName:e.target.value});}} placeholder="First name"/></div>
-  <div style={{marginBottom:16}}><span className="sect-lbl">Last name</span><input value={lastName} onChange={function(e){setLastName(e.target.value);}} onBlur={function(e){autoSave({lastName:e.target.value});}} placeholder="Last name"/></div>
-  <div style={{marginBottom:16}}><span className="sect-lbl">Email</span><input value={email} onChange={function(e){setEmail(e.target.value);}} onBlur={function(e){autoSave({email:e.target.value});}} placeholder="your@email.com" type="email"/></div>
-  <div style={{marginBottom:16}}>
-    <span className="sect-lbl">Daily writing goal</span>
-    <input ref={goalRef} value={goalVal} onChange={function(e){var v=parseInt(e.target.value,10);if(!isNaN(v)&&v>0)setGoalVal(v);}} onBlur={function(e){var v=parseInt(e.target.value,10);if(!isNaN(v)&&v>0)app.setGoal(v);}} type="number" min="1"/>
-    <div style={{fontSize:12,color:'var(--mid)',marginTop:4}}>Words per day</div>
-  </div>
-  <div style={{marginBottom:16}}>
-    <span className="sect-lbl">Editor mode</span>
-    <div style={{display:'flex',gap:8,marginTop:6}}>
-      {[['rt','Rich Text'],['md','Markdown']].map(function(pair){return(
-<button key={pair[0]} className={'btn '+(editorMode===pair[0]?'btn-primary':'btn-ghost')} style={{flex:1,justifyContent:'center'}} onClick={function(){setEditorMode(pair[0]);autoSave({editorMode:pair[0]});}}>
-  {pair[1]}
-</button>
-      );})}
-    </div>
-    <div style={{fontSize:12,color:'var(--mid)',marginTop:6}}>Applies to all drafts.</div>
-  </div>
-  <div ref={reminderRef} style={{marginBottom:16}}>
-    <span className="sect-lbl">Writing reminders</span>
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-      <span style={{fontSize:14,color:'var(--text)'}}>Send me a quick nudge if I haven't written yet!</span>
-      <span style={{width:36,height:20,borderRadius:10,background:reminderEnabled?'var(--indigo)':'var(--bg3)',cursor:'pointer',position:'relative',transition:'all .2s',flexShrink:0,display:'inline-block'}} onClick={function(){var nv=!reminderEnabled;setReminderEnabled(nv);autoSave({reminderEnabled:nv});}}>
-        <span style={{position:'absolute',top:2,left:reminderEnabled?18:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
-      </span>
-    </div>
-    {reminderEnabled&&(
-<div style={{marginTop:8}}>
-  <span className="sect-lbl">Remind me at</span>
-  <div style={{display:'flex',flexWrap:'wrap',gap:6,maxHeight:130,overflowY:'auto',padding:'2px 0'}}>
-    {['6:00 AM','7:00 AM','8:00 AM','9:00 AM','10:00 AM','11:00 AM','12:00 PM','1:00 PM','2:00 PM','3:00 PM','4:00 PM','5:00 PM','6:00 PM','7:00 PM','8:00 PM','9:00 PM','10:00 PM'].map(function(t){var isActive=reminderTime===t;return(
-<button key={t} className={'btn btn-sm '+(isActive?'btn-primary':'btn-ghost')} style={{minWidth:80}} onClick={function(){setReminderTime(t);autoSave({reminderTime:t});}}>{t}</button>
-    );})}
-  </div>
-</div>
-    )}
-  </div>
-  <div style={{opacity:.5,pointerEvents:'none',userSelect:'none',marginTop:8,paddingTop:16,borderTop:'1px solid var(--border)'}}>
-    <span className="sect-lbl">Plan</span>
-    <div style={{display:'flex',gap:8,marginTop:6}}>
-      {[['Basic','Free','Free forever'],['Artisan','$8.99/mo','For serious writers'],['Guild','$19.99/mo','For teams & studios']].map(function(p){var isActive=p[0]==='Basic';return(
-<div key={p[0]} style={{flex:1,border:'1px solid var(--border)',borderRadius:'var(--r)',padding:'10px',textAlign:'center',background:isActive?'var(--bg2)':'transparent'}}>
-  <div style={{fontFamily:'var(--serif)',fontSize:13,fontWeight:600,color:'var(--text)'}}>{p[0]}</div>
-  <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',margin:'2px 0'}}>{p[1]}</div>
-  <div style={{fontSize:10,color:'var(--mid)'}}>{p[2]}</div>
-</div>
-      );})}
-    </div>
-    <div style={{fontSize:12,color:'var(--mid)',marginTop:8,textAlign:'center'}}>Paid plans coming soon</div>
-  </div>
-</Panel>
-  );
-}
-
-
+// ProfilePanel moved to its own file — see ./ProfileDrawer
 
 // ── WovenLogo ──
 function WovenLogo({size,color,dark}){
@@ -3279,95 +2799,6 @@ function WovenLogo({size,color,dark}){
   );
 }
 
-// ── AuthScreen ──
-function AuthScreen({onAuth}){
-  var se=useState('');var email=se[0];var setEmail=se[1];
-  var sp=useState('');var password=sp[0];var setPassword=sp[1];
-  var sfn=useState('');var firstName=sfn[0];var setFirstName=sfn[1];
-  var sl=useState(false);var loading=sl[0];var setLoading=sl[1];
-  var sm=useState('');var msg=sm[0];var setMsg=sm[1];
-  var smode=useState('signin');var mode=smode[0];var setMode=smode[1];
-  async function handleSubmit(){
-    if(!email.trim()||!password.trim()){setMsg('Please enter email and password.');return;}
-    setLoading(true);setMsg('');
-    var res;
-    if(mode==='signup'){
-      res=await supabase.auth.signUp({email:email.trim(),password:password,options:{data:{first_name:firstName.trim()}}});
-      if(!res.error){setMsg('Account created! Check your email to confirm, then sign in.');}
-      else if(res.error.message&&(res.error.message.toLowerCase().includes('already')||res.error.message.toLowerCase().includes('registered')||res.error.message.toLowerCase().includes('exist'))){setMsg('An account with this email already exists. Try signing in instead.');}
-    } else {
-      res=await supabase.auth.signInWithPassword({email:email.trim(),password:password});
-      if(!res.error&&res.data.user)onAuth(res.data.user);
-    }
-    if(res.error)setMsg(res.error.message);
-    setLoading(false);
-  }
-  var ssv=useState(false);var showPw=ssv[0];var setShowPw=ssv[1];
-  async function handleReset(){
-    if(!email.trim()){setMsg('Enter your email above first.');return;}
-    setLoading(true);
-    var res=await supabase.auth.resetPasswordForEmail(email.trim());
-    setMsg(res.error?res.error.message:'Password reset email sent!');
-    setLoading(false);
-  }
-  return(
-<div className="auth-wrapper" style={{position:'relative',display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--bg0)',fontFamily:'var(--ui)',overflow:'hidden'}}>
-  {/* Grain overlay */}
-  <div className="auth-grain"/>
-  {/* Amber radial blurs - top left */}
-  <div style={{position:'absolute',top:'-10%',left:'-10%',width:'70vw',height:'70vh',background:'radial-gradient(ellipse, rgba(196,94,40,0.35) 0%, rgba(196,94,40,0.15) 35%, transparent 65%)',pointerEvents:'none',filter:'blur(60px)',zIndex:0}}/>
-  {/* Amber radial blurs - bottom right */}
-  <div style={{position:'absolute',bottom:'-10%',right:'-10%',width:'70vw',height:'70vh',background:'radial-gradient(ellipse, rgba(240,192,80,0.30) 0%, rgba(232,160,48,0.12) 35%, transparent 65%)',pointerEvents:'none',filter:'blur(60px)',zIndex:0}}/>
-  <div className="auth-card" style={{position:'relative',zIndex:1,background:'rgba(245,237,224,0.92)',backdropFilter:'blur(12px)',border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'40px',width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(42,31,16,.15)'}}>
-    <div style={{textAlign:'center',marginBottom:28}}>
-      <div style={{marginBottom:10,display:'flex',justifyContent:'center',alignItems:'center'}}><WovenLogo size={36} dark={true}/></div>
-      <div style={{fontSize:14,color:'var(--body-text)',fontWeight:700,fontStyle:'italic',textAlign:'center'}}>Where thinking & writing happen together.</div>
-    </div>
-    {mode==='signup'&&(
-<div style={{marginBottom:14}}>
-  <span className="sect-lbl">First name</span>
-  <input value={firstName} onChange={function(e){setFirstName(e.target.value);}} placeholder="What should we call you?" onKeyDown={function(e){if(e.key==='Enter')handleSubmit();}}/>
-</div>
-    )}
-    <div style={{marginBottom:14}}>
-      <span className="sect-lbl">Email</span>
-      <input type="email" value={email} onChange={function(e){setEmail(e.target.value);}} placeholder="your@email.com" onKeyDown={function(e){if(e.key==='Enter')handleSubmit();}}/>
-    </div>
-    <div style={{marginBottom:8}}>
-      <span className="sect-lbl">Password</span>
-      <div style={{position:'relative'}}>
-        <input type={showPw?'text':'password'} value={password} onChange={function(e){setPassword(e.target.value);}} placeholder="••••••••" onKeyDown={function(e){if(e.key==='Enter')handleSubmit();}} style={{paddingRight:40}}/>
-        <button style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--mid)',padding:0}} onClick={function(){setShowPw(!showPw);}}>
-          <span className="mi" style={{fontSize:18}}>{showPw?'visibility_off':'visibility'}</span>
-        </button>
-      </div>
-    </div>
-    {mode==='signin'&&(
-<div style={{textAlign:'right',marginBottom:16}}>
-  <span style={{fontSize:12,color:'var(--indigo)',cursor:'pointer'}} onClick={handleReset}>Forgot password?</span>
-</div>
-    )}
-    {msg&&<div style={{fontSize:13,color:msg.includes('sent')||msg.includes('created')?'var(--teal)':'var(--danger)',marginBottom:14,padding:'8px 12px',background:'var(--bg2)',borderRadius:'var(--r)'}}>{msg}</div>}
-    <button className="btn btn-primary" style={{width:'100%',justifyContent:'center',marginBottom:12}} onClick={handleSubmit} disabled={loading}>
-      {loading?'Please wait...':(mode==='signup'?'Create account':'Sign in')}
-    </button>
-    {mode==='signin'&&(
-<div style={{marginTop:4}}>
-  <div style={{textAlign:'center',fontSize:12,color:'var(--mid)',marginBottom:10}}>Don't have an account?</div>
-  <button className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}} onClick={function(){setMode('signup');setMsg('');}}>
-    Create a free account
-  </button>
-</div>
-    )}
-    {mode==='signup'&&(
-<div style={{textAlign:'center',fontSize:13,color:'var(--mid)',marginTop:4}}>
-  Have an account? <span style={{color:'var(--indigo)',cursor:'pointer'}} onClick={function(){setMode('signin');setMsg('');}}>Sign in</span>
-</div>
-    )}
-  </div>
-</div>
-  );
-}
 
 // ── App Root ──
 function App(){
@@ -3387,6 +2818,7 @@ function App(){
   var ssp=useState(false);var showProfile=ssp[0];var setShowProfile=ssp[1];
   var sglt=useState({});var globalLT=sglt[0];var setGlobalLT=sglt[1];
   var spf2=useState(null);var profileFocus=spf2[0];var setProfileFocus=spf2[1];
+  var ssfc=useState(null);var strandsFocusColl=ssfc[0];var setStrandsFocusColl=ssfc[1];
   var snp=useState(false);var showNewProject=snp[0];var setShowNewProject=snp[1];
 
   function loadProjectDataById(pid){
@@ -3406,7 +2838,7 @@ function App(){
   // Handle browser back button
   useEffect(function(){
     function onPopState(){
-      if(view==='editor'){app&&app.setView&&app.setView('cards');app&&app.setDraftId&&app.setDraftId(null);}
+      if(view==='editor') vc=<DraftEditor app={app}/>;
       else if(view!=='dashboard'){setView('dashboard');}
       else{window.history.pushState(null,'',window.location.href);}
     }
@@ -3450,16 +2882,34 @@ function App(){
     setDataLoading(true);
     // Reset React state first so previous user's data never shows
     setProjects([]);setAllDrafts({});setAllStrands({});setAllTemplates({});
-    setSessions([]);setGlobalLT({});setGoalState(500);
+    setGlobalLT({});setGoalState(500);
     setProfileState({firstName:'',lastName:'',email:'',plan:'Free'});
+    // Don't reset sessions to [] here — causes stats to flash zero while loading
     loadDB('woven:global_lt',{}).then(function(g){setGlobalLT(g||{});});
     loadDB('woven:goal',500).then(function(g){setGoalState(g);});
     // Load sessions from localStorage first (faster, avoids async timing issues)
+    // Load sessions: localStorage first (instant), then merge with Supabase
     loadLS('woven:sessions',[]).then(function(local){
-      if(local&&local.length>0){setSessions(local);}
-      // Then try Supabase in background and merge if newer
+      var localSessions=Array.isArray(local)?local:[];
+      if(localSessions.length>0)setSessions(localSessions);
       loadDB('woven:sessions',[]).then(function(remote){
-        if(remote&&remote.length>0){setSessions(remote);}
+        var remoteSessions=Array.isArray(remote)?remote:[];
+        if(remoteSessions.length===0)return; // nothing remote, keep local
+        if(localSessions.length===0){setSessions(remoteSessions);return;}
+        // Merge: combine both, dedupe by id, keep all dates
+        var merged=localSessions.slice();
+        remoteSessions.forEach(function(rs){
+          var existing=merged.findIndex(function(ls){return ls.date===rs.date&&ls.projId===rs.projId;});
+          if(existing>=0){
+            // Take whichever has more words (in case of partial sync)
+            if((rs.words||0)>(merged[existing].words||0))merged[existing]=rs;
+          } else {
+            merged.push(rs);
+          }
+        });
+        setSessions(merged);
+        // Write merged back to both stores
+        saveLS('woven:sessions',merged);
       });
     });
     loadDB('woven:profile',{firstName:'',lastName:'',email:'',plan:'Free'}).then(function(p){
@@ -3574,7 +3024,7 @@ function App(){
   }
   function recordSession(pid,wordsAdded){
     var t=todayStr();
-    if(!wordsAdded||wordsAdded<=0||wordsAdded>500)return;
+    if(!wordsAdded||wordsAdded<=0)return;
     setSessions(function(prev){
       var next=prev.slice();
       var idx=next.findIndex(function(s){return s.date===t&&s.projId===pid;});
@@ -3590,7 +3040,8 @@ function App(){
       var cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);var cutoffStr=cutoff.getFullYear()+'-'+String(cutoff.getMonth()+1).padStart(2,'0')+'-'+String(cutoff.getDate()).padStart(2,'0');
       next=next.filter(function(s){return s.date>=cutoffStr;});
       // Sessions: always save to localStorage first for reliability, then sync to Supabase
-      saveLS('woven:sessions',next);
+      var lsKey='woven:sessions:'+(window.__wovenUserId||'anon');
+      saveLS(lsKey,next);saveLS('woven:sessions',next); // keep legacy key too
       if(window.__wovenUserId){
         supabase.from('wf_data').upsert({key:'woven:sessions',user_id:window.__wovenUserId,value:next,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(){});
       }
@@ -3609,21 +3060,27 @@ function App(){
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl};
 
   function signOut(){supabase.auth.signOut().then(function(){window.__wovenUserId=null;setCurrentUser(null);setView('dashboard');setProjects([]);setAllDrafts({});});}
 
   // Check for shared draft link
   var urlParams=new URLSearchParams(window.location.search);
   var shareId=urlParams.get('share');
-  if(shareId)return(<div className="woven-root"><GlobalStyles/><SharedDraftView shareId={shareId}/></div>);
+  if(shareId)return(<div className="woven-root"><div id="woven-tt" style={{position:"fixed",display:"none",background:"#7A5A38",color:"#fdf8f0",fontSize:11,padding:"4px 10px",borderRadius:6,pointerEvents:"none",zIndex:99999,transform:"translateX(-50%)",fontFamily:"DM Sans, sans-serif",whiteSpace:"nowrap"}}/><GlobalStyles/><SharedDraftView shareId={shareId}/></div>);
 
-  if(authLoading)return(<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg0)',fontFamily:'var(--serif)',fontSize:24,color:'var(--mid)'}}>Loading...</div>);
+  if(authLoading)return(
+<div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg0)',gap:16}}>
+  <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
+  <div style={{width:36,height:36,borderRadius:'50%',border:'3px solid var(--border)',borderTopColor:'var(--indigo)',animation:'spin .8s linear infinite'}}/>
+  <span style={{fontFamily:'var(--serif)',fontSize:18,color:'var(--mid)'}}>Loading Woven…</span>
+</div>
+  );
   if(!currentUser)return(<div><GlobalStyles/><AuthScreen onAuth={function(user){window.__wovenUserId=user.id;setCurrentUser(user);loadAllData();}}/></div>);
 
   var inner=null;
   if(view==='dashboard'){inner=<Dashboard app={app} onOpenProfile={openProfile} onNewProject={function(){setShowNewProject(true);}}/>;
-  }else if(view==='editor'){inner=<EditorView app={app}/>;
+  }else if(view==='editor'){inner=<DraftEditor app={app}/>;
   }else{
     var vc=null;
    if(view==='canvas')vc=<ExploreCanvas app={app}/>;
@@ -3634,9 +3091,10 @@ function App(){
   }
   return(
 <div className="woven-root">
+<div id="woven-tt"/>
   <GlobalStyles/>
   {inner}
-  <ProfilePanel app={app} focusField={profileFocus} open={showProfile} onClose={function(){setShowProfile(false);}}/>
+  <ProfileDrawer app={app} focusField={profileFocus} open={showProfile} topOffset={54} onClose={function(){setShowProfile(false);}}/>
   {showNewProject&&<ProjectWizard app={app} onClose={function(){setShowNewProject(false);}}/>}
 </div>
   );

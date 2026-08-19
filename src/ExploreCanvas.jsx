@@ -17,6 +17,8 @@ import {
   Controls, MiniMap, addEdge, useNodesState, useEdgesState, useReactFlow,
   Handle, Position, NodeResizer,
 } from '@xyflow/react'
+import { Drawer } from './SharedUI'
+import { STATUSES, genId, initials, getSupabase } from './utils'
 
 // ─────────────────────────────────────────────────────────────
 // STYLES
@@ -95,10 +97,6 @@ const CANVAS_CSS = `
   border-left:1px solid var(--border);display:flex;flex-direction:column;}
 .ex-drawer.open{width:280px;margin:5px 5px 5px 0;border:1px solid var(--border);border-radius:var(--r);}
 .ex-drawer-inner{width:280px;display:flex;flex-direction:column;height:100%;overflow:hidden;}
-.ex-edrawer{background:var(--bg1);display:flex;flex-direction:column;height:100%;}
-.ex-edrawer-hdr{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;
-  align-items:center;justify-content:space-between;flex-shrink:0;background:var(--bg1);}
-.ex-edrawer-title{font-size:14px;font-weight:600;color:var(--text);}
 .ex-edrawer-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
 
 /* Strand collection tabs — scrollable with overflow arrows */
@@ -233,13 +231,7 @@ function CanvasStyles() {
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
-const STATUSES = {
-  loose_thread: { label: 'Loose Thread', color: '#d4943e' },
-  first_draft:  { label: 'First Draft',  color: '#2f76e0' },
-  second_draft: { label: 'Second Draft', color: '#e02f79' },
-  under_review: { label: 'Under Review', color: '#ce2fe0' },
-  complete:     { label: 'Complete',     color: '#64e02f' },
-}
+// STATUSES now lives in ./utils
 
 const STICKY_COLORS = [
   { id: 'none',  bg: '#fdf8f0', border: '#e2d0b8', text: '#2a1f10' },
@@ -264,16 +256,7 @@ const DRAWER_ITEMS = [
 // ─────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────
-function genId() {
-  return '_' + Math.random().toString(36).slice(2) + Date.now().toString(36)
-}
-function initials(name) {
-  if (!name?.trim()) return '?'
-  const p = name.trim().split(/\s+/).filter(w => w.length > 0)
-  if (!p.length) return '?'
-  if (p.length === 1) return p[0][0].toUpperCase()
-  return (p[0][0] + p[p.length - 1][0]).toUpperCase()
-}
+// genId and initials now live in ./utils
 function accentColor(item) {
   if (!item) return '#aaa'
   if (item.itemType === 'strand') return item.color || '#aaa'
@@ -306,23 +289,13 @@ function buildPayload(raw, itemType, templates) {
 // ─────────────────────────────────────────────────────────────
 // PERSISTENCE via wf_data (matches main app pattern exactly)
 // ─────────────────────────────────────────────────────────────
-function getClient() {
-  if (window.__sb) return window.__sb
-  if (window.supabase?.createClient) {
-    window.__sb = window.supabase.createClient(
-      'https://mxsdiqrbxlvcwexfdtrj.supabase.co',
-      'sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u'
-    )
-    return window.__sb
-  }
-  return null
-}
+// getClient() replaced by getSupabase() from ./utils
 
 function canvasSave(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)) } catch {}
   const uid = window.__wovenUserId
   if (!uid) return
-  const sb = getClient()
+  const sb = getSupabase()
   if (sb) sb.from('wf_data').upsert(
     { key, user_id: uid, value: val, updated_at: new Date().toISOString() },
     { onConflict: 'key,user_id' }
@@ -335,7 +308,7 @@ function canvasLoad(key, def) {
     try { const r = localStorage.getItem(key); return Promise.resolve(r ? JSON.parse(r) : def) }
     catch { return Promise.resolve(def) }
   }
-  const sb = getClient()
+  const sb = getSupabase()
   if (!sb) {
     try { const r = localStorage.getItem(key); return Promise.resolve(r ? JSON.parse(r) : def) }
     catch { return Promise.resolve(def) }
@@ -625,7 +598,7 @@ function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
 // ─────────────────────────────────────────────────────────────
 // STRANDS DRAWER — tabs from live strandsObj keys only
 // ─────────────────────────────────────────────────────────────
-function StrandsDrawer({ strandsObj, templates, onDragStart }) {
+function ExploreStrandsPalette({ strandsObj, templates, onDragStart }) {
   // Derive collection names from live data — not hardcoded, not from templates
   const collections = Object.keys(strandsObj)
   const [activeIdx, setActiveIdx] = useState(0)
@@ -701,7 +674,7 @@ function StrandsDrawer({ strandsObj, templates, onDragStart }) {
 function DrawerContent({ panel, templates, strandsObj, drafts, looseThreads, onDragStart }) {
   if (panel === 'strands') {
     return (
-      <StrandsDrawer
+      <ExploreStrandsPalette
         strandsObj={strandsObj}
         templates={templates}
         onDragStart={onDragStart}
@@ -1126,20 +1099,14 @@ export default function ExploreCanvas({ app }) {
               />
               <div className={`ex-drawer ${activeDrawer ? 'open' : ''}`}>
                 <div className="ex-drawer-inner">
-                  <div className="ex-edrawer">
-                    <div className="ex-edrawer-hdr">
-                      <span className="ex-edrawer-title">{drawerLabel}</span>
-                      <button className="btn-icon" onClick={() => setActiveDrawer(null)}>
-                        <span className="mi">close</span>
-                      </button>
-                    </div>
+                  <Drawer variant="inline" open={true} title={drawerLabel} onClose={() => setActiveDrawer(null)} padded={false} width={280}>
                     <DrawerContent
                       panel={activeDrawer}
                       templates={templates} strandsObj={strandsObj}
                       drafts={drafts} looseThreads={looseThreads}
                       onDragStart={handleDragStart}
                     />
-                  </div>
+                  </Drawer>
                 </div>
               </div>
             </div>
