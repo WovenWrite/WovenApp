@@ -17,6 +17,7 @@ var DRAWER_CSS = `
 
 /* Inline variant — a column beside the content */
 .wv-drawer--inline{width:var(--wv-drawer-w,340px);border-left:1px solid var(--border);}
+.wv-drawer--inline.wv-drawer--flexw{width:auto;flex:1;min-width:0;}
 
 /* Overlay variant — slides in over the page */
 .wv-drawer-overlay{position:fixed;inset:0;z-index:200;display:flex;justify-content:flex-end;}
@@ -123,6 +124,18 @@ var DRAWER_CSS = `
   line-height:1.5;color:#7A5A38;}
 .wv-category-link-arrow{color:#7A5A38;flex-shrink:0;font-size:18px;}
 
+/* Drawer toolbar — search + sort, sits between header and body */
+.wv-drawer-toolbar{display:flex;align-items:center;gap:8px;padding:12px 15px;
+  border-bottom:1px solid var(--border);flex-shrink:0;background:#EDE0CC;}
+.wv-search-box{flex:1;display:flex;align-items:center;gap:6px;min-width:0;
+  background:rgba(255,252,248,.5);border:1px solid #E2D0B8;border-radius:8px;
+  padding:7px 12px;transition:background .12s ease,border-color .12s ease;}
+.wv-search-box:focus-within{background:#FFFCF8;border-color:#C45E28;}
+.wv-search-icon{font-size:16px;color:#A88060;flex-shrink:0;}
+.wv-search-input{border:none;background:none;outline:none;flex:1;min-width:0;
+  font-family:var(--serif,'Crimson Text',serif);font-size:14px;color:#6B4A26;padding:0;}
+.wv-search-input::placeholder{font-style:italic;color:var(--placeholder,#A88060);}
+
 /* Checkbox */
 .wv-check{width:17px;height:17px;border-radius:4px;display:flex;align-items:center;
   justify-content:center;flex-shrink:0;transition:all .15s;border:1px solid var(--border);}
@@ -178,17 +191,18 @@ function useDrawerStyles() {
 //   padded   pad the body (default true; set false for edge-to-edge rows)
 //   width    override width in px
 //
-export function Drawer({ variant, open, title, onBack, onClose, footer, padded, children, width, headerExtra, topOffset }) {
+export function Drawer({ variant, open, title, onBack, onClose, footer, padded, children, width, headerExtra, topOffset, toolbar }) {
   useDrawerStyles();
   if (open === false) return null;
 
   var isOverlay = variant === 'overlay';
-  var style = width ? { '--wv-drawer-w': width + 'px' } : undefined;
+  var isFlexWidth = width === 'flex';
+  var style = (width && !isFlexWidth) ? { '--wv-drawer-w': width + 'px' } : undefined;
   var overlayStyle = topOffset ? { top: topOffset } : undefined;
   var bodyCls = 'wv-drawer-body' + (padded === false ? '' : ' wv-drawer-body--pad');
 
   var panel = (
-    <div className={'wv-drawer wv-drawer--' + (isOverlay ? 'overlay' : 'inline')} style={style}>
+    <div className={'wv-drawer wv-drawer--' + (isOverlay ? 'overlay' : 'inline') + (isFlexWidth ? ' wv-drawer--flexw' : '')} style={style}>
       <div className="wv-drawer-hdr">
         <div className="wv-drawer-hdr-left">
           {onBack && (
@@ -207,6 +221,7 @@ export function Drawer({ variant, open, title, onBack, onClose, footer, padded, 
           )}
         </div>
       </div>
+      {toolbar}
       <div className={bodyCls}>{children}</div>
       {footer && <div className="wv-drawer-footer">{footer}</div>}
     </div>
@@ -410,7 +425,7 @@ export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
       <div className="wv-strand-result-left">
         <Avatar strand={strand} size={30} />
         <span className="wv-strand-result-title">{strand.name}</span>
-        <span className="mi wv-strand-result-icon" style={{ fontSize: 10 }}>{spoolIcon || 'account_tree'}</span>
+        <span className="mi wv-strand-result-icon" style={{ fontSize: 10 }}>{spoolIcon || 'auto_stories'}</span>
       </div>
       <span className="mi wv-strand-result-arrow">arrow_forward_ios</span>
       {onAdd && (
@@ -422,6 +437,27 @@ export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
           add_circle_outline
         </span>
       )}
+    </div>
+  );
+}
+
+// Search input + a slot for a sort control, styled as a drawer's toolbar row.
+// Pass any sort widget via `sortSlot` (e.g. an existing StrandSortFilter) —
+// this component only owns the search box and the row layout, not sorting
+// logic itself.
+export function SearchSortBar({ value, onChange, placeholder, sortSlot }) {
+  return (
+    <div className="wv-drawer-toolbar">
+      <div className="wv-search-box">
+        <span className="mi wv-search-icon">search</span>
+        <input
+          className="wv-search-input"
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder || 'Search...'}
+        />
+      </div>
+      {sortSlot}
     </div>
   );
 }
