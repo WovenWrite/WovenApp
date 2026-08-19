@@ -6,16 +6,19 @@
 //   <LooseThreadDrawer lt={thread} activeProjects={projects}
 //     onUpdate={fn} onMove={fn} onDelete={fn} onClose={fn} />
 
-import { Drawer, Section } from './SharedUI';
+import { Drawer, Field, Section } from './SharedUI';
 
 export default function LooseThreadDrawer({ lt, activeProjects, variant, open, onUpdate, onMove, onClose, onDelete }) {
   if (!lt) return null;
 
   var projects = activeProjects || [];
 
-  var archiveBtn = (
-    <button className="btn-icon btn-danger" onClick={onDelete} title="Archive this thread" aria-label="Archive thread">
-      <span className="mi" style={{ fontSize: 18 }}>delete</span>
+  // NOTE: placement is a placeholder — trash can was intentionally pulled out
+  // of the header per the shell redesign; revisit once content-level design
+  // for this drawer is defined.
+  var footer = (
+    <button className="btn btn-ghost" style={{ color: 'var(--danger)', width: '100%', justifyContent: 'center' }} onClick={onDelete}>
+      <span className="mi" style={{ fontSize: 16 }}>delete</span>Archive this thread
     </button>
   );
 
@@ -24,30 +27,24 @@ export default function LooseThreadDrawer({ lt, activeProjects, variant, open, o
       variant={variant || 'overlay'}
       open={open}
       title="Loose Thread"
-      icon="linear_scale"
       onClose={onClose}
-      headerExtra={archiveBtn}
-      padded={false}
+      footer={footer}
     >
-      <Section label="Title">
-        <input
-          key={lt.id + '-t'}
-          defaultValue={lt.title || ''}
-          placeholder="Give this thread a name..."
-          onBlur={function (e) { onUpdate({ title: e.target.value }); }}
-        />
-      </Section>
+      <Field
+        label="Title"
+        key={lt.id + '-t'}
+        defaultValue={lt.title || ''}
+        placeholder="Give this thread a name..."
+        onBlur={function (e) { onUpdate({ title: e.target.value }); }}
+      />
 
-      <Section label="Notes">
-        <textarea
-          key={lt.id + '-s'}
-          defaultValue={lt.synopsis || ''}
-          placeholder="Write freely — capture the idea, explore it, let it breathe..."
-          rows={14}
-          style={{ resize: 'vertical' }}
-          onBlur={function (e) { onUpdate({ synopsis: e.target.value }); }}
-        />
-      </Section>
+      <Field
+        label="Notes"
+        key={lt.id + '-s'}
+        defaultValue={lt.synopsis || ''}
+        placeholder="Write freely — capture the idea, explore it, let it breathe..."
+        onBlur={function (e) { onUpdate({ synopsis: e.target.value }); }}
+      />
 
       {projects.length > 0 && (
         <Section label="Move to a project">
