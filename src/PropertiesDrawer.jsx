@@ -81,7 +81,7 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
       </Section>
 
       <Section label="Status">
-        <StatusDotWithArchive draft={draft} app={app} showLabel={true} />
+        <StatusDotWithArchive draft={draft} app={app} showLabel={true} dotSize={16} />
       </Section>
 
       <Section label="Nested under">
