@@ -12,55 +12,65 @@ import { STATUSES, FIELD_TYPES, SYSTEM_COLORS, PRESET_COLORS, initials, uploadIm
 // ══════════════════════════════════════════════
 
 var DRAWER_CSS = `
-.wv-drawer{background:var(--bg1);display:flex;flex-direction:column;flex-shrink:0;
-  font-family:var(--ui,'DM Sans',sans-serif);overflow:hidden;}
+.wv-drawer{background:#EDE0CC;display:flex;flex-direction:column;flex-shrink:0;
+  height:100%;font-family:var(--ui,'DM Sans',sans-serif);overflow:hidden;}
 
 /* Inline variant — a column beside the content */
-.wv-drawer--inline{width:var(--wv-drawer-w,300px);border-left:1px solid var(--border);}
+.wv-drawer--inline{width:var(--wv-drawer-w,340px);border-left:1px solid var(--border);}
 
 /* Overlay variant — slides in over the page */
 .wv-drawer-overlay{position:fixed;inset:0;z-index:200;display:flex;justify-content:flex-end;}
 .wv-drawer-backdrop{position:absolute;inset:0;background:rgba(42,31,16,.25);
   animation:wvFade .18s ease;}
-.wv-drawer--overlay{position:relative;width:var(--wv-drawer-w,420px);max-width:92vw;
+.wv-drawer--overlay{position:relative;width:var(--wv-drawer-w,340px);max-width:92vw;
   border-left:1px solid var(--border);box-shadow:-8px 0 40px rgba(42,31,16,.10);
   animation:wvSlide .22s cubic-bezier(.22,.61,.36,1);}
 @keyframes wvFade{from{opacity:0}to{opacity:1}}
 @keyframes wvSlide{from{transform:translateX(16px);opacity:.4}to{transform:none;opacity:1}}
 
-/* Header — identical in both variants */
+/* Header — identical in both variants: 62px, 15px padding, bottom stroke #A88060 */
 .wv-drawer-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px;
-  padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0;
-  background:var(--bg1);min-height:48px;}
-.wv-drawer--overlay .wv-drawer-hdr{padding:14px 18px;min-height:56px;}
+  height:62px;padding:15px;box-sizing:border-box;border-bottom:1px solid #A88060;
+  flex-shrink:0;background:#EDE0CC;}
 .wv-drawer-hdr-left{display:flex;align-items:center;gap:8px;min-width:0;flex:1;}
-.wv-drawer-title{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--text);
+.wv-drawer-title{font-family:'DM Sans',sans-serif;font-size:20px;font-weight:700;color:#6B4A26;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.wv-drawer--overlay .wv-drawer-title{font-size:19px;}
-.wv-drawer-back{background:none;border:none;cursor:pointer;color:var(--mid);
+.wv-drawer-back{background:none;border:none;cursor:pointer;color:#6B4A26;
   display:flex;align-items:center;padding:0;flex-shrink:0;}
-.wv-drawer-back:hover{color:var(--text);}
+.wv-drawer-back .mi,.wv-drawer-hdr .mi{color:#6B4A26;}
+.wv-drawer-back:hover{opacity:.75;}
 
 .wv-drawer-body{flex:1;overflow-y:auto;}
-.wv-drawer-body--pad{padding:14px;}
-.wv-drawer--overlay .wv-drawer-body--pad{padding:18px;}
+.wv-drawer-body--pad{padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:24px;}
 
 .wv-drawer-footer{padding:12px 14px;border-top:1px solid var(--border);flex-shrink:0;
-  background:var(--bg1);}
+  background:#EDE0CC;}
 .wv-drawer--overlay .wv-drawer-footer{padding:14px 18px;}
 
-/* Sections */
-.wv-sect{padding:12px 14px;border-bottom:1px solid var(--border);}
-.wv-sect:last-child{border-bottom:none;}
+/* Sections — plain flex children; spacing comes from the body's 24px gap, not their own padding/border */
+.wv-sect{}
 .wv-lbl{font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;
   letter-spacing:.08em;margin-bottom:7px;display:block;}
-.wv-empty{padding:14px;font-size:13px;color:var(--mid);line-height:1.5;}
+.wv-empty{font-size:13px;color:var(--mid);line-height:1.5;}
+
+/* Fields — label + auto-growing box, shared by every text field in the drawers.
+   No padding/border of its own — spacing between fields comes from the parent's 24px gap. */
+.wv-field-wrap{display:flex;flex-direction:column;}
+.wv-field-lbl{display:block;font-family:'DM Sans',sans-serif;font-weight:600;font-size:16px;
+  line-height:20px;color:#7A5A38;margin-bottom:7px;}
+.wv-field-box{display:block;width:100%;box-sizing:border-box;
+  background:rgba(255,252,248,.5);border:1px solid #E2D0B8;border-radius:8px;
+  padding:10px 15px;font-family:var(--serif,'Crimson Text',serif);font-weight:400;
+  font-size:16px;line-height:1.5;color:#6B4A26;resize:none;overflow-y:hidden;
+  transition:background .12s ease,border-color .12s ease;}
+.wv-field-box:focus{outline:none;background:#FFFCF8;border-color:#C45E28;}
+.wv-field-box::placeholder{font-style:italic;color:var(--placeholder,#A88060);}
 
 /* Collapsible */
 .wv-collapse{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mid);
-  cursor:pointer;padding:10px 14px;border-bottom:1px solid var(--border);
-  user-select:none;}
+  cursor:pointer;user-select:none;}
 .wv-collapse:hover{color:var(--text);}
+.wv-collapse-body{display:flex;flex-direction:column;gap:24px;padding-top:15px;}
 
 /* Row — reused by strand lists, bind lists, archive lists */
 .wv-row{display:flex;align-items:center;gap:10px;padding:9px 14px;
@@ -73,6 +83,42 @@ var DRAWER_CSS = `
 .wv-avatar{border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-weight:600;color:#fff;flex-shrink:0;overflow:hidden;font-family:var(--ui);}
 .wv-avatar img{width:100%;height:100%;object-fit:cover;}
+
+/* Buttons — Primary / Secondary / Tertiary, the three used across drawer content */
+.wv-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  box-sizing:border-box;padding:12px 15px;border-radius:8px;cursor:pointer;
+  font-family:'DM Sans',sans-serif;font-weight:700;font-size:16px;
+  transition:background .15s ease,color .15s ease,border-color .15s ease;}
+.wv-btn .mi{font-size:18px;}
+.wv-btn:disabled{opacity:.5;cursor:not-allowed;}
+.wv-btn-primary{background:#DF6321;border:none;color:#F5EDE0;}
+.wv-btn-primary:hover:not(:disabled){background:#6B4A26;}
+.wv-btn-secondary{background:transparent;border:1px solid #DF6321;color:#DF6321;}
+.wv-btn-secondary:hover:not(:disabled){background:#DF6321;color:#F5EDE0;}
+.wv-btn-tertiary{background:none;border:none;color:#DF6321;width:auto;padding:0;}
+.wv-btn-tertiary:hover:not(:disabled){opacity:.75;}
+
+/* Strand result row — used in browse/tag lists (StrandsDrawer, etc.) */
+.wv-strand-result{display:flex;align-items:center;height:50px;box-sizing:border-box;
+  cursor:pointer;}
+.wv-strand-result-left{display:flex;align-items:center;gap:6px;flex:1;min-width:0;}
+.wv-strand-result-title{font-family:var(--serif,'Crimson Text',serif);font-weight:600;
+  font-size:20px;line-height:1.5;color:#684a26;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;}
+.wv-strand-result-icon{color:#A88060;flex-shrink:0;}
+.wv-strand-result-arrow{color:#A88060;flex-shrink:0;font-size:18px;}
+
+/* Help text */
+.wv-help-text{font-family:'DM Sans',sans-serif;font-size:16px;color:#A88060;margin:0;
+  line-height:1.5;}
+
+/* Category link — e.g. "view all in this collection" row */
+.wv-category-link{display:flex;align-items:center;justify-content:space-between;
+  height:50px;box-sizing:border-box;padding:15px 0;border-bottom:1px solid #E2D0B8;
+  cursor:pointer;}
+.wv-category-link-title{font-family:'DM Sans',sans-serif;font-weight:600;font-size:18px;
+  line-height:1.5;color:#7A5A38;}
+.wv-category-link-arrow{color:#7A5A38;flex-shrink:0;font-size:18px;}
 
 /* Checkbox */
 .wv-check{width:17px;height:17px;border-radius:4px;display:flex;align-items:center;
@@ -114,7 +160,7 @@ function useDrawerStyles() {
 //   padded   pad the body (default true; set false for edge-to-edge rows)
 //   width    override width in px
 //
-export function Drawer({ variant, open, title, icon, onBack, onClose, footer, padded, children, width, headerExtra }) {
+export function Drawer({ variant, open, title, onBack, onClose, footer, padded, children, width, headerExtra }) {
   useDrawerStyles();
   if (open === false) return null;
 
@@ -128,10 +174,9 @@ export function Drawer({ variant, open, title, icon, onBack, onClose, footer, pa
         <div className="wv-drawer-hdr-left">
           {onBack && (
             <button className="wv-drawer-back" onClick={onBack} aria-label="Back">
-              <span className="mi" style={{ fontSize: 18 }}>arrow_back</span>
+              <span className="mi" style={{ fontSize: 20 }}>arrow_back</span>
             </button>
           )}
-          {!onBack && icon && <span className="mi" style={{ fontSize: 17, color: 'var(--indigo)', flexShrink: 0 }}>{icon}</span>}
           <span className="wv-drawer-title">{title}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
@@ -167,6 +212,68 @@ export function Section({ label, children, style }) {
   );
 }
 
+// Auto-grows a textarea to fit its content, up to `maxLines` lines, then
+// scrolls internally. Reads font-size/line-height from computed style so it
+// stays correct if the CSS changes later rather than hardcoding a pixel value.
+function useAutoGrow(maxLines) {
+  var ref = useRef(null);
+  useEffect(function () {
+    var el = ref.current;
+    if (!el) return;
+    function resize() {
+      el.style.height = 'auto';
+      var cs = window.getComputedStyle(el);
+      var lineHeight = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5;
+      var paddingV = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      var borderV = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+      var maxH = lineHeight * maxLines + paddingV + borderV;
+      var next = Math.min(el.scrollHeight, maxH);
+      el.style.height = next + 'px';
+      el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden';
+    }
+    resize();
+    el.addEventListener('input', resize);
+    window.addEventListener('resize', resize);
+    return function () {
+      el.removeEventListener('input', resize);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+  return ref;
+}
+
+// A labeled, auto-growing text field — the one style used for every text
+// input across the drawers (Title, Synopsis, Notes, custom fields, etc.).
+// Uncontrolled by design (defaultValue + onBlur) to match the save-on-blur
+// pattern used throughout the app; pass a `key` on the element itself when
+// the underlying record changes so it remounts with the new defaultValue.
+export function Field({ label, wrap, className, style, ...rest }) {
+  var ref = useAutoGrow(6);
+  var box = (
+    <textarea
+      ref={ref}
+      rows={1}
+      className={'wv-field-box' + (className ? ' ' + className : '')}
+      style={style}
+      {...rest}
+    />
+  );
+  if (wrap === false) {
+    return (
+      <>
+        {label && <label className="wv-field-lbl">{label}</label>}
+        {box}
+      </>
+    );
+  }
+  return (
+    <div className="wv-field-wrap">
+      {label && <label className="wv-field-lbl">{label}</label>}
+      {box}
+    </div>
+  );
+}
+
 export function Collapsible({ label, open, onToggle, children }) {
   return (
     <>
@@ -174,7 +281,7 @@ export function Collapsible({ label, open, onToggle, children }) {
         <span className="mi" style={{ fontSize: 16 }}>{open ? 'expand_less' : 'expand_more'}</span>
         <span>{label}</span>
       </div>
-      {open && <div>{children}</div>}
+      {open && <div className="wv-collapse-body">{children}</div>}
     </>
   );
 }
@@ -188,6 +295,60 @@ export function Avatar({ strand, size }) {
         : strand.emoji
           ? <span style={{ fontSize: Math.round(sz * 0.55) }}>{strand.emoji}</span>
           : initials(strand.name)}
+    </div>
+  );
+}
+
+export function PrimaryButton({ icon, children, onClick, disabled, type, style }) {
+  return (
+    <button type={type || 'button'} className="wv-btn wv-btn-primary" onClick={onClick} disabled={disabled} style={style}>
+      {icon && <span className="mi">{icon}</span>}
+      <span>{children}</span>
+    </button>
+  );
+}
+
+export function SecondaryButton({ icon, children, onClick, disabled, type, style }) {
+  return (
+    <button type={type || 'button'} className="wv-btn wv-btn-secondary" onClick={onClick} disabled={disabled} style={style}>
+      {icon && <span className="mi">{icon}</span>}
+      <span>{children}</span>
+    </button>
+  );
+}
+
+export function TertiaryButton({ children, onClick, disabled, type, style }) {
+  return (
+    <button type={type || 'button'} className="wv-btn wv-btn-tertiary" onClick={onClick} disabled={disabled} style={style}>
+      {children}
+    </button>
+  );
+}
+
+// A row for browse/tag lists — strand thumbnail, name, small spool icon, forward chevron.
+export function StrandResultRow({ strand, onClick, spoolIcon }) {
+  return (
+    <div className="wv-strand-result" onClick={onClick}>
+      <div className="wv-strand-result-left">
+        <Avatar strand={strand} size={30} />
+        <span className="wv-strand-result-title">{strand.name}</span>
+        <span className="mi wv-strand-result-icon" style={{ fontSize: 10 }}>{spoolIcon || 'account_tree'}</span>
+      </div>
+      <span className="mi wv-strand-result-arrow">arrow_forward_ios</span>
+    </div>
+  );
+}
+
+export function HelpText({ children, style }) {
+  return <p className="wv-help-text" style={style}>{children}</p>;
+}
+
+// A row for drilling into a category/collection — e.g. "Characters →"
+export function CategoryLink({ title, onClick }) {
+  return (
+    <div className="wv-category-link" onClick={onClick}>
+      <span className="wv-category-link-title">{title}</span>
+      <span className="mi wv-category-link-arrow">arrow_forward_ios</span>
     </div>
   );
 }
