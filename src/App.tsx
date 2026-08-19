@@ -2289,14 +2289,15 @@ function StrandsPage({app,allProjects}){
   var rawColl=Object.keys(projStrands);
   var collNames=savedOrder?savedOrder.filter(function(c){return rawColl.includes(c);}).concat(rawColl.filter(function(c){return !savedOrder.includes(c);})):rawColl;
   if(collNames.length===0)collNames=['Characters'];
-  var sac=useState(collNames[0]);var activeColl=sac[0];var setActiveColl=sac[1];
+  var sac=useState(function(){ return app.strandsFocusColl && collNames.includes(app.strandsFocusColl) ? app.strandsFocusColl : collNames[0]; });var activeColl=sac[0];var setActiveColl=sac[1];
   var sasi=useState(null);var activeStrandId=sasi[0];var setActiveStrandId=sasi[1];
   var ssc=useState('');var search=ssc[0];var setSearch=ssc[1];
   var sss=useState('name');var strandSort=sss[0];var setStrandSort=sss[1];
   var ssf=useState(null);var strandFilter=ssf[0];var setStrandFilter=ssf[1];
   var snc=useState(false);var newColl=snc[0];var setNewColl=snc[1];
   var sncn=useState('');var newCollName=sncn[0];var setNewCollName=sncn[1];
-  var scs=useState(false);var showCollSettings=scs[0];var setShowCollSettings=scs[1];
+  var scs=useState(function(){ return !!app.strandsFocusColl; });var showCollSettings=scs[0];var setShowCollSettings=scs[1];
+  useEffect(function(){ if(app.strandsFocusColl && app.setStrandsFocusColl) app.setStrandsFocusColl(null); },[]);
   var isMobile=useIsMobile();
   var smdo=useState(false);var mobileDetailOpen=smdo[0];var setMobileDetailOpen=smdo[1];
   var savt=useState(false);var showAvatarEdit=savt[0];var setShowAvatarEdit=savt[1];
@@ -2801,6 +2802,7 @@ function App(){
   var ssp=useState(false);var showProfile=ssp[0];var setShowProfile=ssp[1];
   var sglt=useState({});var globalLT=sglt[0];var setGlobalLT=sglt[1];
   var spf2=useState(null);var profileFocus=spf2[0];var setProfileFocus=spf2[1];
+  var ssfc=useState(null);var strandsFocusColl=ssfc[0];var setStrandsFocusColl=ssfc[1];
   var snp=useState(false);var showNewProject=snp[0];var setShowNewProject=snp[1];
 
   function loadProjectDataById(pid){
@@ -3042,7 +3044,7 @@ function App(){
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl};
 
   function signOut(){supabase.auth.signOut().then(function(){window.__wovenUserId=null;setCurrentUser(null);setView('dashboard');setProjects([]);setAllDrafts({});});}
 
