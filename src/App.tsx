@@ -644,11 +644,11 @@ function GlobalLooseThreads({app}){
   var allLT=Object.values(app.globalLT||{}).filter(function(d){return !d.archived;}).sort(function(a,b){return (b.createdAt||'').localeCompare(a.createdAt||'');});
   var activeProjects=app.projects.filter(function(p){return !p.archived;});
   var soi=useState(null);var openLTId=soi[0];var setOpenLTId=soi[1];
+  // A newly-created thread stays purely local (never touches app.globalLT)
+  // until it actually has a title or synopsis — closing an empty one leaves
+  // no trace, per "no input means it does not save."
+  var spl=useState(null);var pendingLT=spl[0];var setPendingLT=spl[1];
   function updateLT(id,changes){app.updateGlobalLT(id,changes);}
-  function addLT(){
-    var id=genId();
-    app.updateGlobalLT(id,{id:id,title:'',synopsis:'',createdAt:new Date().toISOString(),archived:false});
-  }
   function moveToProject(ltId,targetPid){
     if(!targetPid)return;
     var lt=app.globalLT[ltId];if(!lt)return;
@@ -660,8 +660,32 @@ function GlobalLooseThreads({app}){
   var visibleLT=showMore?allLT:allLT.slice(0,3);
   function handleAddLT(){
     var id=genId();
-    app.updateGlobalLT(id,{id:id,title:'',synopsis:'',createdAt:new Date().toISOString(),archived:false});
+    setPendingLT({id:id,title:'',synopsis:'',createdAt:new Date().toISOString(),archived:false});
     setOpenLTId(id);
+  }
+  var activeLT=pendingLT&&pendingLT.id===openLTId?pendingLT:app.globalLT[openLTId];
+  function handleDrawerUpdate(changes){
+    if(pendingLT&&pendingLT.id===openLTId){
+      var merged=Object.assign({},pendingLT,changes);
+      if((merged.title&&merged.title.trim())||(merged.synopsis&&merged.synopsis.trim())){
+        // First real content — actually create the record now.
+        app.updateGlobalLT(merged.id,merged);
+        setPendingLT(null);
+      } else {
+        setPendingLT(merged);
+      }
+      return;
+    }
+    updateLT(openLTId,changes);
+  }
+  function handleDrawerClose(){
+    setPendingLT(null); // no-op if it was never actually saved
+    setOpenLTId(null);
+  }
+  function handleDrawerDelete(){
+    if(pendingLT&&pendingLT.id===openLTId){handleDrawerClose();return;}
+    updateLT(openLTId,{archived:true});
+    setOpenLTId(null);
   }
   return(
 <div style={{marginTop:24}}>
@@ -674,7 +698,7 @@ function GlobalLooseThreads({app}){
 <div key={d.id} style={{background:'#FDF8F0',border:'1px solid #E2D0B8',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:150,maxWidth:150,flexShrink:0,transition:'border-color .2s,box-shadow .2s',outline:'1px solid transparent'}}
   onClick={function(){setOpenLTId(d.id);}}
   onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';e.currentTarget.style.boxShadow='0 4px 12px rgba(196,94,40,.12)';}}
-  onMouseLeave={function(e){e.currentTarget.style.borderColor='transparent';e.currentTarget.style.boxShadow='none';}}>
+  onMouseLeave={function(e){e.currentTarget.style.borderColor='#E2D0B8';e.currentTarget.style.boxShadow='none';}}>
   <div style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2A1F10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.title||'Untitled loose thread'}</div>
   {d.synopsis&&<div style={{fontFamily:'DM Sans, sans-serif',fontSize:14,fontStyle:'italic',color:'#A88060',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.synopsis}</div>}
 </div>
@@ -687,8 +711,13 @@ function GlobalLooseThreads({app}){
   </button>
 </div>
   )}
-  {openLTId&&(
-<LooseThreadDrawer lt={app.globalLT[openLTId]} activeProjects={activeProjects} open={true} variant="overlay" topOffset={54} onUpdate={function(changes){updateLT(openLTId,changes);}} onMove={function(pid){moveToProject(openLTId,pid);setOpenLTId(null);}} onClose={function(){setOpenLTId(null);}} onDelete={function(){updateLT(openLTId,{archived:true});setOpenLTId(null);}}/>
+  <button onClick={handleAddLT} title="Add a loose thread" style={{position:'fixed',bottom:28,right:28,width:52,height:52,borderRadius:'50%',background:'#DF6321',border:'none',boxShadow:'0 4px 14px rgba(42,31,16,.25)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',zIndex:400,transition:'background .15s ease'}}
+    onMouseEnter={function(e){e.currentTarget.style.background='#6B4A26';}}
+    onMouseLeave={function(e){e.currentTarget.style.background='#DF6321';}}>
+    <span className="material-symbols-outlined" style={{fontSize:26,color:'#F5EDE0'}}>add</span>
+  </button>
+  {openLTId&&activeLT&&(
+<LooseThreadDrawer lt={activeLT} activeProjects={activeProjects} open={true} variant="overlay" topOffset={54} onUpdate={handleDrawerUpdate} onMove={function(pid){moveToProject(openLTId,pid);setOpenLTId(null);}} onClose={handleDrawerClose} onDelete={handleDrawerDelete}/>
   )}
 </div>
   );
@@ -1470,24 +1499,73 @@ function SynopsisPreview({draft,onUpdate}){
 }
 
 // ── LooseThreadsSection ──
-function LooseThreadsSection({threads,app,view}){
+function LooseThreadsSection({threads,app,view,structureMode}){
   var sortedThreads=threads.slice().sort(function(a,b){return (b.createdAt||'').localeCompare(a.createdAt||'');});
   var sex=useState(false);var expanded=sex[0];var setExpanded=sex[1];
-  function addLT(){app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
+  var pid=app.projId;
+
+  // Deferred creation — mirrors GlobalLooseThreads: nothing is persisted
+  // until the drawer actually has a title, notes, or a tagged spool.
+  var soi=useState(null);var openLTId=soi[0];var setOpenLTId=soi[1];
+  var spl=useState(null);var pendingLT=spl[0];var setPendingLT=spl[1];
+  function openCreateFlow(){
+    var id=genId();
+    setPendingLT({id:id,projectId:pid,title:'',synopsis:'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+    setOpenLTId(id);
+  }
+  var activeLT=pendingLT&&pendingLT.id===openLTId?pendingLT:threads.find(function(d){return d.id===openLTId;});
+  function handleDrawerUpdate(changes){
+    if(pendingLT&&pendingLT.id===openLTId){
+      var merged=Object.assign({},pendingLT,changes);
+      var hasContent=(merged.title&&merged.title.trim())||(merged.synopsis&&merged.synopsis.trim())||(merged.strandTags&&merged.strandTags.length>0);
+      if(hasContent){
+        app.addDraft(pid,merged);
+        setPendingLT(null);
+      } else {
+        setPendingLT(merged);
+      }
+      return;
+    }
+    app.updateDraft(pid,openLTId,changes);
+  }
+  function handleDrawerClose(){setPendingLT(null);setOpenLTId(null);}
+  function handleDrawerDelete(){
+    if(pendingLT&&pendingLT.id===openLTId){handleDrawerClose();return;}
+    app.updateDraft(pid,openLTId,{archived:true});
+    setOpenLTId(null);
+  }
+
+  var showFab=view==='cards'||view==='table';
+  var fab=showFab&&(
+<button onClick={openCreateFlow} title="Add a loose thread" style={{position:'fixed',bottom:28,right:28,width:52,height:52,borderRadius:'50%',background:'#DF6321',border:'none',boxShadow:'0 4px 14px rgba(42,31,16,.25)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',zIndex:400,transition:'background .15s ease'}}
+  onMouseEnter={function(e){e.currentTarget.style.background='#6B4A26';}}
+  onMouseLeave={function(e){e.currentTarget.style.background='#DF6321';}}>
+  <span className="material-symbols-outlined" style={{fontSize:26,color:'#F5EDE0'}}>add</span>
+</button>
+  );
+  var drawer=openLTId&&activeLT&&(
+<LooseThreadDrawer lt={activeLT} mode="project" app={app} pid={pid} open={true} variant="overlay" topOffset={54} onUpdate={handleDrawerUpdate} onClose={handleDrawerClose} onDelete={handleDrawerDelete}/>
+  );
 
   if(view==='table'){return(
-<div style={{padding:'0 0 12px'}}>
-  <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderTop:'1px solid var(--border)'}}>
+<div style={{padding:'0 0 12px',flexShrink:0}}>
+  <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderTop:'1px solid var(--border)',cursor:'pointer'}} onClick={function(){setExpanded(!expanded);}}>
+    <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--mid)',transition:'transform .15s',transform:expanded?'rotate(90deg)':'none'}}>chevron_right</span>
     <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:13,color:'var(--mid)'}}>Loose Threads</span>
     {threads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:18,height:18,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{threads.length}</span>}
   </div>
-  {sortedThreads.map(function(d){return(
+  {expanded&&sortedThreads.map(function(d){return(
 <div key={d.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderBottom:'1px solid var(--bg2)'}}>
   <input className="tbl-inp" defaultValue={d.title} placeholder="Untitled loose thread" onBlur={function(e){app.updateDraft(app.projId,d.id,{title:e.target.value});}} style={{maxWidth:180}}/>
   <input className="tbl-inp syn" defaultValue={d.synopsis} placeholder="Note..." onBlur={function(e){app.updateDraft(app.projId,d.id,{synopsis:e.target.value});}} style={{flex:1}}/>
   <button className="card-open" onClick={function(){app.openDraft(d.id);}}>Draft</button>
 </div>
   );})}
+  {expanded&&threads.length===0&&(
+<div style={{padding:'6px 12px',fontSize:13,color:'var(--placeholder)',fontStyle:'italic'}}>No loose threads yet.</div>
+  )}
+  {fab}
+  {drawer}
 </div>
   );}
 
@@ -1495,6 +1573,7 @@ function LooseThreadsSection({threads,app,view}){
   // Approximate how many 230px tiles fit in the section (minus ~32px padding each side)
   var ONE_ROW=Math.max(3,Math.floor((window.innerWidth-64)/(230+10)));
   var displayedThreads=expanded?sortedThreads:sortedThreads.slice(0,ONE_ROW);
+  var inStructure=view==='cards'&&structureMode;
 
   return(
 <div
@@ -1518,14 +1597,13 @@ function LooseThreadsSection({threads,app,view}){
   {/* Tile grid */}
   <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
     {/* Ghost add tile */}
-    <div onClick={addLT} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
+    <div onClick={openCreateFlow} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
       onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';}}
       onMouseLeave={function(e){e.currentTarget.style.borderColor='#A88060';}}>
       <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
     </div>
     {displayedThreads.map(function(d){
       var bodyPreview=d.body?stripHtml(d.body).slice(0,200):'';
-      var pid=app.projId;
       var projStrands=app.allStrands[pid]||{};
       var projTemplates=app.allTemplates[pid]||[];
       var tagged=[];
@@ -1537,31 +1615,55 @@ function LooseThreadsSection({threads,app,view}){
           }
         });
       });
+      function showTt(e,name){var tt=document.getElementById('woven-tt');if(tt){var r=e.currentTarget.getBoundingClientRect();tt.textContent=name;tt.style.display='block';tt.style.left=(r.left+r.width/2)+'px';tt.style.top=(r.bottom+6)+'px';}}
+      function hideTt(){var tt=document.getElementById('woven-tt');if(tt)tt.style.display='none';}
       return(
-<div key={d.id} style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:'grab',display:'flex',flexDirection:'column',gap:8,width:220,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
+<div key={d.id} style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:inStructure?'grab':'pointer',display:'flex',flexDirection:'column',gap:8,width:220,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
   draggable={true}
   onDragStart={function(e){e.dataTransfer.setData('draftId',d.id);}}
-  onClick={function(){app.openDraft(d.id);}}
+  onClick={function(){if(!inStructure)app.openDraft(d.id);}}
   onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';e.currentTarget.style.boxShadow='0 4px 12px rgba(196,94,40,.12)';}}
   onMouseLeave={function(e){e.currentTarget.style.borderColor='transparent';e.currentTarget.style.boxShadow='none';}}>
   <div style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2A1F10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
     {d.title||'Untitled loose thread'}
   </div>
   {bodyPreview&&(
-<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,fontStyle:'italic',color:'#A88060',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:4,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,fontStyle:'italic',color:'#A88060',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
   {bodyPreview}
 </div>
   )}
-  {tagged.length>0&&(
-<div style={{display:'flex',alignItems:'center',gap:-4,overflow:'hidden'}}>
-  {tagged.slice(0,4).map(function(st,i){return(
-<div key={st.id} title={st.name} style={{width:22,height:22,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-6:0,boxSizing:'border-box'}}>
-  {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:11}}>{st.emoji}</span>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
-</div>
-  );})}
-  {tagged.length>4&&<span style={{fontSize:11,color:'var(--mid)',marginLeft:4}}>+{tagged.length-4}</span>}
+  {inStructure&&(
+<div onClick={function(e){e.stopPropagation();}}>
+  <StrandTagPicker draft={d} app={app} pid={pid} tagged={tagged}/>
 </div>
   )}
+  {/* Bottom row */}
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:'auto'}}>
+    {!inStructure&&(
+<div style={{display:'flex',alignItems:'center'}}>
+  {tagged.slice(0,3).map(function(st,i){return(
+<div key={st.id} style={{width:22,height:22,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-7:0,boxSizing:'border-box',position:'relative',zIndex:3-i,cursor:'default'}}
+  onMouseEnter={function(e){showTt(e,st.name);}} onMouseLeave={hideTt}>
+  {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:10}}>{st.emoji}</span>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:8,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
+</div>
+  );})}
+  {tagged.length>3&&(
+<div style={{width:22,height:22,borderRadius:'50%',background:'#E2D0B8',border:'1px solid #A88060',display:'flex',alignItems:'center',justifyContent:'center',marginLeft:-7,flexShrink:0,zIndex:0,cursor:'default'}}
+  onMouseEnter={function(e){showTt(e,tagged.slice(3).map(function(s){return s.name;}).join(', '));}} onMouseLeave={hideTt}>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:9,color:'#7A5A38',fontWeight:600}}>+{tagged.length-3}</span>
+</div>
+      )}
+</div>
+    )}
+    {inStructure&&(
+<button onClick={function(e){e.stopPropagation();var seq=(app.allDrafts[pid]||[]).filter(function(x){return x.status!=='loose_thread'&&!x.parentId&&!x.archived;});var maxOrder=seq.reduce(function(m,x){return Math.max(m,x.order||0);},0);app.updateDraft(pid,d.id,{status:'first_draft',order:maxOrder+1,parentId:null});}} title="Move to sequence" style={{width:26,height:26,borderRadius:6,border:'1px solid var(--border)',background:'var(--bg2)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
+  <span className="material-symbols-outlined" style={{fontSize:16,color:'var(--mid)'}}>arrow_upward</span>
+</button>
+    )}
+    <div style={{display:'flex',alignItems:'center',marginLeft:'auto'}} onClick={function(e){e.stopPropagation();}}>
+      <StatusDotWithArchive draft={d} app={app} showLabel={false} dotSize={13}/>
+    </div>
+  </div>
 </div>
       );
     })}
@@ -1569,6 +1671,8 @@ function LooseThreadsSection({threads,app,view}){
 <div style={{fontSize:13,color:'var(--placeholder)',fontStyle:'italic',padding:'8px 0'}}>No loose threads yet. Drag a draft here or click + to add one.</div>
     )}
   </div>
+  {fab}
+  {drawer}
 </div>
   );
 }
@@ -1623,8 +1727,9 @@ function CardsView({app}){
     var allDr=app.allDrafts[pid]||[];
     var fromDraft=allDr.find(function(d){return d.id===fromId;});
     if(fromDraft&&fromDraft.status==='loose_thread'){
-      var seqCount=allDr.filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).length;
-      app.updateDraft(pid,fromId,{status:'first_draft',order:seqCount+1,parentId:null});
+      var seq=allDr.filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;});
+      var maxOrder=seq.reduce(function(m,d){return Math.max(m,d.order||0);},0);
+      app.updateDraft(pid,fromId,{status:'first_draft',order:maxOrder+1,parentId:null});
     }
   }}>
   {displayed.map(function(parent){
@@ -1635,7 +1740,7 @@ function CardsView({app}){
   })}
 </div>
     )}
-    <LooseThreadsSection threads={ltDrafts} app={app} view="cards"/>
+    <LooseThreadsSection threads={ltDrafts} app={app} view="cards" structureMode={structureMode}/>
     <div style={{height:50,background:'#A88060',flexShrink:0,marginTop:'auto'}}/>
   </div>
   <BindDrawer app={app} open={bindOpen} variant="overlay" topOffset={54} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
@@ -1847,6 +1952,7 @@ function TableView({app}){
 </div>
     )}
   </div>
+  <LooseThreadsSection threads={ltDrafts} app={app} view="table"/>
   {colOpen&&(
 <div ref={colDropRef} className="col-vis-drop" style={{top:colPos.top,right:colPos.right,maxHeight:'60vh',overflowY:'auto'}}>
   <div style={{padding:'4px 8px 6px',fontSize:11,color:'var(--mid)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.06em'}}>Columns</div>
@@ -2037,16 +2143,17 @@ function StrandSortFilter({sort,setSort,strandFilter,setStrandFilter,fields}){
 function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrandId,setSearch,setShowCollSettings}){
   var se=useState(false);var editing=se[0];var setEditing=se[1];
   var sv=useState(coll);var val=sv[0];var setVal=sv[1];
+  var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.name===coll;});
+  var isNative=!tpl||tpl.projectId===pid;
   function commitRename(){
     var nc=val.trim();
     if(nc&&nc!==coll){app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[nc]=ps[coll]||[];delete ps[coll];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});if(activeColl===coll)setActiveColl(nc);}
     else{setVal(coll);}setEditing(false);
   }
   if(editing)return(<div className="strands-tab active" style={{padding:'0 4px'}}><input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commitRename} onKeyDown={function(e){if(e.key==='Enter')commitRename();if(e.key==='Escape'){setVal(coll);setEditing(false);}}} style={{width:90,height:24,fontSize:13,padding:'2px 6px',borderRadius:4}}/></div>);
-  var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.name===coll;});
   var tabIcon=tpl&&tpl.icon?tpl.icon:null;
   var tabColor=tpl&&tpl.color?tpl.color:'#7A5A38';
-  return(<div className={'strands-tab'+(isActive?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){setEditing(true);}} style={{display:'flex',alignItems:'center',gap:6}}>
+  return(<div className={'strands-tab'+(isActive?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){if(isNative)setEditing(true);}} title={isNative?undefined:'Shared from another project — rename from its source'} style={{display:'flex',alignItems:'center',gap:6}}>
     {tabIcon&&<span className="material-symbols-outlined" style={{fontSize:16,color:isActive?tabColor:'rgba(122,90,56,.75)'}}>{tabIcon}</span>}
     {coll}
   </div>);
@@ -2416,9 +2523,15 @@ function StrandsPage({app,allProjects}){
   var detailContent=showCollSettings&&editingFields?(
 <div style={{padding:24}}>
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>{activeColl} — Settings</div>
+    <div>
+      <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>{activeColl} — Settings</div>
+      {activeTpl&&activeTpl.projectId!==pid&&(function(){
+        var srcProj=allProjects.find(function(p){return p.id===activeTpl.projectId;});
+        return <div style={{fontSize:12,color:'var(--mid)',marginTop:2}}>Shared from {srcProj?srcProj.title:'another project'} — fields and items are editable here, but the collection itself (rename, delete, sharing) is managed from its source.</div>;
+      })()}
+    </div>
     <div style={{display:'flex',gap:8}}>
-      <button className="btn btn-danger btn-sm" onClick={function(){setDeleteCollConfirm(true);}}><span className="mi" style={{fontSize:14}}>delete</span>Delete</button>
+      {(!activeTpl||activeTpl.projectId===pid)&&<button className="btn btn-danger btn-sm" onClick={function(){setDeleteCollConfirm(true);}}><span className="mi" style={{fontSize:14}}>delete</span>Delete</button>}
       <button className="btn btn-ghost btn-sm" onClick={function(){setShowCollSettings(false);}}>Cancel</button>
       <button className="btn btn-primary btn-sm" onClick={saveCollSettings}>Save</button>
     </div>
@@ -2506,7 +2619,8 @@ function StrandsPage({app,allProjects}){
     <select value={newFieldType} onChange={function(e){setNewFieldType(e.target.value);}} style={{width:110}}>{FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}</select>
     <button className="btn btn-ghost btn-sm" onClick={addFieldToSettings}>Add</button>
   </div>
-  <div style={{paddingTop:16,borderTop:'1px solid var(--border)'}}>
+  {(!activeTpl||activeTpl.projectId===pid)&&(
+<div style={{paddingTop:16,borderTop:'1px solid var(--border)'}}>
     <span className="sect-lbl">Share across projects</span>
     {otherProjects.length===0
       ?<div style={{fontSize:13,color:'var(--placeholder)'}}>No other projects to share with.</div>
@@ -2521,6 +2635,7 @@ function StrandsPage({app,allProjects}){
       </div>
     }
   </div>
+  )}
 </div>
   ):activeStrand?(
 <div style={{padding:24,backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.12) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
@@ -2818,9 +2933,32 @@ function App(){
   var ssp=useState(false);var showProfile=ssp[0];var setShowProfile=ssp[1];
   var sglt=useState({});var globalLT=sglt[0];var setGlobalLT=sglt[1];
   var spf2=useState(null);var profileFocus=spf2[0];var setProfileFocus=spf2[1];
+  // Cross-project collection sharing: { [pid]: { [collectionName]: sourcePid } }
+  // for collections that live in allStrands[pid]/allTemplates[pid] but are
+  // actually owned by a DIFFERENT project (shared in via template.sharedWith).
+  var ssc3=useState({});var sharedCollectionSources=ssc3[0];var setSharedCollectionSources=ssc3[1];
   var ssfc=useState(null);var strandsFocusColl=ssfc[0];var setStrandsFocusColl=ssfc[1];
   var snp=useState(false);var showNewProject=snp[0];var setShowNewProject=snp[1];
 
+  // Templates are small (field defs + metadata, no strand content), so it's
+  // cheap to load every project's templates up front. This is what lets us
+  // resolve "who shares a collection into project X" without a relational
+  // query the key-value store can't do.
+  function loadAllProjectTemplates(){
+    var pids=projects.map(function(p){return p.id;});
+    return Promise.all(pids.map(function(opid){
+      return loadDB('woven:templates:'+opid,[]).then(function(tm){return {pid:opid,templates:Array.isArray(tm)?tm:[]};});
+    })).then(function(results){
+      var map={};
+      results.forEach(function(r){map[r.pid]=r.templates;});
+      setAllTemplates(function(prev){
+        var next=Object.assign({},prev);
+        results.forEach(function(r){next[r.pid]=r.templates;});
+        return next;
+      });
+      return map;
+    });
+  }
   function loadProjectDataById(pid){
     setDataLoading(true);
     Promise.all([
@@ -2828,11 +2966,54 @@ function App(){
       loadDB('woven:strands:'+pid,{}),
       loadDB('woven:templates:'+pid,[])
     ]).then(function(results){
-      var d=results[0];var st=results[1];var tm=results[2];
+      var d=results[0];var st=results[1]&&typeof results[1]==='object'?results[1]:{};var tm=Array.isArray(results[2])?results[2]:[];
       setAllDrafts(function(p){var n=Object.assign({},p);n[pid]=Array.isArray(d)?d:[];return n;});
-      setAllStrands(function(p){var n=Object.assign({},p);n[pid]=st&&typeof st==='object'?st:{};return n;});
-      setAllTemplates(function(p){var n=Object.assign({},p);n[pid]=Array.isArray(tm)?tm:[];return n;});
-      setDataLoading(false);
+      setAllTemplates(function(p){var n=Object.assign({},p);n[pid]=tm;return n;});
+
+      // Resolve which collections are shared INTO this project by another one.
+      loadAllProjectTemplates().then(function(templatesMap){
+        var sourceFor={}; // collectionName -> sourcePid, for collections shared into pid
+        Object.keys(templatesMap).forEach(function(opid){
+          if(opid===pid)return;
+          (templatesMap[opid]||[]).forEach(function(t){
+            if(t.sharedWith&&t.sharedWith.indexOf(pid)>=0)sourceFor[t.name]=opid;
+          });
+        });
+        var sourcePids=Object.keys(sourceFor).map(function(c){return sourceFor[c];}).filter(function(v,i,a){return a.indexOf(v)===i;});
+
+        if(sourcePids.length===0){
+          setAllStrands(function(p){var n=Object.assign({},p);n[pid]=st;return n;});
+          setSharedCollectionSources(function(p){var n=Object.assign({},p);n[pid]={};return n;});
+          setDataLoading(false);
+          return;
+        }
+
+        Promise.all(sourcePids.map(function(spid){
+          return loadDB('woven:strands:'+spid,{}).then(function(sst){return {pid:spid,strands:sst&&typeof sst==='object'?sst:{}};});
+        })).then(function(sourceResults){
+          var sourceStrandsByPid={};
+          sourceResults.forEach(function(r){sourceStrandsByPid[r.pid]=r.strands;});
+
+          var mergedStrands=Object.assign({},st);
+          var mergedTemplates=tm.slice();
+          Object.keys(sourceFor).forEach(function(collName){
+            var spid=sourceFor[collName];
+            mergedStrands[collName]=(sourceStrandsByPid[spid]&&sourceStrandsByPid[spid][collName])||[];
+            var srcTpl=(templatesMap[spid]||[]).find(function(t){return t.name===collName;});
+            if(srcTpl&&!mergedTemplates.find(function(t){return t.id===srcTpl.id;}))mergedTemplates.push(srcTpl);
+          });
+
+          setAllStrands(function(p){
+            var n=Object.assign({},p);
+            n[pid]=mergedStrands;
+            sourcePids.forEach(function(spid){if(!n[spid])n[spid]=sourceStrandsByPid[spid];});
+            return n;
+          });
+          setAllTemplates(function(p){var n=Object.assign({},p);n[pid]=mergedTemplates;return n;});
+          setSharedCollectionSources(function(p){var n=Object.assign({},p);n[pid]=sourceFor;return n;});
+          setDataLoading(false);
+        });
+      });
     });
   }
   // Handle browser back button
@@ -2988,10 +3169,87 @@ function App(){
       next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;
     });
   }
-  function updateStrand(pid,coll,sid,changes){setAllStrands(function(prev){var next=Object.assign({},prev);var ps=Object.assign({},next[pid]||{});ps[coll]=(ps[coll]||[]).map(function(s){return s.id!==sid?s:Object.assign({},s,changes);});next[pid]=ps;saveDB('woven:strands:'+pid,ps);return next;});}
-  function addStrand(pid,coll,ns){setAllStrands(function(prev){var next=Object.assign({},prev);var ps=Object.assign({},next[pid]||{});ps[coll]=(ps[coll]||[]).concat([ns]);next[pid]=ps;saveDB('woven:strands:'+pid,ps);return next;});}
+  // Resolves the project a collection's strands actually live in — the
+  // caller's own pid unless that collection was merged in from elsewhere.
+  function ownerOfCollection(pid,coll){
+    var srcMap=sharedCollectionSources[pid];
+    return (srcMap&&srcMap[coll])||pid;
+  }
+  // After writing to the owning project's copy, mirror the same result into
+  // every other already-loaded project that also has this collection shared
+  // in, so all in-memory views stay consistent without a reload.
+  function propagateSharedStrands(next,ownerPid,coll,updatedList){
+    Object.keys(sharedCollectionSources).forEach(function(otherPid){
+      if(otherPid===ownerPid)return;
+      var srcMap=sharedCollectionSources[otherPid];
+      if(srcMap&&srcMap[coll]===ownerPid&&next[otherPid]){
+        var ops=Object.assign({},next[otherPid]);
+        ops[coll]=updatedList;
+        next[otherPid]=ops;
+      }
+    });
+  }
+  function updateStrand(pid,coll,sid,changes){
+    var ownerPid=ownerOfCollection(pid,coll);
+    setAllStrands(function(prev){
+      var next=Object.assign({},prev);
+      var ownerPs=Object.assign({},next[ownerPid]||{});
+      var updated=(ownerPs[coll]||[]).map(function(s){return s.id!==sid?s:Object.assign({},s,changes);});
+      ownerPs[coll]=updated;
+      next[ownerPid]=ownerPs;
+      saveDB('woven:strands:'+ownerPid,ownerPs);
+      propagateSharedStrands(next,ownerPid,coll,updated);
+      return next;
+    });
+  }
+  function addStrand(pid,coll,ns){
+    var ownerPid=ownerOfCollection(pid,coll);
+    setAllStrands(function(prev){
+      var next=Object.assign({},prev);
+      var ownerPs=Object.assign({},next[ownerPid]||{});
+      var updated=(ownerPs[coll]||[]).concat([ns]);
+      ownerPs[coll]=updated;
+      next[ownerPid]=ownerPs;
+      saveDB('woven:strands:'+ownerPid,ownerPs);
+      propagateSharedStrands(next,ownerPid,coll,updated);
+      return next;
+    });
+  }
   function addTemplate(pid,tpl){setAllTemplates(function(prev){var next=Object.assign({},prev);next[pid]=(next[pid]||[]).concat([tpl]);saveDB('woven:templates:'+pid,next[pid]);return next;});}
-  function updateTemplate(pid,tid,changes){setAllTemplates(function(prev){var next=Object.assign({},prev);next[pid]=(next[pid]||[]).map(function(t){return t.id!==tid?t:Object.assign({},t,changes);});saveDB('woven:templates:'+pid,next[pid]);return next;});}
+  function updateTemplate(pid,tid,changes){
+    // Templates already carry their own projectId — use that as the source
+    // of truth for ownership rather than the caller's active pid, since a
+    // shared-in template record keeps its original projectId when merged in.
+    var existing=(allTemplates[pid]||[]).find(function(t){return t.id===tid;});
+    var ownerPid=(existing&&existing.projectId)||pid;
+    setAllTemplates(function(prev){
+      var next=Object.assign({},prev);
+      var updated=(next[ownerPid]||[]).map(function(t){return t.id!==tid?t:Object.assign({},t,changes);});
+      next[ownerPid]=updated;
+      saveDB('woven:templates:'+ownerPid,updated);
+      var updatedTpl=updated.find(function(t){return t.id===tid;});
+      if(updatedTpl){
+        Object.keys(next).forEach(function(otherPid){
+          if(otherPid===ownerPid)return;
+          var idx=(next[otherPid]||[]).findIndex(function(t){return t.id===tid;});
+          if(idx>=0){
+            var ops=next[otherPid].slice();
+            ops[idx]=updatedTpl;
+            next[otherPid]=ops;
+          }
+        });
+      }
+      return next;
+    });
+  }
+  // Ready-to-use guard for a future permanent-delete-project feature: call
+  // this before allowing deletion and block with an error if it returns any
+  // shared collections. There's no hard delete anywhere in the app yet (only
+  // archive/unarchive, which is reversible and doesn't touch this data), so
+  // nothing calls this today — it's here for when that feature is built.
+  function collectionsSharedFromProject(pid){
+    return (allTemplates[pid]||[]).filter(function(t){return t.projectId===pid&&t.sharedWith&&t.sharedWith.length>0;});
+  }
   function updateProjectTitle(pid,newTitle){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{title:newTitle});});saveDB('woven:projects',next);return next;});}
   function updateProjectSynopsis(pid,syn){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{synopsis:syn});});saveDB('woven:projects',next);return next;});}
   function updateProjectImage(pid,img){setProjects(function(prev){var old=prev.find(function(p){return p.id===pid;});if(old&&old.image&&old.image!==img)deleteStorageImage(old.image);var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{image:img});});saveDB('woven:projects',next);return next;});}
@@ -3060,7 +3318,7 @@ function App(){
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
 
   function signOut(){supabase.auth.signOut().then(function(){window.__wovenUserId=null;setCurrentUser(null);setView('dashboard');setProjects([]);setAllDrafts({});});}
 
