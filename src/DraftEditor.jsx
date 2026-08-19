@@ -660,9 +660,11 @@ function DraftEditor({app}){
     {/* Editor column — this whole column (including its toolbar) squeezes when a drawer opens */}
     <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden',minWidth:0}}>
 
-      {/* Format toolbar (slides up in flow mode along with nav) */}
-      <div style={{flexShrink:0,transform:flowMode?'translateY(-110%)':'translateY(0)',transition:'transform .3s cubic-bezier(.4,0,.2,1)',pointerEvents:flowMode?'none':'auto',position:flowMode?'absolute':'relative',width:'100%',zIndex:10}}>
-        <div style={{display:'flex',alignItems:'center',padding:'6px 20px',background:T.toolBg,borderBottom:'1px solid '+T.stroke,gap:4}}>
+      {/* Format toolbar — collapses via max-height in flow mode (stays in normal
+          flex flow rather than being removed via position:absolute, so it
+          doesn't cause its own layout reflow independent of nav's) */}
+      <div style={{flexShrink:0,maxHeight:flowMode?0:200,overflow:'hidden',transition:'max-height .3s cubic-bezier(.4,0,.2,1)',pointerEvents:flowMode?'none':'auto'}}>
+        <div style={{display:'flex',alignItems:'center',padding:'6px 20px',background:T.toolBg,borderBottom:'1px solid '+T.stroke,gap:4,minWidth:0}}>
           {/* Left: style, font, size */}
           <div style={{display:'flex',alignItems:'center',gap:8,marginRight:12}}>
             <StyledSelect value={activeFormat} onChange={handleStyleChange} options={styleOpts} style={{minWidth:110}}/>
@@ -671,7 +673,7 @@ function DraftEditor({app}){
             </select>
           </div>
           {/* Middle: format buttons */}
-          <div style={{display:'flex',alignItems:'center',gap:0,flex:1,justifyContent:'center'}}>
+          <div style={{display:'flex',alignItems:'center',gap:0,flex:1,justifyContent:'center',minWidth:0,overflow:'hidden'}}>
             {fmtBtns.map(function(b,i){
               if(b.sep)return(<div key={'s'+i} className={b.sepClass||''} style={{width:1,height:20,background:T.stroke,margin:'0 4px',flexShrink:0}}/>);
               var cls=b.cls||'';
