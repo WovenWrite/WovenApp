@@ -1652,7 +1652,7 @@ function LooseThreadsSection({threads,app,view,structureMode}){
 </div>
     )}
     {inStructure&&(
-<button onClick={function(e){e.stopPropagation();app.updateDraft(pid,d.id,{status:'first_draft',order:(app.allDrafts[pid]||[]).filter(function(x){return x.status!=='loose_thread'&&!x.parentId&&!x.archived;}).length+1,parentId:null});}} title="Move to sequence" style={{width:26,height:26,borderRadius:6,border:'1px solid var(--border)',background:'var(--bg2)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
+<button onClick={function(e){e.stopPropagation();var seq=(app.allDrafts[pid]||[]).filter(function(x){return x.status!=='loose_thread'&&!x.parentId&&!x.archived;});var maxOrder=seq.reduce(function(m,x){return Math.max(m,x.order||0);},0);app.updateDraft(pid,d.id,{status:'first_draft',order:maxOrder+1,parentId:null});}} title="Move to sequence" style={{width:26,height:26,borderRadius:6,border:'1px solid var(--border)',background:'var(--bg2)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
   <span className="material-symbols-outlined" style={{fontSize:16,color:'var(--mid)'}}>arrow_upward</span>
 </button>
     )}
@@ -1723,8 +1723,9 @@ function CardsView({app}){
     var allDr=app.allDrafts[pid]||[];
     var fromDraft=allDr.find(function(d){return d.id===fromId;});
     if(fromDraft&&fromDraft.status==='loose_thread'){
-      var seqCount=allDr.filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;}).length;
-      app.updateDraft(pid,fromId,{status:'first_draft',order:seqCount+1,parentId:null});
+      var seq=allDr.filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;});
+      var maxOrder=seq.reduce(function(m,d){return Math.max(m,d.order||0);},0);
+      app.updateDraft(pid,fromId,{status:'first_draft',order:maxOrder+1,parentId:null});
     }
   }}>
   {displayed.map(function(parent){
