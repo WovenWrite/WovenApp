@@ -1525,6 +1525,18 @@ function LooseThreadsSection({threads,app,view}){
     </div>
     {displayedThreads.map(function(d){
       var bodyPreview=d.body?stripHtml(d.body).slice(0,200):'';
+      var pid=app.projId;
+      var projStrands=app.allStrands[pid]||{};
+      var projTemplates=app.allTemplates[pid]||[];
+      var tagged=[];
+      Object.keys(projStrands).forEach(function(coll){
+        (projStrands[coll]||[]).forEach(function(st){
+          if((d.strandTags||[]).includes(st.id)){
+            var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
+            tagged.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));
+          }
+        });
+      });
       return(
 <div key={d.id} style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:'grab',display:'flex',flexDirection:'column',gap:8,width:220,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
   draggable={true}
@@ -1538,6 +1550,16 @@ function LooseThreadsSection({threads,app,view}){
   {bodyPreview&&(
 <div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,fontStyle:'italic',color:'#A88060',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:4,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
   {bodyPreview}
+</div>
+  )}
+  {tagged.length>0&&(
+<div style={{display:'flex',alignItems:'center',gap:-4,overflow:'hidden'}}>
+  {tagged.slice(0,4).map(function(st,i){return(
+<div key={st.id} title={st.name} style={{width:22,height:22,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-6:0,boxSizing:'border-box'}}>
+  {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:11}}>{st.emoji}</span>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
+</div>
+  );})}
+  {tagged.length>4&&<span style={{fontSize:11,color:'var(--mid)',marginLeft:4}}>+{tagged.length-4}</span>}
 </div>
   )}
 </div>
@@ -1731,7 +1753,7 @@ function TableView({app}){
     if(col==='title')return <input className="tbl-inp" style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2a1f10',textOverflow:'ellipsis',overflow:'hidden',whiteSpace:'nowrap'}} title={draft.title||''} defaultValue={draft.title} placeholder="Untitled" onBlur={function(e){app.updateDraft(app.projId,draft.id,{title:e.target.value});}}/>;
     if(col==='status'){var si=STATUSES[draft.status]||STATUSES.first_draft;return(
 <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'4px 10px',borderRadius:12,background:si.color+'18'}}>
-  <div style={{width:8,height:8,borderRadius:'50%',background:si.color,flexShrink:0}}/>
+  <StatusDotWithArchive draft={draft} app={app} showLabel={false} dotSize={12}/>
   <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,color:si.color,fontWeight:500,whiteSpace:'nowrap'}}>{si.label}</span>
 </div>
     );}
@@ -2541,13 +2563,18 @@ function StrandsPage({app,allProjects}){
   );
   var findSelectIcon=function(collName){var t=projTemplates.find(function(t){return t.name===collName;});return (t&&t.icon)||'auto_stories';};
   var findSelectPanel=(
-<Drawer variant="inline" title={activeColl} padded={false}
-  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} placeholder={'Search '+activeColl+'...'} sortSlot={<StrandSortFilter sort={strandSort} setSort={setStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>}/>}
+<Drawer variant="inline" title={activeColl}
+  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<StrandSortFilter sort={strandSort} setSort={setStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>}/>}
   footer={<PrimaryButton icon="add" onClick={addStrand}>Add to {activeColl}</PrimaryButton>}>
-  {filtered.length===0&&<HelpText style={{padding:20}}>{collStrands.length===0?'No entries yet.':'No results for "'+search+'".'}</HelpText>}
-  {filtered.map(function(st){return(
-    <StrandResultRow key={st.id} strand={st} spoolIcon={findSelectIcon(activeColl)} onClick={function(){setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}/>
-  );})}
+  {filtered.length===0?(
+    <HelpText>{collStrands.length===0?'No entries yet.':'No results for "'+search+'".'}</HelpText>
+  ):(
+    <div>
+      {filtered.map(function(st){return(
+        <StrandResultRow key={st.id} strand={st} spoolIcon={findSelectIcon(activeColl)} onClick={function(){setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}/>
+      );})}
+    </div>
+  )}
 </Drawer>
   );
   return(
@@ -2586,8 +2613,8 @@ function StrandsPage({app,allProjects}){
   </div>
   <div className="strands-layout">
     {!isMobile&&<div style={{flex:1,overflowY:'auto'}}>{detailContent}</div>}
-    {!isMobile&&findSelectPanel}
-    {isMobile&&!mobileDetailOpen&&findSelectPanel}
+    {!isMobile&&!showCollSettings&&findSelectPanel}
+    {isMobile&&!mobileDetailOpen&&!showCollSettings&&findSelectPanel}
     {isMobile&&mobileDetailOpen&&(
 <div style={{position:'fixed',inset:0,zIndex:50,background:'var(--bg1)',overflow:'auto'}}>
   <div style={{display:'flex',alignItems:'center',gap:8,padding:'14px 16px',borderBottom:'1px solid var(--border)'}}>
