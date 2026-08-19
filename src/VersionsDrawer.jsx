@@ -6,7 +6,7 @@
 //   <VersionsDrawer draftId={did} variant="inline" onRestore={fn} onClose={...} />
 
 import { useState, useEffect } from 'react';
-import { Drawer } from './SharedUI';
+import { Drawer, PrimaryButton } from './SharedUI';
 import { loadSnapshots, formatSnapshotTime } from './utils';
 
 var LABELS = { 'session-end': 'Session end', 'auto': 'Autosave' };
@@ -35,7 +35,7 @@ export default function VersionsDrawer({ draftId, variant, open, onClose, onRest
   }
 
   return (
-    <Drawer variant={variant || 'inline'} open={open} title="Version History" icon="history" onClose={onClose} padded={false}>
+    <Drawer variant={variant || 'inline'} open={open} title="Version History" onClose={onClose} padded={false}>
 
       {snapshots.length === 0 && (
         <div className="wv-empty" style={{ textAlign: 'center', padding: '28px 18px' }}>
@@ -77,13 +77,9 @@ export default function VersionsDrawer({ draftId, variant, open, onClose, onRest
                   }}
                   dangerouslySetInnerHTML={{ __html: snap.body }}
                 />
-                <button
-                  className="btn btn-primary btn-sm"
-                  style={{ width: '100%', justifyContent: 'center' }}
-                  onClick={function () { handleRestore(snap); }}
-                >
-                  <span className="mi" style={{ fontSize: 15 }}>restore</span>Restore this version
-                </button>
+                <PrimaryButton icon="restore" onClick={function () { handleRestore(snap); }}>
+                  Restore this version
+                </PrimaryButton>
               </div>
             )}
           </div>
