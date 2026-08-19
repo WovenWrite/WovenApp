@@ -454,6 +454,7 @@ export function SearchSortBar({ value, onChange, placeholder, sortSlot }) {
           className="wv-search-input"
           value={value}
           onChange={onChange}
+          onMouseUp={function (e) { e.preventDefault(); }}
           placeholder={placeholder || 'Search...'}
         />
       </div>
