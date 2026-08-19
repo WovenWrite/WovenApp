@@ -10,7 +10,7 @@
 //   <StrandsDrawer app={app} draft={draft} variant="inline" onClose={...} />
 
 import { useState } from 'react';
-import { Drawer, Section, Avatar, AvatarEditModal } from './SharedUI';
+import { Drawer, Field, Avatar, AvatarEditModal, StrandResultRow, HelpText } from './SharedUI';
 import { defaultFields } from './utils';
 
 export default function StrandsDrawer({ app, draft, variant, open, onClose, strandId, onOpenStrand }) {
@@ -53,7 +53,7 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
     if (!strand) {
       // Strand was deleted while open — fall back to the list.
       return (
-        <Drawer variant={variant || 'inline'} open={open} title="Strands" icon="gesture" onClose={onClose}>
+        <Drawer variant={variant || 'inline'} open={open} title="Strands" onClose={onClose}>
           <div className="wv-empty">That strand no longer exists.</div>
           <div style={{ padding: '0 14px' }}>
             <button className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }} onClick={goBack}>Back to strands</button>
@@ -87,33 +87,33 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
         title={strand.name}
         onBack={goBack}
         onClose={onClose}
-        padded={false}
         headerExtra={avatarBtn}
       >
-        <div style={{ padding: '12px 14px 4px', fontSize: 11, color: 'var(--mid)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>
+        <div style={{ fontSize: 11, color: 'var(--mid)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>
           {collName}
         </div>
 
-        <Section label="Name">
-          <input
-            key={strand.id + '-name'}
-            defaultValue={strand.name}
-            placeholder="Strand name"
-            onBlur={function (e) {
-              var v = e.target.value.trim();
-              if (v && v !== strand.name) app.updateStrand(pid, collName, selectedId, { name: v });
-            }}
-          />
-        </Section>
+        <Field
+          label="Name"
+          key={strand.id + '-name'}
+          defaultValue={strand.name}
+          placeholder="Strand name"
+          onBlur={function (e) {
+            var v = e.target.value.trim();
+            if (v && v !== strand.name) app.updateStrand(pid, collName, selectedId, { name: v });
+          }}
+        />
 
         {fields.map(function (f) {
           var val = (strand.fields && strand.fields[f.id]) || '';
           return (
-            <Section key={f.id} label={f.label}>
-              {f.type === 'long_text'
-                ? <textarea defaultValue={val} rows={3} placeholder={'Add ' + f.label.toLowerCase() + '...'} style={{ fontSize: 13 }} onBlur={function (e) { updateField(f.id, e.target.value); }} />
-                : <input defaultValue={val} placeholder={'Add ' + f.label.toLowerCase() + '...'} style={{ fontSize: 13 }} onBlur={function (e) { updateField(f.id, e.target.value); }} />}
-            </Section>
+            <Field
+              key={f.id}
+              label={f.label}
+              defaultValue={val}
+              placeholder={'Add ' + f.label.toLowerCase() + '...'}
+              onBlur={function (e) { updateField(f.id, e.target.value); }}
+            />
           );
         })}
 
@@ -136,23 +136,14 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
   }
 
   return (
-    <Drawer variant={variant || 'inline'} open={open} title="Strands" icon="gesture" onClose={onClose} padded={false}>
+    <Drawer variant={variant || 'inline'} open={open} title="Strands" onClose={onClose} padded={false}>
 
       {tagged.length === 0 && (
-        <div className="wv-empty">No strands tagged yet. Tap a strand below to add it to this draft.</div>
+        <HelpText style={{ padding: '14px' }}>No strands tagged yet. Tap a strand below to add it to this draft.</HelpText>
       )}
 
       {tagged.map(function (st) {
-        return (
-          <div key={st.id} className="wv-row" onClick={function () { select(st.id); }}>
-            <Avatar strand={st} size={28} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="wv-row-title">{st.name}</div>
-              <div className="wv-row-sub">{st.collectionName}</div>
-            </div>
-            <span className="mi" style={{ fontSize: 16, color: 'var(--border)' }}>chevron_right</span>
-          </div>
-        );
+        return <StrandResultRow key={st.id} strand={st} onClick={function () { select(st.id); }} />;
       })}
 
       {untagged.length > 0 && (
