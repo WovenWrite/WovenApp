@@ -200,9 +200,11 @@ export function Drawer({ variant, open, title, onBack, onClose, footer, padded, 
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           {headerExtra}
-          <button className="btn-icon" onClick={onClose} aria-label="Close drawer">
-            <span className="mi">close</span>
-          </button>
+          {onClose && (
+            <button className="btn-icon" onClick={onClose} aria-label="Close drawer">
+              <span className="mi">close</span>
+            </button>
+          )}
         </div>
       </div>
       <div className={bodyCls}>{children}</div>
