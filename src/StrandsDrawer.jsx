@@ -48,6 +48,11 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
   var projStrands = app.allStrands[pid] || {};
   var taggedIds = draft.strandTags || [];
   var collections = Object.keys(projStrands);
+  var templatesAll = app.allTemplates[pid] || [];
+  function iconFor(collName) {
+    var t = templatesAll.find(function (t) { return t.name === collName; });
+    return (t && t.icon) || 'auto_stories';
+  }
 
   var controlled = strandId !== undefined;
   var detailId = controlled ? strandId : localDetailId;
@@ -211,6 +216,7 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
             <StrandResultRow
               key={st.id}
               strand={st}
+              spoolIcon={iconFor(activeCategory)}
               onClick={function () { openDetail(st.id); }}
               onAdd={taggedIds.includes(st.id) ? undefined : function () { tagStrand(st.id); }}
             />
@@ -240,6 +246,7 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
                 <StrandResultRow
                   key={st.id}
                   strand={st}
+                  spoolIcon={iconFor(st.collectionName)}
                   onClick={function () { openDetail(st.id); }}
                 />
               );
