@@ -2296,8 +2296,7 @@ function StrandsPage({app,allProjects}){
   var ssf=useState(null);var strandFilter=ssf[0];var setStrandFilter=ssf[1];
   var snc=useState(false);var newColl=snc[0];var setNewColl=snc[1];
   var sncn=useState('');var newCollName=sncn[0];var setNewCollName=sncn[1];
-  var scs=useState(function(){ return !!app.strandsFocusColl; });var showCollSettings=scs[0];var setShowCollSettings=scs[1];
-  useEffect(function(){ if(app.strandsFocusColl && app.setStrandsFocusColl) app.setStrandsFocusColl(null); },[]);
+  var scs=useState(false);var showCollSettings=scs[0];var setShowCollSettings=scs[1];
   var isMobile=useIsMobile();
   var smdo=useState(false);var mobileDetailOpen=smdo[0];var setMobileDetailOpen=smdo[1];
   var savt=useState(false);var showAvatarEdit=savt[0];var setShowAvatarEdit=savt[1];
@@ -2342,6 +2341,12 @@ function StrandsPage({app,allProjects}){
   var snft=useState('short_text');var newFieldType=snft[0];var setNewFieldType=snft[1];
   var ssw=useState([]);var sharedWith=ssw[0];var setSharedWith=ssw[1];
   function openCollSettings(){setEditingFields(activeTpl?[...activeTpl.fields]:[]);setSharedWith(activeTpl?activeTpl.sharedWith||[]:[]);setEditingSpoolColor(activeTpl?activeTpl.color||null:null);setEditingSpoolIcon(activeTpl?activeTpl.icon||null:null);setShowCollSettings(true);}
+  useEffect(function(){
+    if(app.strandsFocusColl){
+      openCollSettings();
+      if(app.setStrandsFocusColl)app.setStrandsFocusColl(null);
+    }
+  },[]);
   var sdc=useState(false);var deleteCollConfirm=sdc[0];var setDeleteCollConfirm=sdc[1];
   function deleteCollection(){
     if(!activeTpl)return;
