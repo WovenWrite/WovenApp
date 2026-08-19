@@ -5,13 +5,17 @@
 // on purpose — only user-facing text changed.
 //
 // Three layers:
-//   Layer 1     — Tagged Spools (10px-padded result list) + help text +
+//   Layer 1     — Presently tagged (10px-padded result list) + help text +
 //                 a Category Link per collection + "Create New Spool"
 //   Layer 2a    — a single collection's full spool list (via Category Link)
 //   Layer 2b    — one spool's detail (large thumbnail + fields in template order)
 //
-// Back from Layer 2b always returns to Layer 1 (per spec — not to Layer 2a,
-// even if that's how you arrived).
+// Back from Layer 2b always returns to Layer 1 (not Layer 2a, even if
+// that's how you arrived).
+//
+// Viewing a spool (tapping a row) and tagging it to this draft (tapping the
+// add icon) are separate actions — opening a spool's detail no longer tags
+// it as a side effect.
 //
 // strandId/onOpenStrand still work as an external override for jumping
 // straight to Layer 2b (used by PropertiesDrawer's tagged-strand chips) —
@@ -21,7 +25,7 @@
 //   <StrandsDrawer app={app} draft={draft} variant="inline" onClose={...} />
 
 import { useState } from 'react';
-import { Drawer, Field, AvatarEditModal, StrandResultRow, CategoryLink, HelpText, PrimaryButton, SpoolThumbnailUpload } from './SharedUI';
+import { Drawer, Field, AvatarEditModal, StrandResultRow, CategoryLink, HelpText, PrimaryButton, SecondaryButton, TertiaryButton, SpoolThumbnailUpload } from './SharedUI';
 import { defaultFields, genId, PRESET_COLORS } from './utils';
 
 var SPOOL_COLOR_BY_COLLECTION = {
@@ -48,12 +52,19 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
   var controlled = strandId !== undefined;
   var detailId = controlled ? strandId : localDetailId;
 
+  // Viewing a spool — no tagging side effect.
   function openDetail(id) {
+    if (controlled) { onOpenStrand && onOpenStrand(id); }
+    else { setLocalDetailId(id); }
+  }
+  // Tagging a spool to this draft — independent of viewing it.
+  function tagStrand(id) {
     if (!taggedIds.includes(id)) {
       app.updateDraft(pid, draft.id, { strandTags: taggedIds.concat([id]) });
     }
-    if (controlled) { onOpenStrand && onOpenStrand(id); }
-    else { setLocalDetailId(id); }
+  }
+  function untagStrand(id) {
+    app.updateDraft(pid, draft.id, { strandTags: taggedIds.filter(function (t) { return t !== id; }) });
   }
   function backToList() {
     setView('list');
@@ -81,7 +92,13 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
     };
     app.addStrand(pid, collName, ns);
     setShowCreateMenu(false);
+    tagStrand(ns.id);
     openDetail(ns.id);
+  }
+
+  function editTemplate(collName) {
+    if (app.setStrandsFocusColl) app.setStrandsFocusColl(collName);
+    if (app.setView) app.setView('strands');
   }
 
   // ── Layer 2b: Spool detail ──
@@ -113,19 +130,34 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
       app.updateStrand(pid, collName, detailId, { fields: nf });
     }
 
-    return (
-      <Drawer variant={variant || 'inline'} open={open} title={strand.name} onBack={backToList} onClose={onClose}>
+    var footer = (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+        <SecondaryButton icon="tune" onClick={function () { editTemplate(collName); }}>
+          Edit Spool Template
+        </SecondaryButton>
+        <TertiaryButton
+          style={{ color: 'var(--danger)' }}
+          onClick={function () { untagStrand(detailId); backToList(); }}
+        >
+          Disconnect from draft
+        </TertiaryButton>
+      </div>
+    );
 
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
+    return (
+      <Drawer variant={variant || 'inline'} open={open} title={strand.name} onBack={backToList} onClose={onClose} footer={footer}>
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
           <SpoolThumbnailUpload
             strand={strand}
-            onUpload={function (url) { app.updateStrand(pid, collName, detailId, { image: url }); }}
+            onClick={function () { setShowAvatarEdit(true); }}
           />
-        </div>
-
-        <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--mid)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}
-          onClick={function () { setShowAvatarEdit(true); }}>
-          {collName} · <span style={{ cursor: 'pointer', textDecoration: 'underline' }}>edit appearance</span>
+          <span
+            style={{ fontSize: 13, color: 'var(--indigo)', cursor: 'pointer', textDecoration: 'underline' }}
+            onClick={function () { setShowAvatarEdit(true); }}
+          >
+            Edit appearance
+          </span>
         </div>
 
         <Field
@@ -174,14 +206,23 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
         {items.length === 0 && (
           <HelpText style={{ padding: 20 }}>No {activeCategory.toLowerCase()} yet.</HelpText>
         )}
-        {items.map(function (st) {
-          return <StrandResultRow key={st.id} strand={st} onClick={function () { openDetail(st.id); }} />;
-        })}
+        <div style={{ padding: 10 }}>
+          {items.map(function (st) {
+            return (
+              <StrandResultRow
+                key={st.id}
+                strand={st}
+                onClick={function () { openDetail(st.id); }}
+                onAdd={function () { tagStrand(st.id); }}
+              />
+            );
+          })}
+        </div>
       </Drawer>
     );
   }
 
-  // ── Layer 1: Tagged Spools + Categories ──
+  // ── Layer 1: Presently tagged + Categories ──
   var tagged = [];
   collections.forEach(function (c) {
     (projStrands[c] || []).forEach(function (st) {
@@ -194,10 +235,17 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
 
       {tagged.length > 0 && (
         <div>
-          <span className="wv-field-lbl">Tagged Spools</span>
+          <span className="wv-field-lbl">Presently tagged</span>
           <div style={{ padding: 10 }}>
             {tagged.map(function (st) {
-              return <StrandResultRow key={st.id} strand={st} onClick={function () { openDetail(st.id); }} />;
+              return (
+                <StrandResultRow
+                  key={st.id}
+                  strand={st}
+                  onClick={function () { openDetail(st.id); }}
+                  onAdd={function () { tagStrand(st.id); }}
+                />
+              );
             })}
           </div>
         </div>
