@@ -1548,20 +1548,29 @@ function LooseThreadsSection({threads,app,view}){
     {d.title||'Untitled loose thread'}
   </div>
   {bodyPreview&&(
-<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,fontStyle:'italic',color:'#A88060',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:4,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,fontStyle:'italic',color:'#A88060',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
   {bodyPreview}
 </div>
   )}
-  {tagged.length>0&&(
-<div style={{display:'flex',alignItems:'center',gap:-4,overflow:'hidden'}}>
-  {tagged.slice(0,4).map(function(st,i){return(
-<div key={st.id} title={st.name} style={{width:22,height:22,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-6:0,boxSizing:'border-box'}}>
-  {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:11}}>{st.emoji}</span>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
+  {/* Bottom row — matches DraftCard: strand avatars left, status + word count right */}
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:'auto'}}>
+    <div style={{display:'flex',alignItems:'center'}}>
+      {tagged.slice(0,3).map(function(st,i){return(
+<div key={st.id} title={st.name} style={{width:22,height:22,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-7:0,boxSizing:'border-box',position:'relative',zIndex:3-i}}>
+  {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:st.emoji?<span style={{fontSize:10}}>{st.emoji}</span>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:8,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
 </div>
-  );})}
-  {tagged.length>4&&<span style={{fontSize:11,color:'var(--mid)',marginLeft:4}}>+{tagged.length-4}</span>}
+      );})}
+      {tagged.length>3&&(
+<div title={tagged.slice(3).map(function(s){return s.name;}).join(', ')} style={{width:22,height:22,borderRadius:'50%',background:'#E2D0B8',border:'1px solid #A88060',display:'flex',alignItems:'center',justifyContent:'center',marginLeft:-7,flexShrink:0,zIndex:0}}>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:9,color:'#7A5A38',fontWeight:600}}>+{tagged.length-3}</span>
 </div>
-  )}
+      )}
+    </div>
+    <div style={{display:'flex',alignItems:'center',gap:6}} onClick={function(e){e.stopPropagation();}}>
+      <StatusDotWithArchive draft={d} app={app} showLabel={false} dotSize={13}/>
+      <span style={{fontFamily:'DM Sans, sans-serif',fontSize:12,color:'#a88060'}}>{(d.wordCount||0)}w</span>
+    </div>
+  </div>
 </div>
       );
     })}
