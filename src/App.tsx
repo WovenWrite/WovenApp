@@ -9,8 +9,8 @@ import ProfileDrawer from './ProfileDrawer'
 import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
 import LooseThreadDrawer from './LooseThreadDrawer'
-import BindDrawer from './BindDrawer'
-import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar } from './SharedUI'
+import BindDrawer from './BindDrawer'a
+import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar } from './SharedUI'
 import {
   STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
   supabase, genId, stripHtml, countWords, initials, todayStr,
@@ -822,32 +822,7 @@ function ProjectNav({app,onOpenProfile}){
 
 
 
-// ── CollFilterGroup ──
-function CollFilterGroup({coll,strands,filter,setFilter,setFilterOpen}){
-  var sc=useState(true);var collapsed=sc[0];var setCollapsed=sc[1];
-  var hasActive=strands.some(function(st){return st.id===filter;});
-  return(
-<div style={{borderBottom:'1px solid var(--border)'}}>
-  <div style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',cursor:'pointer',userSelect:'none'}} onClick={function(){setCollapsed(!collapsed);}}>
-    <span className="mi" style={{fontSize:14,color:'var(--mid)',transition:'transform .15s',transform:collapsed?'rotate(-90deg)':'rotate(0deg)'}}>expand_more</span>
-    <span style={{fontSize:12,fontWeight:600,color:hasActive?'var(--indigo)':'var(--text)',flex:1}}>{coll}</span>
-    {hasActive&&<span style={{width:6,height:6,borderRadius:'50%',background:'var(--indigo)',flexShrink:0}}/>}
-  </div>
-  {!collapsed&&(
-<div style={{paddingBottom:6}}>
-  {strands.map(function(st){var isActive=filter===st.id;return(
-<div key={st.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 10px 5px 28px',cursor:'pointer'}} onMouseDown={function(e){e.preventDefault();e.stopPropagation();setFilter(isActive?null:st.id);setFilterOpen(false);}}>
-  <span style={{width:14,height:14,borderRadius:3,border:'1px solid '+(isActive?'var(--indigo)':'var(--border)'),background:isActive?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
-    {isActive&&<span className="mi" style={{fontSize:11,color:'#fff'}}>check</span>}
-  </span>
-  <span style={{fontSize:13,color:isActive?'var(--indigo)':'var(--text)',fontWeight:isActive?500:400}}>{st.name}</span>
-</div>
-  );})}
-</div>
-  )}
-</div>
-  );
-}
+// CollFilterGroup removed — replaced by ViewHeader's Popover-based filter
 
 // ── SortDropdown ──
 function SortDropdown({sort,setSort}){
@@ -878,80 +853,131 @@ function SortDropdown({sort,setSort}){
 }
 
 // ── ViewHeader ──
-function ViewHeader({app,filter,setFilter,sort,setSort,onAddDraft,onBind,structureMode,onStructureToggle,searchQ,onSearch,hideStructure}){
+function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onAddDraft,onBind,structureMode,onStructureToggle,searchQ,onSearch,hideStructure,resultCount}){
+  var filter=filterProp||emptyFilterState();
   var sf=useState(false);var filterOpen=sf[0];var setFilterOpen=sf[1];
-  var sp=useState({top:0,left:0});var filterPos=sp[0];var setFilterPos=sp[1];
   var ss=useState(false);var searchOpen=ss[0];var setSearchOpen=ss[1];
   var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
   var st=useState(structureMode||false);var structureOn=st[0];var setStructureOn=st[1];
   var sfs=useState('');var filterSearch=sfs[0];var setFilterSearch=sfs[1];
   var filterRef=useRef(null);var searchRef=useRef(null);
-  var projStrands=app.allStrands[app.projId]||{};
-  useEffect(function(){if(!filterOpen)return;function onDown(e){
-    if(filterRef.current&&filterRef.current.contains(e.target))return;
-    var drop=document.querySelector('.filter-dropdown');
-    if(drop&&drop.contains(e.target))return;
-    setFilterOpen(false);
-  }document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[filterOpen]);
+  var pid=app.projId;
+  var projStrands=app.allStrands[pid]||{};
+  var draftFieldDefs=(app.currentProject&&app.currentProject.draftFieldDefs)||[];
+  var refFields=draftFieldDefs.filter(function(f){return f.type==='strand_ref'&&f.refSpool;});
   useEffect(function(){if(searchOpen&&searchRef.current)searchRef.current.focus();},[searchOpen]);
-  var hasFilter=!!filter;
+  var criteriaCount=filterCriteriaCount(filter);
+  var hasFilter=criteriaCount>0;
   var SEP=(<div style={{width:1,height:24,background:'#7A5A38',opacity:.5,margin:'0 10px',flexShrink:0}}/>);
+
+  function toggleStatus(k){
+    var cur=filter.status||[];
+    var next=cur.indexOf(k)>=0?cur.filter(function(x){return x!==k;}):cur.concat([k]);
+    setFilter(Object.assign({},filter,{status:next}));
+  }
+  function toggleStrand(id){
+    var cur=filter.strandTags||[];
+    var next=cur.indexOf(id)>=0?cur.filter(function(x){return x!==id;}):cur.concat([id]);
+    setFilter(Object.assign({},filter,{strandTags:next}));
+  }
+  function toggleRefField(fid,strandId){
+    var cur=(filter.customFields&&filter.customFields[fid])||[];
+    var next=cur.indexOf(strandId)>=0?cur.filter(function(x){return x!==strandId;}):cur.concat([strandId]);
+    var cf=Object.assign({},filter.customFields);
+    cf[fid]=next;
+    setFilter(Object.assign({},filter,{customFields:cf}));
+  }
+
+  var sectLbl={fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:13,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8,display:'block'};
+  var allStrandsList=[];
+  Object.keys(projStrands).forEach(function(coll){
+    (projStrands[coll]||[]).forEach(function(s){allStrandsList.push(Object.assign({},s,{collectionName:coll}));});
+  });
+  var filteredStrandList=allStrandsList.filter(function(s){return !filterSearch||(s.name||'').toLowerCase().indexOf(filterSearch.toLowerCase())>=0;});
+
   return(
 <div className="view-hdr">
   <div style={{display:'flex',alignItems:'center',flex:1}}>
     <div style={{position:'relative'}}>
-      <button ref={filterRef} onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setFilterPos({top:r.bottom+4,left:r.left});setFilterOpen(!filterOpen);}} style={{display:'flex',alignItems:'center',gap:7,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer',position:'relative'}}>
+      <button ref={filterRef} onClick={function(){setFilterOpen(!filterOpen);}} style={{display:'flex',alignItems:'center',gap:7,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer',position:'relative'}}>
         <span className="material-symbols-outlined" style={{fontSize:20,color:'#6B4A26'}}>{hasFilter?'filter_alt_off':'filter_alt'}</span>
         <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'#7A5A38'}}>Define</span>
-        {hasFilter&&<span style={{position:'absolute',top:10,right:6,background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:14,height:14,fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>1</span>}
+        {hasFilter&&<span style={{position:'absolute',top:10,right:6,background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:14,height:14,fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{criteriaCount}</span>}
       </button>
-      {filterOpen&&(
-<div className="filter-dropdown" style={{top:filterPos.top,left:filterPos.left,minWidth:240,padding:0}}>
-  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px 4px'}}>
-    <span style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em'}}>Filter by strand</span>
-    {hasFilter&&<button className="btn btn-ghost btn-sm" style={{padding:'2px 8px',fontSize:11}} onClick={function(){setFilter(null);setFilterOpen(false);}}>Clear</button>}
-  </div>
-  <div style={{padding:'4px 10px 8px'}}>
-    <input value={filterSearch} onChange={function(e){setFilterSearch(e.target.value);}} placeholder="Search spools…" style={{width:'100%',padding:'5px 10px',fontSize:12,border:'1px solid var(--border)',borderRadius:20,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',boxSizing:'border-box'}}/>
-  </div>
-  {(function(){
-    var pid=app.projId;
-    var savedOrder=null;try{var so=localStorage.getItem('woven:collOrder:'+pid);if(so)savedOrder=JSON.parse(so);}catch(e){}
-    var rawColl=Object.keys(projStrands);
-    var orderedColl=savedOrder?savedOrder.filter(function(c){return rawColl.includes(c);}).concat(rawColl.filter(function(c){return !savedOrder.includes(c);})):rawColl;
-    var projTemplates=app.allTemplates[pid]||[];
-    if(filterSearch){
-      // Flat results when searching
-      var flatResults=[];
-      orderedColl.forEach(function(coll){
-        var tpl=projTemplates.find(function(t){return t.name===coll;});
-        if(tpl&&tpl.showInFilter===false)return;
-        (projStrands[coll]||[]).forEach(function(s){
-          if((s.name||'').toLowerCase().includes(filterSearch.toLowerCase()))flatResults.push({st:s,coll:coll,tpl:tpl});
-        });
-      });
-      if(flatResults.length===0)return[<div key="no" style={{padding:'8px 12px',fontSize:12,color:'var(--mid)'}}>No matches.</div>];
-      return flatResults.map(function(r){var isActive=filter===r.st.id;return(
-<div key={r.st.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:'pointer',background:isActive?'rgba(196,94,40,.06)':'transparent'}}
-  onClick={function(){setFilter(isActive?null:r.st.id);setFilterOpen(false);}}>
-  <div style={{width:12,height:12,borderRadius:'50%',background:r.tpl&&r.tpl.color?r.tpl.color:'var(--indigo)',flexShrink:0}}/>
-  <span style={{fontSize:13,color:isActive?'var(--indigo)':'var(--text)',fontWeight:isActive?600:400}}>{r.st.name}</span>
-  <span style={{fontSize:11,color:'var(--mid)',marginLeft:'auto'}}>{r.coll}</span>
+      <Popover anchorRef={filterRef} open={filterOpen} onClose={function(){setFilterOpen(false);}} title="Define filter" width={300}
+        footer={hasFilter?(
+          <button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center'}} onClick={function(){setFilter(emptyFilterState());}}>Clear all filters</button>
+        ):null}>
+
+        <div>
+          <span style={sectLbl}>Status</span>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+            {Object.keys(STATUSES).map(function(k){
+              var active=(filter.status||[]).indexOf(k)>=0;
+              return(
+<span key={k} onClick={function(){toggleStatus(k);}} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:12,fontSize:12,fontWeight:500,cursor:'pointer',background:active?STATUSES[k].color+'22':'var(--bg2)',color:active?STATUSES[k].color:'var(--mid)',border:'1px solid '+(active?STATUSES[k].color+'55':'var(--border)')}}>
+  <span style={{width:7,height:7,borderRadius:'50%',background:STATUSES[k].color,flexShrink:0}}/>
+  {STATUSES[k].label}
+</span>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <span style={sectLbl}>Tagged Strands</span>
+          <div style={{display:'flex',alignItems:'center',gap:6,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:8,padding:'6px 10px',marginBottom:8}}>
+            <span className="mi" style={{fontSize:14,color:'var(--mid)'}}>search</span>
+            <input value={filterSearch} onChange={function(e){setFilterSearch(e.target.value);}} placeholder="Search spools..." style={{border:'none',background:'none',outline:'none',flex:1,fontSize:13,color:'var(--text)'}}/>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:2,maxHeight:160,overflowY:'auto'}}>
+            {filteredStrandList.length===0&&<div style={{fontSize:12,color:'var(--mid)',padding:'4px 0'}}>{allStrandsList.length===0?'No strands yet.':'No matches.'}</div>}
+            {filteredStrandList.map(function(s){
+              var active=(filter.strandTags||[]).indexOf(s.id)>=0;
+              return(
+<div key={s.id} onClick={function(){toggleStrand(s.id);}} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 4px',cursor:'pointer',borderRadius:6}}
+  onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}} onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  <Check on={active}/>
+  <Avatar strand={s} size={22}/>
+  <span style={{fontSize:13,color:'var(--text)',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</span>
+  <span style={{fontSize:11,color:'var(--mid)'}}>{s.collectionName}</span>
 </div>
-      );});
-    }
-    return orderedColl.map(function(coll){
-      var tpl=projTemplates.find(function(t){return t.name===coll;});
-      if(tpl&&tpl.showInFilter===false)return null;
-      var collStrands=projStrands[coll]||[];
-      if(collStrands.length===0)return null;
-      return(<CollFilterGroup key={coll} coll={coll} strands={collStrands} filter={filter} setFilter={setFilter} setFilterOpen={setFilterOpen}/>);
-    });
-  })()}
-  {Object.values(projStrands).flat().length===0&&<div style={{padding:'8px 12px',fontSize:13,color:'var(--mid)'}}>No strands yet.</div>}
+              );
+            })}
+          </div>
+        </div>
+
+        {refFields.map(function(f){
+          var opts=(projStrands[f.refSpool]||[]);
+          var selected=(filter.customFields&&filter.customFields[f.id])||[];
+          return(
+<div key={f.id}>
+  <span style={sectLbl}>{f.label}</span>
+  <div style={{display:'flex',flexDirection:'column',gap:2,maxHeight:160,overflowY:'auto'}}>
+    {opts.length===0&&<div style={{fontSize:12,color:'var(--mid)',padding:'4px 0'}}>No {f.refSpool.toLowerCase()} yet.</div>}
+    {opts.map(function(s){
+      var active=selected.indexOf(s.id)>=0;
+      return(
+<div key={s.id} onClick={function(){toggleRefField(f.id,s.id);}} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 4px',cursor:'pointer',borderRadius:6}}
+  onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}} onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  <Check on={active}/>
+  <Avatar strand={s} size={22}/>
+  <span style={{fontSize:13,color:'var(--text)'}}>{s.name}</span>
 </div>
-      )}
+      );
+    })}
+  </div>
+</div>
+          );
+        })}
+
+      </Popover>
     </div>
+    {hasFilter&&(
+      <span style={{fontFamily:'DM Sans, sans-serif',fontSize:12,fontWeight:600,color:'var(--indigo)',background:'rgba(196,94,40,.10)',padding:'3px 10px',borderRadius:12,marginLeft:4,whiteSpace:'nowrap'}}>
+        {resultCount} {resultCount===1?'result':'results'}
+      </span>
+    )}
     {!hideStructure&&SEP}
     {!hideStructure&&<button onClick={function(){var nv=!structureOn;setStructureOn(nv);if(onStructureToggle)onStructureToggle(nv);}} style={{display:'flex',alignItems:'center',gap:8,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer'}}>
       <div style={{width:34,height:18,borderRadius:9,background:structureOn?'#7A5A38':'#A88060',position:'relative',transition:'background .2s',flexShrink:0}}>
@@ -1169,11 +1195,55 @@ window.doExport=function doExport(format,drafts,project,isSingleDraft,authorName
 // ── BindPanel ──
 // BindPanel now lives as BindDrawer in ./BindDrawer
 // ── applyFS ──// ── applyFS ──
-function applyFS(drafts,filter,sort){
-  // drafts here are tree nodes (with .children). Filter matches parent or any child.
-  var d=filter?drafts.filter(function(x){
-    var matchSelf=(x.strandTags||[]).includes(filter);
-    var matchChild=(x.children||[]).some(function(c){return (c.strandTags||[]).includes(filter);});
+// ── Define filter — property-based, multi-criteria ──
+// Shape: { status:[...statusKeys], strandTags:[...strandIds], customFields:{fieldId:[...strandIds]} }
+// AND across categories (status / strandTags / each custom field), OR within
+// a category's own selections. Persisted per-project in localStorage so it
+// survives navigation and reload — cleared only on sign out (see signOut()).
+function emptyFilterState(){return {status:[],strandTags:[],customFields:{}};}
+function filterStorageKey(pid){return 'woven:filter:'+pid;}
+function loadFilterState(pid){
+  try{
+    var raw=localStorage.getItem(filterStorageKey(pid));
+    if(!raw)return emptyFilterState();
+    var parsed=JSON.parse(raw);
+    return Object.assign(emptyFilterState(),parsed,{customFields:Object.assign({},parsed.customFields)});
+  }catch(e){return emptyFilterState();}
+}
+function persistFilterState(pid,filterObj){
+  try{localStorage.setItem(filterStorageKey(pid),JSON.stringify(filterObj));}catch(e){}
+}
+function filterCriteriaCount(filterObj){
+  if(!filterObj)return 0;
+  var n=(filterObj.status||[]).length+(filterObj.strandTags||[]).length;
+  Object.keys(filterObj.customFields||{}).forEach(function(k){n+=(filterObj.customFields[k]||[]).length;});
+  return n;
+}
+function draftMatchesFilter(draft,filterObj){
+  if(!filterObj)return true;
+  var st=filterObj.status||[];
+  if(st.length>0&&st.indexOf(draft.status)<0)return false;
+  var sTags=filterObj.strandTags||[];
+  if(sTags.length>0){
+    var dTags=draft.strandTags||[];
+    if(!sTags.some(function(id){return dTags.indexOf(id)>=0;}))return false;
+  }
+  var cf=filterObj.customFields||{};
+  var keys=Object.keys(cf);
+  for(var i=0;i<keys.length;i++){
+    var fid=keys[i];var wanted=cf[fid]||[];
+    if(wanted.length===0)continue;
+    var raw=(draft.customFields&&draft.customFields[fid])||'';
+    var have=[];try{var parsed=JSON.parse(raw);if(Array.isArray(parsed))have=parsed;}catch(e){}
+    if(!wanted.some(function(id){return have.indexOf(id)>=0;}))return false;
+  }
+  return true;
+}
+function applyFS(drafts,filterObj,sort){
+  var hasFilter=filterCriteriaCount(filterObj)>0;
+  var d=hasFilter?drafts.filter(function(x){
+    var matchSelf=draftMatchesFilter(x,filterObj);
+    var matchChild=(x.children||[]).some(function(c){return draftMatchesFilter(c,filterObj);});
     return matchSelf||matchChild;
   }):drafts;
   return d.slice().sort(function(a,b){
@@ -1499,8 +1569,10 @@ function SynopsisPreview({draft,onUpdate}){
 }
 
 // ── LooseThreadsSection ──
-function LooseThreadsSection({threads,app,view,structureMode}){
-  var sortedThreads=threads.slice().sort(function(a,b){return (b.createdAt||'').localeCompare(a.createdAt||'');});
+function LooseThreadsSection({threads,app,view,structureMode,filter}){
+  var hasActiveFilter=filterCriteriaCount(filter)>0;
+  var filteredThreads=hasActiveFilter?threads.filter(function(t){return draftMatchesFilter(t,filter);}):threads;
+  var sortedThreads=filteredThreads.slice().sort(function(a,b){return (b.createdAt||'').localeCompare(a.createdAt||'');});
   var sex=useState(false);var expanded=sex[0];var setExpanded=sex[1];
   var pid=app.projId;
 
@@ -1535,7 +1607,7 @@ function LooseThreadsSection({threads,app,view,structureMode}){
     setOpenLTId(null);
   }
 
-  var showFab=view==='cards';
+  var showFab=view==='cards'||view==='table';
   var fab=showFab&&(
 <button onClick={openCreateFlow} title="Add a loose thread" style={{position:'fixed',bottom:28,right:28,width:52,height:52,borderRadius:'50%',background:'#DF6321',border:'none',boxShadow:'0 4px 14px rgba(42,31,16,.25)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',zIndex:400,transition:'background .15s ease'}}
   onMouseEnter={function(e){e.currentTarget.style.background='#6B4A26';}}
@@ -1572,8 +1644,8 @@ function LooseThreadsSection({threads,app,view,structureMode}){
   {/* Section header */}
   <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
     <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'var(--text)'}}>Loose Threads</span>
-    {threads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:22,height:22,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{threads.length}</span>}
-    {threads.length>ONE_ROW&&(
+    {filteredThreads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:22,height:22,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{filteredThreads.length}</span>}
+    {filteredThreads.length>ONE_ROW&&(
 <button onClick={function(){setExpanded(!expanded);}} title={expanded?'Collapse':'Expand all'} style={{marginLeft:'auto',display:'flex',alignItems:'center',background:'transparent',border:'none',cursor:'pointer',color:'var(--mid)',padding:4}}>
   <span className="material-symbols-outlined" style={{fontSize:22}}>{expanded?'collapse_all':'expand_all'}</span>
 </button>
@@ -1679,7 +1751,8 @@ function EmptyDrafts({onAdd}){
 
 // ── CardsView ──
 function CardsView({app}){
-  var sf=useState(null);var filter=sf[0];var setFilter=sf[1];
+  var sf=useState(function(){return loadFilterState(app.projId);});var filter=sf[0];var setFilterRaw=sf[1];
+  function setFilter(next){setFilterRaw(next);persistFilterState(app.projId,next);}
   var ss=useState('order');var sort=ss[0];var setSort=ss[1];
   var sb=useState(false);var bindOpen=sb[0];var setBindOpen=sb[1];
   var sst=useState(false);var structureMode=sst[0];var setStructureMode=sst[1];
@@ -1701,7 +1774,7 @@ function CardsView({app}){
   });
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} structureMode={structureMode} onStructureToggle={function(v){setStructureMode(v);}} searchQ={searchQ} onSearch={setSearchQ}/>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} structureMode={structureMode} onStructureToggle={function(v){setStructureMode(v);}} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
   <div className="view-area dot-grid">
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div className="cards-grid"
@@ -1725,7 +1798,7 @@ function CardsView({app}){
   })}
 </div>
     )}
-    <LooseThreadsSection threads={ltDrafts} app={app} view="cards" structureMode={structureMode}/>
+    <LooseThreadsSection threads={ltDrafts} app={app} view="cards" structureMode={structureMode} filter={filter}/>
     <div style={{height:50,background:'#A88060',flexShrink:0,marginTop:'auto'}}/>
   </div>
   <BindDrawer app={app} open={bindOpen} variant="overlay" topOffset={54} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
@@ -1735,7 +1808,8 @@ function CardsView({app}){
 
 // ── TilesView ──
 function TilesView({app}){
-  var sf=useState(null);var filter=sf[0];var setFilter=sf[1];
+  var sf=useState(function(){return loadFilterState(app.projId);});var filter=sf[0];var setFilterRaw=sf[1];
+  function setFilter(next){setFilterRaw(next);persistFilterState(app.projId,next);}
   var ss=useState('order');var sort=ss[0];var setSort=ss[1];
   var sb=useState(false);var bindOpen=sb[0];var setBindOpen=sb[1];
   var so2=useState(null);var dragOver=so2[0];var setDragOver=so2[1];
@@ -1789,7 +1863,8 @@ function TilesView({app}){
 
 // ── TableView ──
 function TableView({app}){
-  var sf=useState(null);var filter=sf[0];var setFilter=sf[1];
+  var sf=useState(function(){return loadFilterState(app.projId);});var filter=sf[0];var setFilterRaw=sf[1];
+  function setFilter(next){setFilterRaw(next);persistFilterState(app.projId,next);}
   var ss=useState('order');var sort=ss[0];var setSort=ss[1];
   var sb=useState(false);var bindOpen=sb[0];var setBindOpen=sb[1];
   var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
@@ -1899,7 +1974,7 @@ function TableView({app}){
   );}
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} hideStructure={true} searchQ={searchQ} onSearch={setSearchQ}/>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} hideStructure={true} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
   <div className="table-wrap" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto',padding:20}}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>
@@ -1956,7 +2031,7 @@ function TableView({app}){
 </div>
   )}
   <BindDrawer app={app} open={bindOpen} variant="overlay" topOffset={54} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
-  <LooseThreadsSection threads={ltDrafts} app={app} view="table"/>
+  <LooseThreadsSection threads={ltDrafts} app={app} view="table" filter={filter}/>
 </div>
   );
 }
@@ -2238,7 +2313,6 @@ function NewSpoolModal({onConfirm,onCancel}){
   var sn=useState('');var name=sn[0];var setName=sn[1];
   var si=useState('auto_stories');var icon=si[0];var setIcon=si[1];
   var sc=useState('#c45e28');var color=sc[0];var setColor=sc[1];
-  var ssif=useState(true);var showInFilter=ssif[0];var setShowInFilter=ssif[1];
   var smis=useState(false);var showModalIconSearch=smis[0];var setShowModalIconSearch=smis[1];
   var ref=useRef(null);
   useEffect(function(){if(ref.current)ref.current.focus();},[]);
@@ -2283,18 +2357,9 @@ function NewSpoolModal({onConfirm,onCancel}){
         </button>
         {showModalIconSearch&&<IconSearchPopup current={icon} onSelect={function(ic){setIcon(ic);}} onClose={function(){setShowModalIconSearch(false);}}/> }      </div>
     </div>
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-      <div>
-        <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,fontWeight:600,color:'var(--text)'}}>Show in Define filter</span>
-        <div style={{fontSize:11,color:'var(--mid)'}}>Include in sequence filter dropdown</div>
-      </div>
-      <div onClick={function(){setShowInFilter(!showInFilter);}} style={{width:36,height:20,borderRadius:10,background:showInFilter?'#7A5A38':'#A88060',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
-        <div style={{position:'absolute',top:2,left:showInFilter?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
-      </div>
-    </div>
     <div style={{display:'flex',gap:8}}>
       <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onCancel}>Cancel</button>
-      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={function(){if(name.trim())onConfirm(name,icon,color,showInFilter);}} disabled={!name.trim()}>Create Spool</button>
+      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={function(){if(name.trim())onConfirm(name,icon,color);}} disabled={!name.trim()}>Create Spool</button>
     </div>
   </div>
 </div>
@@ -2558,13 +2623,6 @@ function StrandsPage({app,allProjects}){
     </div>
     {showIconSearch&&<IconSearchPopup current={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onSelect={function(ic){setEditingSpoolIcon(ic);}} onClose={function(){setShowIconSearch(false);}}/>}
   </div>
-  {/* Use as filter toggle */}
-  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-    <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,color:'var(--text)',fontWeight:600}}>Use as a filter?</span>
-    <div onClick={function(){var cur=activeTpl?activeTpl.showInFilter!==false:true;app.updateTemplate(pid,activeTpl&&activeTpl.id,{showInFilter:!cur});}} style={{width:36,height:20,borderRadius:10,background:(activeTpl?activeTpl.showInFilter!==false:true)?'#7A5A38':'#A88060',cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
-      <div style={{position:'absolute',top:2,left:(activeTpl?activeTpl.showInFilter!==false:true)?16:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
-    </div>
-  </div>
   <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:12,color:'var(--text)'}}>Fields</div>
   {deleteCollConfirm&&(
 <div className="modal-overlay">
@@ -2705,9 +2763,9 @@ function StrandsPage({app,allProjects}){
   <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
     <button className="btn-icon" onClick={openCollSettings} title="Spool settings"><span className="mi" style={{fontSize:18}}>settings</span></button>
     <button className="btn btn-ghost btn-sm" onClick={function(){setNewColl(true);}}>+ Create Spool</button>
-  {newColl&&<NewSpoolModal onConfirm={function(name,icon,color,sif){
+  {newColl&&<NewSpoolModal onConfirm={function(name,icon,color){
     if(!name.trim())return;
-    var nt={id:genId(),projectId:pid,name:name.trim(),icon:icon,color:color,showInFilter:sif!==false,fields:defaultFields(name.trim()),sharedWith:[]};
+    var nt={id:genId(),projectId:pid,name:name.trim(),icon:icon,color:color,fields:defaultFields(name.trim()),sharedWith:[]};
     app.addTemplate(pid,nt);
     app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name.trim()]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});
     setActiveColl(name.trim());setNewColl(false);
@@ -3319,7 +3377,16 @@ function App(){
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
   var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
 
-  function signOut(){supabase.auth.signOut().then(function(){window.__wovenUserId=null;setCurrentUser(null);setView('dashboard');setProjects([]);setAllDrafts({});});}
+  function signOut(){
+    supabase.auth.signOut().then(function(){
+      window.__wovenUserId=null;setCurrentUser(null);setView('dashboard');setProjects([]);setAllDrafts({});
+      try{
+        var toRemove=[];
+        for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('woven:filter:')===0)toRemove.push(k);}
+        toRemove.forEach(function(k){localStorage.removeItem(k);});
+      }catch(e){}
+    });
+  }
 
   // Check for shared draft link
   var urlParams=new URLSearchParams(window.location.search);
