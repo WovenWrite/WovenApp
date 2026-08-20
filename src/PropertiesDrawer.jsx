@@ -6,7 +6,7 @@
 //   <PropertiesDrawer app={app} draft={draft} variant="inline" onClose={...} />
 
 import { useState } from 'react';
-import { Drawer, Section, Field, Collapsible, StatusDotWithArchive, AddFieldInline } from './SharedUI';
+import { Drawer, Section, Field, Collapsible, StatusDotWithArchive, AddFieldInline, StrandRefPicker } from './SharedUI';
 import { genId, uploadImage } from './utils';
 
 export default function PropertiesDrawer({ app, draft, variant, open, onClose, onOpenStrand }) {
@@ -135,18 +135,31 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
       </Section>
 
       <Collapsible label="Advanced" open={advOpen} onToggle={function () { setAdvOpen(!advOpen); }}>
-        <Section label="POV">
-          <select value={draft.pov || ''} onChange={function (e) { update({ pov: e.target.value }); }}>
-            <option value="">None</option>
-            {taggedStrands.map(function (st) { return <option key={st.id} value={st.id}>{st.name}</option>; })}
-          </select>
-          {taggedStrands.length === 0 && (
-            <div style={{ fontSize: 12, color: 'var(--mid)', marginTop: 4 }}>Tag strands above to set POV.</div>
-          )}
-        </Section>
-
         {draftFieldDefs.map(function (f) {
           var val = (draft.customFields && draft.customFields[f.id]) || '';
+          if (f.type === 'strand_ref') {
+            var refIds = [];
+            try { var parsed = JSON.parse(val); if (Array.isArray(parsed)) refIds = parsed; } catch (e) {}
+            return (
+              <div key={f.id}>
+                <span className="wv-field-lbl">{f.label}</span>
+                <StrandRefPicker
+                  app={app}
+                  pid={app.projId}
+                  value={refIds}
+                  placeholder={'Select ' + f.label.toLowerCase() + '...'}
+                  onChange={function (ids) {
+                    var cf = Object.assign({}, draft.customFields || {});
+                    cf[f.id] = ids.length ? JSON.stringify(ids) : '';
+                    var newlyAdded = ids.filter(function (id) { return !tagIds.includes(id); });
+                    var changes = { customFields: cf };
+                    if (newlyAdded.length) changes.strandTags = tagIds.concat(newlyAdded);
+                    update(changes);
+                  }}
+                />
+              </div>
+            );
+          }
           return (
             <Field
               key={f.id}
