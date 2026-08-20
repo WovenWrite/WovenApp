@@ -10,7 +10,7 @@ import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
 import LooseThreadDrawer from './LooseThreadDrawer'
 import BindDrawer from './BindDrawer'
-import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor } from './SharedUI'
+import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor, Radio } from './SharedUI'
 import {
   STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
   supabase, genId, stripHtml, countWords, initials, todayStr,
@@ -2501,15 +2501,14 @@ function StrandsPage({app,allProjects}){
   function renderFieldInput(f,sid,val){
     if(f.type==='long_text')return <textarea key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} rows={3} onBlur={function(e){updateField(sid,f.id,e.target.value);}} style={{resize:'vertical',minHeight:72,cursor:'default'}}/>;
     if(f.type==='boolean')return(
-<div style={{display:'flex',gap:14}}>
+<div key={sid+'-'+f.id} style={{display:'flex',gap:16}}>
   {['Yes','No'].map(function(opt){return(
-<label key={opt} style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',fontSize:14}}>
-  <input type="radio" name={sid+'-'+f.id} value={opt} defaultChecked={val===opt} onChange={function(){updateField(sid,f.id,opt);}} style={{width:'auto'}}/>{opt}
-</label>
+    <Radio key={opt} on={val===opt} label={opt} onClick={function(){updateField(sid,f.id,opt);}}/>
   );})}
 </div>
     );
     if(f.type==='select')return(<select key={sid+'-'+f.id} defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}><option value="">Select...</option>{(f.options||[]).map(function(o){return <option key={o} value={o}>{o}</option>;})}</select>);
+    if(f.type==='date')return(<input key={sid+'-'+f.id} type="date" defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}/>);
     if(f.type==='strand_ref'){
       return <StrandRefField key={sid+'-'+f.id} f={f} sid={sid} val={val} pid={pid} app={app} onUpdate={function(newVal){updateField(sid,f.id,newVal);}}/>;
     }
