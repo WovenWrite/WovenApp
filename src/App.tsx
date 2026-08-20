@@ -3251,6 +3251,15 @@ function App(){
     // Add empty value to all existing drafts
     setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).map(function(d){var cf=Object.assign({},d.customFields||{});cf[fieldDef.id]='';return Object.assign({},d,{customFields:cf});});next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});
   }
+  function updateDraftFieldDef(pid,fieldId,changes){
+    setProjects(function(prev){var next=prev.map(function(p){if(p.id!==pid)return p;var defs=(p.draftFieldDefs||[]).map(function(f){return f.id!==fieldId?f:Object.assign({},f,changes);});return Object.assign({},p,{draftFieldDefs:defs});});saveDB('woven:projects',next);return next;});
+  }
+  function removeDraftFieldDef(pid,fieldId){
+    setProjects(function(prev){var next=prev.map(function(p){if(p.id!==pid)return p;var defs=(p.draftFieldDefs||[]).filter(function(f){return f.id!==fieldId;});return Object.assign({},p,{draftFieldDefs:defs});});saveDB('woven:projects',next);return next;});
+  }
+  function reorderDraftFieldDefs(pid,orderedDefs){
+    setProjects(function(prev){var next=prev.map(function(p){if(p.id!==pid)return p;return Object.assign({},p,{draftFieldDefs:orderedDefs});});saveDB('woven:projects',next);return next;});
+  }
   function createProject(proj,seed){
     var pid=proj.id;
     setProjects(function(prev){var next=prev.concat([proj]);saveDB('woven:projects',next);return next;});
@@ -3308,7 +3317,7 @@ function App(){
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
 
   function signOut(){supabase.auth.signOut().then(function(){window.__wovenUserId=null;setCurrentUser(null);setView('dashboard');setProjects([]);setAllDrafts({});});}
 
