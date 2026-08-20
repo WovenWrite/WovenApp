@@ -699,6 +699,43 @@ export function CategoryLink({ title, onClick }) {
   );
 }
 
+// Manages a Dropdown field's option list (add/remove option strings). Used
+// wherever a "select" type field is being configured — strand template
+// fields and draft custom fields both need the exact same interaction.
+export function OptionsEditor({ options, onChange }) {
+  var si = useState(''); var input = si[0]; var setInput = si[1];
+  var opts = options || [];
+  function add() {
+    var v = input.trim();
+    if (!v || opts.indexOf(v) >= 0) return;
+    onChange(opts.concat([v]));
+    setInput('');
+  }
+  function remove(idx) {
+    onChange(opts.filter(function (_, i) { return i !== idx; }));
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, width: '100%' }}>
+      {opts.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {opts.map(function (o, i) {
+            return (
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 6px 2px 8px', borderRadius: 10, background: 'var(--bg2)', border: '1px solid var(--border)', fontSize: 11, color: 'var(--text)' }}>
+                {o}
+                <span className="mi" style={{ fontSize: 12, cursor: 'pointer', color: 'var(--mid)' }} onClick={function () { remove(i); }}>close</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 4 }}>
+        <input value={input} onChange={function (e) { setInput(e.target.value); }} placeholder="Add option..." onKeyDown={function (e) { if (e.key === 'Enter') { e.preventDefault(); add(); } }} style={{ flex: 1, fontSize: 11, padding: '3px 6px' }} />
+        <button className="btn-icon" onClick={add} style={{ padding: '2px 6px', flexShrink: 0 }}><span className="mi" style={{ fontSize: 14 }}>add</span></button>
+      </div>
+    </div>
+  );
+}
+
 export function Check({ on }) {
   return (
     <span className={'wv-check' + (on ? ' on' : '')}>
