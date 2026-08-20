@@ -67,6 +67,29 @@ var DRAWER_CSS = `
 .wv-field-box:focus{outline:none;background:#FFFCF8;border-color:#C45E28;}
 .wv-field-box::placeholder{font-style:italic;color:var(--placeholder,#A88060);}
 
+/* Strand reference picker */
+.wv-refpick-empty{display:flex;align-items:center;justify-content:space-between;
+  width:100%;box-sizing:border-box;background:rgba(255,252,248,.5);border:1px solid #E2D0B8;
+  border-radius:8px;padding:10px 15px;font-family:'DM Sans',sans-serif;font-size:15px;
+  font-style:italic;color:#A88060;cursor:pointer;transition:background .12s ease,border-color .12s ease;}
+.wv-refpick-empty:hover{background:#FFFCF8;border-color:#C45E28;}
+.wv-refpick-selected{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;
+  background:#FFFCF8;border:1px solid #E2D0B8;border-radius:8px;padding:7px 10px;cursor:pointer;}
+.wv-refpick-name{flex:1;min-width:0;font-family:var(--serif,'Crimson Text',serif);font-weight:600;
+  font-size:16px;color:#6B4A26;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.wv-refpick-x{color:#A88060;flex-shrink:0;cursor:pointer;display:flex;}
+.wv-refpick-x:hover{color:#C45E28;}
+.wv-refpick-dropdown{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:60;
+  background:#FFFCF8;border:1px solid #E2D0B8;border-radius:10px;
+  box-shadow:0 8px 26px rgba(42,31,16,.16);max-height:280px;display:flex;flex-direction:column;
+  overflow:hidden;}
+.wv-refpick-search{flex-shrink:0;padding:8px;border-bottom:1px solid #E2D0B8;}
+.wv-refpick-search input{width:100%;box-sizing:border-box;border:1px solid #E2D0B8;border-radius:7px;
+  padding:6px 10px;font-family:'DM Sans',sans-serif;font-size:14px;color:#6B4A26;outline:none;
+  background:rgba(255,252,248,.6);}
+.wv-refpick-search input:focus{background:#FFFCF8;border-color:#C45E28;}
+.wv-refpick-list{overflow-y:auto;}
+
 /* Collapsible */
 .wv-collapse{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mid);
   cursor:pointer;user-select:none;}
@@ -445,6 +468,79 @@ export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
 // Pass any sort widget via `sortSlot` (e.g. an existing StrandSortFilter) —
 // this component only owns the search box and the row layout, not sorting
 // logic itself.
+// A multi-select, project-wide, searchable strand picker — for any custom
+// draft field typed "Reference" (e.g. a user-defined "POV" field). Not
+// scoped to one collection or project; searches every strand in the current
+// project. Selecting a strand does NOT tag it to a draft on its own — the
+// caller decides whether to also tag.
+export function StrandRefPicker({ app, pid, value, onChange, placeholder }) {
+  var so = useState(false); var open = so[0]; var setOpen = so[1];
+  var sq = useState(''); var query = sq[0]; var setQuery = sq[1];
+  var ref = useRef(null);
+
+  useEffect(function () {
+    if (!open) return;
+    function onDown(e) { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setQuery(''); } }
+    document.addEventListener('mousedown', onDown);
+    return function () { document.removeEventListener('mousedown', onDown); };
+  }, [open]);
+
+  var selectedIds = value || [];
+  var projStrands = (app.allStrands[pid] || {});
+  var all = [];
+  Object.keys(projStrands).forEach(function (coll) {
+    (projStrands[coll] || []).forEach(function (st) {
+      all.push(Object.assign({}, st, { collectionName: coll }));
+    });
+  });
+
+  var selected = selectedIds.map(function (id) { return all.find(function (s) { return s.id === id; }); }).filter(Boolean);
+  var available = all.filter(function (st) { return selectedIds.indexOf(st.id) < 0; });
+  var filtered = available.filter(function (st) {
+    return !query || (st.name || '').toLowerCase().indexOf(query.toLowerCase()) >= 0;
+  });
+
+  function add(st) { onChange(selectedIds.concat([st.id])); setQuery(''); }
+  function remove(id) { onChange(selectedIds.filter(function (i) { return i !== id; })); }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      {selected.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+          {selected.map(function (st) {
+            return (
+              <div key={st.id} className="wv-refpick-selected">
+                <Avatar strand={st} size={26} />
+                <span className="wv-refpick-name">{st.name}</span>
+                <span className="mi wv-refpick-x" onClick={function () { remove(st.id); }}>close</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="wv-refpick-empty" onClick={function () { setOpen(!open); }}>
+        <span>{selected.length > 0 ? 'Add another...' : (placeholder || 'Select spools...')}</span>
+        <span className="mi" style={{ fontSize: 18 }}>{open ? 'expand_less' : 'expand_more'}</span>
+      </div>
+      {open && (
+        <div className="wv-refpick-dropdown">
+          <div className="wv-refpick-search">
+            <input autoFocus value={query} onChange={function (e) { setQuery(e.target.value); }} placeholder="Search spools..." />
+          </div>
+          <div className="wv-refpick-list">
+            {filtered.length === 0 && (
+              <HelpText style={{ padding: 14 }}>{available.length === 0 ? 'All spools selected.' : 'No spools match "' + query + '".'}</HelpText>
+            )}
+            {filtered.map(function (st) {
+              return <StrandResultRow key={st.id} strand={st} onClick={function () { add(st); }} />;
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SearchSortBar({ value, onChange, placeholder, sortSlot }) {
   return (
     <div className="wv-drawer-toolbar">
