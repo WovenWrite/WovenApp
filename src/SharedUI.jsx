@@ -178,6 +178,13 @@ var DRAWER_CSS = `
 .wv-check{width:17px;height:17px;border-radius:4px;display:flex;align-items:center;
   justify-content:center;flex-shrink:0;transition:all .15s;border:1px solid var(--border);}
 .wv-check.on{border-color:var(--indigo);background:var(--indigo);}
+.wv-radio{width:17px;height:17px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;transition:all .15s;border:1px solid var(--border);
+  background:rgba(255,252,248,.5);}
+.wv-radio.on{border-color:var(--indigo);}
+.wv-radio-dot{width:9px;height:9px;border-radius:50%;background:var(--indigo);}
+.wv-radio-lbl{display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+  font-family:var(--serif,'Crimson Text',serif);font-size:15px;color:#6B4A26;}
 
 /* Large spool thumbnail — detail view, click to upload */
 .wv-thumb-upload{position:relative;width:150px;height:150px;border-radius:100px;
@@ -715,22 +722,32 @@ export function OptionsEditor({ options, onChange }) {
     onChange(opts.filter(function (_, i) { return i !== idx; }));
   }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4, width: '100%' }}>
       {opts.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
           {opts.map(function (o, i) {
             return (
-              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 6px 2px 8px', borderRadius: 10, background: 'var(--bg2)', border: '1px solid var(--border)', fontSize: 11, color: 'var(--text)' }}>
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 6px 3px 10px', borderRadius: 12, background: 'rgba(196,94,40,.08)', border: '1px solid rgba(196,94,40,.25)', fontFamily: 'DM Sans, sans-serif', fontSize: 12, color: '#6B4A26' }}>
                 {o}
-                <span className="mi" style={{ fontSize: 12, cursor: 'pointer', color: 'var(--mid)' }} onClick={function () { remove(i); }}>close</span>
+                <span className="mi" style={{ fontSize: 13, cursor: 'pointer', color: '#A88060' }} onClick={function () { remove(i); }}>close</span>
               </span>
             );
           })}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 4 }}>
-        <input value={input} onChange={function (e) { setInput(e.target.value); }} placeholder="Add option..." onKeyDown={function (e) { if (e.key === 'Enter') { e.preventDefault(); add(); } }} style={{ flex: 1, fontSize: 11, padding: '3px 6px' }} />
-        <button className="btn-icon" onClick={add} style={{ padding: '2px 6px', flexShrink: 0 }}><span className="mi" style={{ fontSize: 14 }}>add</span></button>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          value={input}
+          onChange={function (e) { setInput(e.target.value); }}
+          placeholder="Add option..."
+          onKeyDown={function (e) { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          style={{ flex: 1, boxSizing: 'border-box', background: 'rgba(255,252,248,.5)', border: '1px solid #E2D0B8', borderRadius: 8, padding: '6px 10px', fontFamily: 'DM Sans, sans-serif', fontSize: 12, color: '#6B4A26', outline: 'none' }}
+          onFocus={function (e) { e.target.style.background = '#FFFCF8'; e.target.style.borderColor = '#C45E28'; }}
+          onBlur={function (e) { e.target.style.background = 'rgba(255,252,248,.5)'; e.target.style.borderColor = '#E2D0B8'; }}
+        />
+        <button onClick={add} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #E2D0B8', background: 'rgba(255,252,248,.5)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <span className="mi" style={{ fontSize: 15, color: '#6B4A26' }}>add</span>
+        </button>
       </div>
     </div>
   );
@@ -741,6 +758,19 @@ export function Check({ on }) {
     <span className={'wv-check' + (on ? ' on' : '')}>
       {on && <span className="mi" style={{ fontSize: 12, color: '#fff' }}>check</span>}
     </span>
+  );
+}
+
+// Styled radio button matching Check's visual language (same size/border
+// treatment) but circular with a filled dot, per radio-button convention.
+export function Radio({ on, onClick, label }) {
+  return (
+    <label className="wv-radio-lbl" onClick={onClick}>
+      <span className={'wv-radio' + (on ? ' on' : '')}>
+        {on && <span className="wv-radio-dot" />}
+      </span>
+      {label}
+    </label>
   );
 }
 
