@@ -271,11 +271,10 @@ function buildPayload(raw, itemType, templates) {
   if (itemType === 'draft') {
     return {
       ...raw, itemType, name: raw.title,
-      fields: { synopsis: raw.synopsis, pov: raw.pov },
+      fields: { synopsis: raw.synopsis },
       fieldDefs: [
         { id: 'synopsis', label: 'Synopsis' },
         { id: 'status',   label: 'Status'   },
-        { id: 'pov',      label: 'POV'      },
       ],
     }
   }
