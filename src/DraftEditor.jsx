@@ -460,7 +460,7 @@ function DraftEditor({app}){
       synopsis:draft.synopsis||'',status:draft.status||'first_draft',
       order:draft.order,parentId:did,
       nestExpanded:true,body:body,wordCount:draft.wordCount||0,
-      strandTags:draft.strandTags||[],pov:draft.pov||'',
+      strandTags:draft.strandTags||[],
       customFields:draft.customFields||{},createdAt:now,updatedAt:now
     };
     if(app.addDraft)app.addDraft(pid,nb);
