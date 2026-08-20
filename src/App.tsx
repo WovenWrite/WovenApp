@@ -10,7 +10,7 @@ import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
 import LooseThreadDrawer from './LooseThreadDrawer'
 import BindDrawer from './BindDrawer'
-import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar } from './SharedUI'
+import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor } from './SharedUI'
 import {
   STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
   supabase, genId, stripHtml, countWords, initials, todayStr,
@@ -2639,17 +2639,21 @@ function StrandsPage({app,allProjects}){
 </div>
   )}
   {editingFields.map(function(f,i){return(
-<div key={f.id} className="field-edit-row" draggable={true}
+<div key={f.id} draggable={true}
   onDragStart={function(e){e.dataTransfer.setData('fieldIdx',''+i);}}
   onDragOver={function(e){e.preventDefault();}}
-  onDrop={function(e){e.preventDefault();var from=parseInt(e.dataTransfer.getData('fieldIdx'),10);if(isNaN(from)||from===i)return;var nf=editingFields.slice();var item=nf.splice(from,1)[0];nf.splice(i,0,item);setEditingFields(nf);}}>
-  <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab',flexShrink:0}}>drag_indicator</span>
-  <input defaultValue={f.label} style={{maxWidth:160,fontSize:13}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});setEditingFields(nf);}}/>
-  <select value={f.type} style={{width:110,fontSize:13}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value,refSpool:null,refMultiple:false});setEditingFields(nf);}}>
-    {FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}
-  </select>
+  onDrop={function(e){e.preventDefault();var from=parseInt(e.dataTransfer.getData('fieldIdx'),10);if(isNaN(from)||from===i)return;var nf=editingFields.slice();var item=nf.splice(from,1)[0];nf.splice(i,0,item);setEditingFields(nf);}}
+  style={{borderBottom:'1px solid var(--bg2)',padding:'8px 0'}}>
+  <div style={{display:'flex',alignItems:'center',gap:7}}>
+    <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab',flexShrink:0}}>drag_indicator</span>
+    <input defaultValue={f.label} style={{maxWidth:160,fontSize:13}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});setEditingFields(nf);}}/>
+    <select value={f.type} style={{width:110,fontSize:13}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value,refSpool:null,refMultiple:false,options:null});setEditingFields(nf);}}>
+      {FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}
+    </select>
+    <button className="btn-icon" onClick={function(){setEditingFields(editingFields.filter(function(_,j){return j!==i;}));}}><span className="mi" style={{fontSize:18}}>delete</span></button>
+  </div>
   {f.type==='strand_ref'&&(
-<div style={{display:'flex',gap:4,alignItems:'center',marginTop:4}}>
+<div style={{display:'flex',gap:4,alignItems:'center',marginTop:6,marginLeft:26}}>
   <select value={f.refSpool||''} style={{fontSize:11,flex:1}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refSpool:e.target.value});setEditingFields(nf);}}>
     <option value="">Pick spool…</option>
     {Object.keys(app.allStrands[pid]||{}).map(function(c){return <option key={c} value={c}>{c}</option>;})}
@@ -2659,7 +2663,11 @@ function StrandsPage({app,allProjects}){
   </label>
 </div>
   )}
-  <button className="btn-icon" onClick={function(){setEditingFields(editingFields.filter(function(_,j){return j!==i;}));}}><span className="mi" style={{fontSize:18}}>delete</span></button>
+  {f.type==='select'&&(
+    <div style={{marginLeft:26,marginTop:2}}>
+      <OptionsEditor options={f.options} onChange={function(opts){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{options:opts});setEditingFields(nf);}}/>
+    </div>
+  )}
 </div>
   );})}
   <div style={{display:'flex',gap:8,marginTop:12,marginBottom:24}}>
