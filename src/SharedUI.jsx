@@ -179,6 +179,11 @@ var DRAWER_CSS = `
 .wv-thumb-upload:hover .wv-thumb-upload-overlay{opacity:1;}
 .wv-thumb-upload-overlay .mi{color:#fff;font-size:28px;}
 
+/* Draft thumbnail — 190x150, rounded rect (not circular), same hover-overlay */
+.wv-draft-thumb{width:190px;height:150px;border-radius:15px;background:#E2D0B8;}
+.wv-draft-thumb-empty{width:100%;height:100%;display:flex;align-items:center;
+  justify-content:center;color:#A88060;}
+
 /* Mobile — inline drawers become full-screen sheets */
 @media(max-width:768px){
   .wv-drawer--inline{position:fixed;top:54px;bottom:0;left:0;right:0;z-index:50;
@@ -468,12 +473,13 @@ export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
 // Pass any sort widget via `sortSlot` (e.g. an existing StrandSortFilter) —
 // this component only owns the search box and the row layout, not sorting
 // logic itself.
-// A multi-select, project-wide, searchable strand picker — for any custom
-// draft field typed "Reference" (e.g. a user-defined "POV" field). Not
-// scoped to one collection or project; searches every strand in the current
-// project. Selecting a strand does NOT tag it to a draft on its own — the
-// caller decides whether to also tag.
-export function StrandRefPicker({ app, pid, value, onChange, placeholder }) {
+// A multi-select, searchable strand picker — for any custom draft field
+// typed "Reference" (e.g. a user-defined "POV" field). Pass `collection` to
+// scope the picker to one spool collection (recommended — otherwise every
+// strand in the project is searched, which gets unwieldy fast). Selecting a
+// strand does NOT tag it to a draft on its own — the caller decides whether
+// to also tag.
+export function StrandRefPicker({ app, pid, collection, value, onChange, placeholder }) {
   var so = useState(false); var open = so[0]; var setOpen = so[1];
   var sq = useState(''); var query = sq[0]; var setQuery = sq[1];
   var ref = useRef(null);
@@ -488,7 +494,8 @@ export function StrandRefPicker({ app, pid, value, onChange, placeholder }) {
   var selectedIds = value || [];
   var projStrands = (app.allStrands[pid] || {});
   var all = [];
-  Object.keys(projStrands).forEach(function (coll) {
+  var collNames = collection ? [collection] : Object.keys(projStrands);
+  collNames.forEach(function (coll) {
     (projStrands[coll] || []).forEach(function (st) {
       all.push(Object.assign({}, st, { collectionName: coll }));
     });
@@ -537,6 +544,30 @@ export function StrandRefPicker({ app, pid, value, onChange, placeholder }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// A draft's own thumbnail — 190x150, rounded rect, click-to-upload with the
+// same hover overlay as SpoolThumbnailUpload. No fallback initials (drafts
+// don't have a name-based avatar concept) — just an empty placeholder.
+export function DraftThumbnailUpload({ image, onUpload }) {
+  var inputRef = useRef(null);
+  function handleFile(e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5 MB.'); return; }
+    uploadImage(file).then(function (url) { if (url) onUpload(url); });
+  }
+  return (
+    <div className="wv-thumb-upload wv-draft-thumb" onClick={function () { inputRef.current && inputRef.current.click(); }}>
+      {image
+        ? <img src={image} alt="" />
+        : <div className="wv-draft-thumb-empty"><span className="mi" style={{ fontSize: 32 }}>image</span></div>}
+      <div className="wv-thumb-upload-overlay">
+        <span className="mi">edit</span>
+      </div>
+      <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
     </div>
   );
 }
