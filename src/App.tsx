@@ -67,14 +67,14 @@ var DEFAULT_TABLE_COLS=['title','synopsis','status','strandTags'];
 function makeSeedData(pid){
   var now=new Date().toISOString();
   var drafts=[
-    {id:'d1',projectId:pid,title:'The Arrival',synopsis:'Eldric arrives at the farmstead to find it eerily silent.',status:'second_draft',order:1,parentId:null,nestExpanded:true,body:'<p>The farmstead appeared through the fog as Eldric crested the hill. He had not expected the silence.</p><p>"Maren?" His voice was swallowed by the grey.</p>',wordCount:32,strandTags:['s1','s2'],pov:'s1',customFields:{},createdAt:now,updatedAt:now},
-    {id:'d1a',projectId:pid,title:'The Farmstead at Dawn',synopsis:'A nested scene — Eldric searches the outbuildings.',status:'first_draft',order:1.1,parentId:'d1',nestExpanded:true,body:'',wordCount:0,strandTags:['s1'],pov:'s1',customFields:{},createdAt:now,updatedAt:now},
-    {id:'d2',projectId:pid,title:'The Keep at Ironveil',synopsis:'Lord Vasher summons the council. Maren must attend or raise suspicion.',status:'first_draft',order:2,parentId:null,nestExpanded:true,body:'<p>The great hall was lit by torchlight even at midday. Maren took her place where the shadows were deepest.</p>',wordCount:27,strandTags:['s2','s3'],pov:'s2',customFields:{},createdAt:now,updatedAt:now},
-    {id:'d3',projectId:pid,title:'First Light',synopsis:'Eldric remembers the archive before the fire.',status:'first_draft',order:3,parentId:null,nestExpanded:true,body:'<p>He had loved the archive most at dawn, when the light caught the dust motes like suspended snow.</p>',wordCount:24,strandTags:['s1'],pov:'s1',customFields:{},createdAt:now,updatedAt:now},
-    {id:'d4',projectId:pid,title:'The Council Meets',synopsis:'Something is decided that cannot be undone.',status:'first_draft',order:4,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:['s2','s3'],pov:'s2',customFields:{},createdAt:now,updatedAt:now},
-    {id:'d5',projectId:pid,title:"Eldric's Secret",synopsis:'The truth about the archive fire is finally revealed.',status:'complete',order:5,parentId:null,nestExpanded:true,body:'<p>Eldric had not started the fire. But he had known it was coming.</p>',wordCount:18,strandTags:['s1'],pov:'s1',customFields:{},createdAt:now,updatedAt:now},
-    {id:'lt1',projectId:pid,title:'The Dream Sequence',synopsis:'Maren keeps having the same dream. Magical or psychological?',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:now,updatedAt:now},
-    {id:'lt2',projectId:pid,title:'',synopsis:'Where does Vasher finally show his hand?',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:now,updatedAt:now}
+    {id:'d1',projectId:pid,title:'The Arrival',synopsis:'Eldric arrives at the farmstead to find it eerily silent.',status:'second_draft',order:1,parentId:null,nestExpanded:true,body:'<p>The farmstead appeared through the fog as Eldric crested the hill. He had not expected the silence.</p><p>"Maren?" His voice was swallowed by the grey.</p>',wordCount:32,strandTags:['s1','s2'],customFields:{},createdAt:now,updatedAt:now},
+    {id:'d1a',projectId:pid,title:'The Farmstead at Dawn',synopsis:'A nested scene — Eldric searches the outbuildings.',status:'first_draft',order:1.1,parentId:'d1',nestExpanded:true,body:'',wordCount:0,strandTags:['s1'],customFields:{},createdAt:now,updatedAt:now},
+    {id:'d2',projectId:pid,title:'The Keep at Ironveil',synopsis:'Lord Vasher summons the council. Maren must attend or raise suspicion.',status:'first_draft',order:2,parentId:null,nestExpanded:true,body:'<p>The great hall was lit by torchlight even at midday. Maren took her place where the shadows were deepest.</p>',wordCount:27,strandTags:['s2','s3'],customFields:{},createdAt:now,updatedAt:now},
+    {id:'d3',projectId:pid,title:'First Light',synopsis:'Eldric remembers the archive before the fire.',status:'first_draft',order:3,parentId:null,nestExpanded:true,body:'<p>He had loved the archive most at dawn, when the light caught the dust motes like suspended snow.</p>',wordCount:24,strandTags:['s1'],customFields:{},createdAt:now,updatedAt:now},
+    {id:'d4',projectId:pid,title:'The Council Meets',synopsis:'Something is decided that cannot be undone.',status:'first_draft',order:4,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:['s2','s3'],customFields:{},createdAt:now,updatedAt:now},
+    {id:'d5',projectId:pid,title:"Eldric's Secret",synopsis:'The truth about the archive fire is finally revealed.',status:'complete',order:5,parentId:null,nestExpanded:true,body:'<p>Eldric had not started the fire. But he had known it was coming.</p>',wordCount:18,strandTags:['s1'],customFields:{},createdAt:now,updatedAt:now},
+    {id:'lt1',projectId:pid,title:'The Dream Sequence',synopsis:'Maren keeps having the same dream. Magical or psychological?',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:now,updatedAt:now},
+    {id:'lt2',projectId:pid,title:'',synopsis:'Where does Vasher finally show his hand?',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:now,updatedAt:now}
   ];
   var templates=[
     {id:'t1',projectId:pid,name:'Characters',fields:COLL_FIELDS['Characters'],sharedWith:[]},
@@ -652,7 +652,7 @@ function GlobalLooseThreads({app}){
   function moveToProject(ltId,targetPid){
     if(!targetPid)return;
     var lt=app.globalLT[ltId];if(!lt)return;
-    app.addDraft(targetPid,{id:genId(),projectId:targetPid,title:lt.title||'',synopsis:lt.synopsis||'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+    app.addDraft(targetPid,{id:genId(),projectId:targetPid,title:lt.title||'',synopsis:lt.synopsis||'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
     app.updateGlobalLT(ltId,{archived:true});
   }
   var ssm=useState(false);var showMore=ssm[0];var setShowMore=ssm[1];
@@ -1510,7 +1510,7 @@ function LooseThreadsSection({threads,app,view,structureMode}){
   var spl=useState(null);var pendingLT=spl[0];var setPendingLT=spl[1];
   function openCreateFlow(){
     var id=genId();
-    setPendingLT({id:id,projectId:pid,title:'',synopsis:'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+    setPendingLT({id:id,projectId:pid,title:'',synopsis:'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
     setOpenLTId(id);
   }
   var activeLT=pendingLT&&pendingLT.id===openLTId?pendingLT:threads.find(function(d){return d.id===openLTId;});
@@ -1535,7 +1535,7 @@ function LooseThreadsSection({threads,app,view,structureMode}){
     setOpenLTId(null);
   }
 
-  var showFab=view==='cards'||view==='table';
+  var showFab=view==='cards';
   var fab=showFab&&(
 <button onClick={openCreateFlow} title="Add a loose thread" style={{position:'fixed',bottom:28,right:28,width:52,height:52,borderRadius:'50%',background:'#DF6321',border:'none',boxShadow:'0 4px 14px rgba(42,31,16,.25)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',zIndex:400,transition:'background .15s ease'}}
   onMouseEnter={function(e){e.currentTarget.style.background='#6B4A26';}}
@@ -1548,25 +1548,10 @@ function LooseThreadsSection({threads,app,view,structureMode}){
   );
 
   if(view==='table'){return(
-<div style={{padding:'0 0 12px',flexShrink:0}}>
-  <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderTop:'1px solid var(--border)',cursor:'pointer'}} onClick={function(){setExpanded(!expanded);}}>
-    <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--mid)',transition:'transform .15s',transform:expanded?'rotate(90deg)':'none'}}>chevron_right</span>
-    <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:13,color:'var(--mid)'}}>Loose Threads</span>
-    {threads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:18,height:18,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{threads.length}</span>}
-  </div>
-  {expanded&&sortedThreads.map(function(d){return(
-<div key={d.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderBottom:'1px solid var(--bg2)'}}>
-  <input className="tbl-inp" defaultValue={d.title} placeholder="Untitled loose thread" onBlur={function(e){app.updateDraft(app.projId,d.id,{title:e.target.value});}} style={{maxWidth:180}}/>
-  <input className="tbl-inp syn" defaultValue={d.synopsis} placeholder="Note..." onBlur={function(e){app.updateDraft(app.projId,d.id,{synopsis:e.target.value});}} style={{flex:1}}/>
-  <button className="card-open" onClick={function(){app.openDraft(d.id);}}>Draft</button>
-</div>
-  );})}
-  {expanded&&threads.length===0&&(
-<div style={{padding:'6px 12px',fontSize:13,color:'var(--placeholder)',fontStyle:'italic'}}>No loose threads yet.</div>
-  )}
+<>
   {fab}
   {drawer}
-</div>
+</>
   );}
 
   // How many tiles fit in one row (approx based on tile width 220+10gap)
@@ -1703,7 +1688,7 @@ function CardsView({app}){
   var seqDrafts=allDrafts.filter(function(d){return !d.archived&&d.status!=='loose_thread'&&!d.parentId;});
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
-  function addDraft(){var nid=genId();app.addDraft(app.projId,{id:nid,projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqDrafts.length+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});app.openDraft(nid);}
+  function addDraft(){var nid=genId();app.addDraft(app.projId,{id:nid,projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqDrafts.length+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});app.openDraft(nid);}
   function moveUp(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<=0)return;app.reorderDraft(app.projId,did,sorted[idx-1].order||0);}
   function moveDown(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<0||idx>=sorted.length-1)return;app.reorderDraft(app.projId,did,sorted[idx+1].order||0);}
   var displayed=applyFS(tree,filter,sort).filter(function(p){
@@ -1759,7 +1744,7 @@ function TilesView({app}){
   var allDrafts=app.allDrafts[app.projId]||[];
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
-  function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
+  function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
   var displayed=applyFS(tree,filter,sort);
   return(
 <div className="view-layout">
@@ -1816,7 +1801,7 @@ function TableView({app}){
   var projKey='colvis:'+app.projId;
   var svc=useState(function(){try{var v=localStorage.getItem(projKey);return v?JSON.parse(v):DEFAULT_TABLE_COLS;}catch(e){return DEFAULT_TABLE_COLS;}});
   var visCols=svc[0];var setVisCols=svc[1];
-  var scw=useState({title:160,synopsis:260,status:130,strandTags:160,wordCount:64,pov:90});
+  var scw=useState({title:160,synopsis:260,status:130,strandTags:160,wordCount:64});
   var colWidths=scw[0];var setColWidths=scw[1];
   var resizing=useRef(null);
   function startResize(col,e){
@@ -1832,8 +1817,7 @@ function TableView({app}){
     {id:'title',label:'Title'},
     {id:'status',label:'Status'},
     {id:'wordCount',label:'Words'},
-    {id:'synopsis',label:'Synopsis'},
-    {id:'pov',label:'POV'}
+    {id:'synopsis',label:'Synopsis'}
     ,{id:'strandTags',label:'Strands'}
   ].concat(draftFieldDefs.map(function(f){return{id:'cf_'+f.id,label:f.label};}));
   function toggleCol(id){var next=visCols.includes(id)?visCols.filter(function(c){return c!==id;}):visCols.concat([id]);setVisCols(next);try{localStorage.setItem(projKey,JSON.stringify(next));}catch(e){}}
@@ -1845,13 +1829,13 @@ function TableView({app}){
   }document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[colOpen]);
   var allDrafts=app.allDrafts[app.projId]||[];
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
-  var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
+  var ltDrafts=allDrafts.filter(function(d){return d.status==='loose_thread'&&!d.archived;});
   var displayed=applyFS(tree,filter,sort).filter(function(p){
     if(!searchQ.trim())return true;
     var q=searchQ.toLowerCase();
     return (p.title||'').toLowerCase().includes(q)||(p.synopsis||'').toLowerCase().includes(q)||(p.body?stripHtml(p.body).toLowerCase().includes(q):false);
   });
-  function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],pov:'',customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
+  function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
   var tblProjStrands=app.allStrands[app.projId]||{};
   var tblProjTemplates=app.allTemplates[app.projId]||[];
   function renderCell(col,draft){
@@ -1876,13 +1860,19 @@ function TableView({app}){
   {ts2.length>4&&<span style={{marginLeft:2,fontSize:11,color:'#7A5A38'}}>+{ts2.length-4}</span>}
 </div>
     );}
-    if(col==='pov'){var projStrands=app.allStrands[app.projId]||{};var taggedStrands=[];Object.keys(projStrands).forEach(function(c){(projStrands[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id))taggedStrands.push(st);});});return(
-<select style={{background:'transparent',border:'none',padding:0,fontSize:12,color:'var(--mid)',width:90}} value={draft.pov||''} onChange={function(e){app.updateDraft(app.projId,draft.id,{pov:e.target.value});}}>
-  <option value="">—</option>
-  {taggedStrands.map(function(st){return <option key={st.id} value={st.id}>{st.name}</option>;})}
-</select>
-    );}
-    if(col.startsWith('cf_')){var fid=col.slice(3);var cfVal=draft.customFields&&draft.customFields[fid]?draft.customFields[fid]:'';return <input className="tbl-inp" defaultValue={cfVal} placeholder="—" onBlur={function(e){var cf=Object.assign({},draft.customFields||{});cf[fid]=e.target.value;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',fontStyle:cfVal?'normal':'italic',opacity:cfVal?1:.75}}/>;}
+    if(col.startsWith('cf_')){
+      var fid=col.slice(3);
+      var cfVal=draft.customFields&&draft.customFields[fid]?draft.customFields[fid]:'';
+      var fieldDef=draftFieldDefs.find(function(f){return f.id===fid;});
+      if(fieldDef&&fieldDef.type==='strand_ref'){
+        var refIds=[];try{var parsed=JSON.parse(cfVal);if(Array.isArray(parsed))refIds=parsed;}catch(e){}
+        var projStrandsAll=app.allStrands[app.projId]||{};
+        var flatStrands=[];Object.keys(projStrandsAll).forEach(function(c){(projStrandsAll[c]||[]).forEach(function(st){flatStrands.push(st);});});
+        var refNames=refIds.map(function(id){var st=flatStrands.find(function(s){return s.id===id;});return st?st.name:null;}).filter(Boolean);
+        return <span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:refNames.length?'#7A5A38':'var(--placeholder)',fontStyle:refNames.length?'normal':'italic'}}>{refNames.length?refNames.join(', '):'—'}</span>;
+      }
+      return <input className="tbl-inp" defaultValue={cfVal} placeholder="—" onBlur={function(e){var cf=Object.assign({},draft.customFields||{});cf[fid]=e.target.value;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',fontStyle:cfVal?'normal':'italic',opacity:cfVal?1:.75}}/>;
+    }
     return null;
   }
   function renderRow(draft,label,isNested,parentIdx,childIdx,hasChildren,isExpanded){return(
@@ -1952,7 +1942,6 @@ function TableView({app}){
 </div>
     )}
   </div>
-  <LooseThreadsSection threads={ltDrafts} app={app} view="table"/>
   {colOpen&&(
 <div ref={colDropRef} className="col-vis-drop" style={{top:colPos.top,right:colPos.right,maxHeight:'60vh',overflowY:'auto'}}>
   <div style={{padding:'4px 8px 6px',fontSize:11,color:'var(--mid)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.06em'}}>Columns</div>
@@ -1967,6 +1956,7 @@ function TableView({app}){
 </div>
   )}
   <BindDrawer app={app} open={bindOpen} variant="overlay" topOffset={54} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
+  <LooseThreadsSection threads={ltDrafts} app={app} view="table"/>
 </div>
   );
 }
