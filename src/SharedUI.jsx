@@ -20,6 +20,21 @@ var DRAWER_CSS = `
 .wv-drawer--inline.wv-drawer--flexw{width:auto;flex:1;min-width:0;}
 
 /* Overlay variant — slides in over the page */
+/* Popover — a small anchored panel with the same visual language as Drawer
+   (cream fill, DM Sans header, same field/chip styling inside), for
+   dropdowns and menus that shouldn't be a full drawer. First user: the
+   Define filter. Meant to be reused for other popup needs going forward. */
+.wv-popover{position:fixed;z-index:400;background:#EDE0CC;border-radius:14px;
+  box-shadow:0 10px 34px rgba(42,31,16,.20);border:1px solid #E2D0B8;
+  min-width:280px;max-height:min(420px,calc(100vh - 80px));display:flex;flex-direction:column;
+  overflow:hidden;animation:wvPopIn .16s cubic-bezier(.22,.9,.32,1);}
+@keyframes wvPopIn{from{opacity:0;transform:translateY(-4px) scale(.98);}to{opacity:1;transform:none;}}
+.wv-popover-hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 15px;border-bottom:1px solid #A88060;flex-shrink:0;}
+.wv-popover-title{font-family:'DM Sans',sans-serif;font-weight:700;font-size:16px;color:#6B4A26;}
+.wv-popover-body{flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;gap:16px;}
+.wv-popover-footer{flex-shrink:0;padding:12px 15px;border-top:1px solid #E2D0B8;display:flex;gap:8px;}
+
 .wv-drawer-overlay{position:fixed;inset:0;z-index:200;display:flex;justify-content:flex-end;}
 .wv-drawer-backdrop{position:absolute;inset:0;background:rgba(42,31,16,.25);
   animation:wvFade .18s ease;}
@@ -267,6 +282,49 @@ export function Drawer({ variant, open, title, onBack, onClose, footer, padded, 
 
 // ── Layout helpers ──
 
+// A small anchored panel — same visual language as Drawer, positioned off a
+// trigger element instead of being a full-height panel. Pass a ref to the
+// trigger as `anchorRef`; Popover computes its own position and handles
+// click-outside-to-close (including clicks back on the trigger itself).
+export function Popover({ anchorRef, open, onClose, title, footer, width, children }) {
+  var ref = useRef(null);
+  var sp = useState({ top: 0, left: 0 }); var pos = sp[0]; var setPos = sp[1];
+
+  useEffect(function () {
+    if (!open || !anchorRef || !anchorRef.current) return;
+    var r = anchorRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + 6, left: r.left });
+  }, [open]);
+
+  useEffect(function () {
+    if (!open) return;
+    function onDown(e) {
+      if (ref.current && ref.current.contains(e.target)) return;
+      if (anchorRef && anchorRef.current && anchorRef.current.contains(e.target)) return;
+      onClose();
+    }
+    document.addEventListener('mousedown', onDown);
+    return function () { document.removeEventListener('mousedown', onDown); };
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div ref={ref} className="wv-popover" style={{ top: pos.top, left: pos.left, width: width || undefined }}>
+      {title && (
+        <div className="wv-popover-hdr">
+          <span className="wv-popover-title">{title}</span>
+          <button className="btn-icon" onClick={onClose} aria-label="Close">
+            <span className="mi">close</span>
+          </button>
+        </div>
+      )}
+      <div className="wv-popover-body">{children}</div>
+      {footer && <div className="wv-popover-footer">{footer}</div>}
+    </div>
+  );
+}
+
 export function Section({ label, children, style }) {
   return (
     <div className="wv-sect" style={style}>
@@ -483,7 +541,7 @@ export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
 // StrandRefPicker's own expand, and Properties' "tag a strand" trigger.
 // Click-outside closes it. Looks up each strand's real collection icon
 // rather than defaulting, so results match what the app shows elsewhere.
-export function StrandSearchDropdown({ app, pid, collection, excludeIds, onPick, onClose }) {
+export function StrandSearchDropdown({ app, pid, collection, excludeIds, onPick, onClose, style }) {
   var sq = useState(''); var query = sq[0]; var setQuery = sq[1];
   var ref = useRef(null);
 
@@ -514,7 +572,7 @@ export function StrandSearchDropdown({ app, pid, collection, excludeIds, onPick,
   });
 
   return (
-    <div ref={ref} className="wv-refpick-dropdown">
+    <div ref={ref} className="wv-refpick-dropdown" style={style}>
       <div className="wv-refpick-search">
         <input autoFocus value={query} onChange={function (e) { setQuery(e.target.value); }} placeholder="Search spools..." />
       </div>
