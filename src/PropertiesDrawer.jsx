@@ -9,7 +9,7 @@
 //   <PropertiesDrawer app={app} draft={draft} variant="inline" onClose={...} />
 
 import { useState } from 'react';
-import { Drawer, Field, ArchiveConfirmModal, StrandRefPicker, StrandSearchDropdown, DraftThumbnailUpload, Avatar, PrimaryButton, SecondaryButton, TertiaryButton, HelpText } from './SharedUI';
+import { Drawer, Field, ArchiveConfirmModal, StrandRefPicker, StrandSearchDropdown, DraftThumbnailUpload, Avatar, PrimaryButton, SecondaryButton, TertiaryButton, HelpText, OptionsEditor } from './SharedUI';
 import { genId, STATUSES, FIELD_TYPES } from './utils';
 
 export default function PropertiesDrawer({ app, draft, variant, open, onClose, onOpenStrand }) {
@@ -107,8 +107,8 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
         onBlur={function (e) { update({ synopsis: e.target.value }); }}
       />
 
-      <div>
-        <span className="wv-field-lbl">Tagged Strands</span>
+      <div style={{ position: 'relative' }}>
+        <span className="wv-field-lbl">Spools</span>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {taggedStrands.slice(0, 6).map(function (st, i) {
             return (
@@ -122,24 +122,23 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
           {taggedStrands.length > 6 && (
             <span style={{ fontSize: 11, color: 'var(--mid)', marginLeft: 6 }}>+{taggedStrands.length - 6}</span>
           )}
-          <div style={{ position: 'relative', marginLeft: taggedStrands.length > 0 ? 8 : 0 }}>
-            <span
-              className="chip"
-              onClick={function () { setAddChipOpen(!addChipOpen); }}
-              style={{ background: 'var(--bg3)', color: 'var(--mid)', border: '1px solid var(--border)' }}>
-              <span className="mi" style={{ fontSize: 14 }}>add</span>
-            </span>
-            {addChipOpen && (
-              <StrandSearchDropdown
-                app={app}
-                pid={pid}
-                excludeIds={tagIds}
-                onPick={function (st) { addStrand(st.id); }}
-                onClose={function () { setAddChipOpen(false); }}
-              />
-            )}
-          </div>
+          <span
+            className="chip"
+            onClick={function () { setAddChipOpen(!addChipOpen); }}
+            style={{ background: 'var(--bg3)', color: 'var(--mid)', border: '1px solid var(--border)', marginLeft: taggedStrands.length > 0 ? 8 : 0 }}>
+            <span className="mi" style={{ fontSize: 14 }}>add</span>
+          </span>
         </div>
+        {addChipOpen && (
+          <StrandSearchDropdown
+            app={app}
+            pid={pid}
+            excludeIds={tagIds}
+            onPick={function (st) { addStrand(st.id); }}
+            onClose={function () { setAddChipOpen(false); }}
+            style={{ left: 15, right: 15 }}
+          />
+        )}
         {allStrandsList.length === 0 && (
           <HelpText style={{ marginTop: 6 }}>No strands yet. Go to the Strands view.</HelpText>
         )}
@@ -168,6 +167,43 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
                   update(changes);
                 }}
               />
+            </div>
+          );
+        }
+        if (f.type === 'boolean') {
+          return (
+            <div key={f.id}>
+              <span className="wv-field-lbl">{f.label}</span>
+              <div style={{ display: 'flex', gap: 14 }}>
+                {['Yes', 'No'].map(function (opt) {
+                  return (
+                    <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 15, fontFamily: 'var(--serif)', color: 'var(--brown, #6B4A26)' }}>
+                      <input type="radio" name={draft.id + '-' + f.id} value={opt} checked={val === opt} onChange={function () {
+                        var cf = Object.assign({}, draft.customFields || {});
+                        cf[f.id] = opt;
+                        update({ customFields: cf });
+                      }} style={{ width: 'auto' }} />
+                      {opt}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        }
+        if (f.type === 'select') {
+          return (
+            <div key={f.id}>
+              <span className="wv-field-lbl">{f.label}</span>
+              <select className="wv-field-box" value={val} onChange={function (e) {
+                var cf = Object.assign({}, draft.customFields || {});
+                cf[f.id] = e.target.value;
+                update({ customFields: cf });
+              }}>
+                <option value="">Select...</option>
+                {(f.options || []).map(function (o) { return <option key={o} value={o}>{o}</option>; })}
+              </select>
+              {(f.options || []).length === 0 && <HelpText style={{ marginTop: 4 }}>No options set yet — add some via "Edit existing fields."</HelpText>}
             </div>
           );
         }
@@ -214,6 +250,7 @@ function AddFieldModal({ app, pid, onClose }) {
   var sl = useState(''); var label = sl[0]; var setLabel = sl[1];
   var st = useState('short_text'); var type = st[0]; var setType = st[1];
   var sc = useState(''); var refSpool = sc[0]; var setRefSpool = sc[1];
+  var so = useState([]); var options = so[0]; var setOptions = so[1];
 
   var collections = Object.keys(app.allStrands[pid] || {});
   var canSubmit = label.trim() && (type !== 'strand_ref' || refSpool);
@@ -222,6 +259,7 @@ function AddFieldModal({ app, pid, onClose }) {
     if (!canSubmit) return;
     var fieldDef = { id: genId(), label: label.trim(), type: type };
     if (type === 'strand_ref') fieldDef.refSpool = refSpool;
+    if (type === 'select') fieldDef.options = options;
     app.addDraftFieldDef(pid, fieldDef);
     onClose();
   }
@@ -239,7 +277,7 @@ function AddFieldModal({ app, pid, onClose }) {
 
         <div style={{ marginBottom: 12 }}>
           <span className="wv-field-lbl">Type</span>
-          <select className="wv-field-box" value={type} onChange={function (e) { setType(e.target.value); setRefSpool(''); }}>
+          <select className="wv-field-box" value={type} onChange={function (e) { setType(e.target.value); setRefSpool(''); setOptions([]); }}>
             {FIELD_TYPES.map(function (t) { return <option key={t.id} value={t.id}>{t.label}</option>; })}
           </select>
         </div>
@@ -252,6 +290,13 @@ function AddFieldModal({ app, pid, onClose }) {
               {collections.map(function (c) { return <option key={c} value={c}>{c}</option>; })}
             </select>
             {collections.length === 0 && <HelpText style={{ marginTop: 4 }}>No spool collections in this project yet.</HelpText>}
+          </div>
+        )}
+
+        {type === 'select' && (
+          <div style={{ marginBottom: 4 }}>
+            <span className="wv-field-lbl">Options</span>
+            <OptionsEditor options={options} onChange={setOptions} />
           </div>
         )}
 
@@ -294,7 +339,7 @@ function ManageFieldsModal({ app, pid, fields, onClose }) {
           {editing.length === 0 && <HelpText>No custom fields yet.</HelpText>}
           {editing.map(function (f, i) {
             return (
-              <div key={f.id} className="field-edit-row" draggable={true}
+              <div key={f.id} draggable={true}
                 onDragStart={function (e) { e.dataTransfer.setData('fieldIdx', '' + i); }}
                 onDragOver={function (e) { e.preventDefault(); }}
                 onDrop={function (e) {
@@ -305,21 +350,31 @@ function ManageFieldsModal({ app, pid, fields, onClose }) {
                   var item = nf.splice(from, 1)[0];
                   nf.splice(i, 0, item);
                   setEditing(nf);
-                }}>
-                <span className="mi" style={{ fontSize: 18, color: 'var(--border)', cursor: 'grab', flexShrink: 0 }}>drag_indicator</span>
-                <input defaultValue={f.label} style={{ maxWidth: 120, fontSize: 13 }} onBlur={function (e) { updateLocal(i, { label: e.target.value }); }} />
-                <select value={f.type} style={{ width: 100, fontSize: 13 }} onChange={function (e) { updateLocal(i, { type: e.target.value, refSpool: null }); }}>
-                  {FIELD_TYPES.map(function (t) { return <option key={t.id} value={t.id}>{t.label}</option>; })}
-                </select>
-                {f.type === 'strand_ref' && (
-                  <select value={f.refSpool || ''} style={{ fontSize: 11, flex: 1, minWidth: 90 }} onChange={function (e) { updateLocal(i, { refSpool: e.target.value }); }}>
-                    <option value="">Pick spool...</option>
-                    {collections.map(function (c) { return <option key={c} value={c}>{c}</option>; })}
+                }}
+                style={{ borderBottom: '1px solid var(--bg2)', padding: '8px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span className="mi" style={{ fontSize: 18, color: 'var(--border)', cursor: 'grab', flexShrink: 0 }}>drag_indicator</span>
+                  <input defaultValue={f.label} style={{ maxWidth: 120, fontSize: 13 }} onBlur={function (e) { updateLocal(i, { label: e.target.value }); }} />
+                  <select value={f.type} style={{ width: 100, fontSize: 13 }} onChange={function (e) { updateLocal(i, { type: e.target.value, refSpool: null, options: null }); }}>
+                    {FIELD_TYPES.map(function (t) { return <option key={t.id} value={t.id}>{t.label}</option>; })}
                   </select>
+                  <button className="btn-icon" onClick={function () { removeLocal(i); }} aria-label={'Delete ' + f.label}>
+                    <span className="mi" style={{ fontSize: 16, color: 'var(--danger)' }}>delete</span>
+                  </button>
+                </div>
+                {f.type === 'strand_ref' && (
+                  <div style={{ marginTop: 6, marginLeft: 26 }}>
+                    <select value={f.refSpool || ''} style={{ fontSize: 11, width: '100%' }} onChange={function (e) { updateLocal(i, { refSpool: e.target.value }); }}>
+                      <option value="">Pick spool...</option>
+                      {collections.map(function (c) { return <option key={c} value={c}>{c}</option>; })}
+                    </select>
+                  </div>
                 )}
-                <button className="btn-icon" onClick={function () { removeLocal(i); }} aria-label={'Delete ' + f.label}>
-                  <span className="mi" style={{ fontSize: 16, color: 'var(--danger)' }}>delete</span>
-                </button>
+                {f.type === 'select' && (
+                  <div style={{ marginTop: 2, marginLeft: 26 }}>
+                    <OptionsEditor options={f.options} onChange={function (opts) { updateLocal(i, { options: opts }); }} />
+                  </div>
+                )}
               </div>
             );
           })}
