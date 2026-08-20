@@ -9,7 +9,7 @@ import ProfileDrawer from './ProfileDrawer'
 import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
 import LooseThreadDrawer from './LooseThreadDrawer'
-import BindDrawer from './BindDrawer'a
+import BindDrawer from './BindDrawer'
 import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar } from './SharedUI'
 import {
   STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
