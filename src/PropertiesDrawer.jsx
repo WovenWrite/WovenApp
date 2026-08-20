@@ -9,7 +9,7 @@
 //   <PropertiesDrawer app={app} draft={draft} variant="inline" onClose={...} />
 
 import { useState } from 'react';
-import { Drawer, Field, ArchiveConfirmModal, StrandRefPicker, DraftThumbnailUpload, Avatar, PrimaryButton, SecondaryButton, TertiaryButton, HelpText } from './SharedUI';
+import { Drawer, Field, ArchiveConfirmModal, StrandRefPicker, StrandSearchDropdown, DraftThumbnailUpload, Avatar, PrimaryButton, SecondaryButton, TertiaryButton, HelpText } from './SharedUI';
 import { genId, STATUSES, FIELD_TYPES } from './utils';
 
 export default function PropertiesDrawer({ app, draft, variant, open, onClose, onOpenStrand }) {
@@ -31,7 +31,6 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
 
   var tagIds = draft.strandTags || [];
   var taggedStrands = allStrandsList.filter(function (st) { return tagIds.includes(st.id); });
-  var untaggedStrands = allStrandsList.filter(function (st) { return !tagIds.includes(st.id); });
 
   var project = app.currentProject || {};
   var draftFieldDefs = project.draftFieldDefs || [];
@@ -65,7 +64,7 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
   return (
     <Drawer variant={variant || 'inline'} open={open} title="Properties" onClose={onClose}>
 
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
         <DraftThumbnailUpload image={draft.thumbnail} onUpload={function (url) { update({ thumbnail: url }); }} />
       </div>
 
@@ -78,16 +77,19 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
       />
 
       <div style={{ display: 'flex', gap: 12 }}>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 2 }}>
           <span className="wv-field-lbl">Status</span>
-          <select className="wv-field-box" value={draft.status} onChange={handleStatusChange}>
-            {Object.keys(STATUSES).map(function (k) { return <option key={k} value={k}>{STATUSES[k].label}</option>; })}
-            <option value="archive">Archive...</option>
-          </select>
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)', width: 9, height: 9, borderRadius: '50%', background: (STATUSES[draft.status] && STATUSES[draft.status].color) || '#999', pointerEvents: 'none' }} />
+            <select className="wv-field-box" style={{ paddingLeft: 32 }} value={draft.status} onChange={handleStatusChange}>
+              {Object.keys(STATUSES).map(function (k) { return <option key={k} value={k}>{STATUSES[k].label}</option>; })}
+              <option value="archive">Archive...</option>
+            </select>
+          </div>
         </div>
         {isInSequence && (
           <div style={{ flex: 1 }}>
-            <span className="wv-field-lbl">Sequence #</span>
+            <span className="wv-field-lbl">Sequence</span>
             <select className="wv-field-box" value={myPosition} onChange={handleSequenceChange}>
               {seqSiblings.map(function (d, i) { return <option key={d.id} value={i + 1}>{i + 1}</option>; })}
             </select>
@@ -100,6 +102,8 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
         key={draft.id + '-ps'}
         defaultValue={draft.synopsis}
         placeholder="Brief synopsis..."
+        resizeMode="manual"
+        rows={3}
         onBlur={function (e) { update({ synopsis: e.target.value }); }}
       />
 
@@ -119,28 +123,20 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
             <span style={{ fontSize: 11, color: 'var(--mid)', marginLeft: 6 }}>+{taggedStrands.length - 6}</span>
           )}
           <div style={{ position: 'relative', marginLeft: taggedStrands.length > 0 ? 8 : 0 }}>
-            <button
+            <span
+              className="chip"
               onClick={function () { setAddChipOpen(!addChipOpen); }}
-              aria-label="Tag a strand"
-              style={{ width: 28, height: 28, borderRadius: '50%', border: '1px dashed var(--stroke-strong)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-              <span className="mi" style={{ fontSize: 16, color: 'var(--mid)' }}>add</span>
-            </button>
+              style={{ background: 'var(--bg3)', color: 'var(--mid)', border: '1px solid var(--border)' }}>
+              <span className="mi" style={{ fontSize: 14 }}>add</span>
+            </span>
             {addChipOpen && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', boxShadow: '0 4px 16px rgba(42,31,16,.18)', minWidth: 190, maxHeight: 220, overflowY: 'auto' }}>
-                {untaggedStrands.map(function (st) {
-                  return (
-                    <div key={st.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', cursor: 'pointer', fontSize: 13 }}
-                      onClick={function () { addStrand(st.id); }}
-                      onMouseOver={function (e) { e.currentTarget.style.background = 'var(--bg3)'; }}
-                      onMouseOut={function (e) { e.currentTarget.style.background = 'transparent'; }}>
-                      <Avatar strand={st} size={22} />
-                      <span>{st.name}</span>
-                      <span style={{ fontSize: 11, color: 'var(--mid)', marginLeft: 'auto' }}>{st.collectionName}</span>
-                    </div>
-                  );
-                })}
-                {untaggedStrands.length === 0 && <div style={{ padding: '8px 10px', fontSize: 13, color: 'var(--mid)' }}>All strands tagged.</div>}
-              </div>
+              <StrandSearchDropdown
+                app={app}
+                pid={pid}
+                excludeIds={tagIds}
+                onPick={function (st) { addStrand(st.id); }}
+                onClose={function () { setAddChipOpen(false); }}
+              />
             )}
           </div>
         </div>
@@ -181,6 +177,8 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
             label={f.label}
             defaultValue={val}
             placeholder={'Enter ' + f.label.toLowerCase() + '...'}
+            resizeMode={f.type === 'long_text' ? 'manual' : 'auto'}
+            rows={f.type === 'long_text' ? 3 : undefined}
             onBlur={function (e) {
               var cf = Object.assign({}, draft.customFields || {});
               cf[f.id] = e.target.value;
