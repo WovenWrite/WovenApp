@@ -1,21 +1,27 @@
 // @ts-nocheck
 // ── PropertiesDrawer ──
-// Draft metadata: title, synopsis, thumbnail, status, nesting, strand tags,
-// plus an Advanced section for POV and custom draft fields.
+// Draft metadata, in order: Thumbnail, Title, Status + Sequence #, Synopsis,
+// Tagged Strands, custom fields, Add new field / Edit existing fields.
+//
+// "Nested under" is gone — nesting/branching now lives in DraftEditor's top
+// nav (BranchDropdown), not here.
 //
 //   <PropertiesDrawer app={app} draft={draft} variant="inline" onClose={...} />
 
 import { useState } from 'react';
-import { Drawer, Section, Field, Collapsible, StatusDotWithArchive, AddFieldInline, StrandRefPicker } from './SharedUI';
-import { genId, uploadImage } from './utils';
+import { Drawer, Field, ArchiveConfirmModal, StrandRefPicker, DraftThumbnailUpload, Avatar, PrimaryButton, SecondaryButton, TertiaryButton, HelpText } from './SharedUI';
+import { genId, STATUSES, FIELD_TYPES } from './utils';
 
 export default function PropertiesDrawer({ app, draft, variant, open, onClose, onOpenStrand }) {
-  var s1 = useState(false); var advOpen = s1[0]; var setAdvOpen = s1[1];
+  var pid = app.projId;
   var s2 = useState(false); var addChipOpen = s2[0]; var setAddChipOpen = s2[1];
+  var sac = useState(false); var showArchiveConfirm = sac[0]; var setShowArchiveConfirm = sac[1];
+  var saf = useState(false); var showAddField = saf[0]; var setShowAddField = saf[1];
+  var sef = useState(false); var showEditFields = sef[0]; var setShowEditFields = sef[1];
 
   if (!draft) return null;
 
-  var projStrands = app.allStrands[app.projId] || {};
+  var projStrands = app.allStrands[pid] || {};
   var allStrandsList = [];
   Object.keys(projStrands).forEach(function (c) {
     (projStrands[c] || []).forEach(function (st) {
@@ -27,27 +33,41 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
   var taggedStrands = allStrandsList.filter(function (st) { return tagIds.includes(st.id); });
   var untaggedStrands = allStrandsList.filter(function (st) { return !tagIds.includes(st.id); });
 
-  var allDrafts = app.allDrafts[app.projId] || [];
-  var parentOptions = allDrafts.filter(function (d) {
-    return d.status !== 'loose_thread' && d.id !== draft.id && !d.parentId;
-  });
-
   var project = app.currentProject || {};
   var draftFieldDefs = project.draftFieldDefs || [];
 
-  function update(changes) { app.updateDraft(app.projId, draft.id, changes); }
+  var allDrafts = app.allDrafts[pid] || [];
+  var seqSiblings = allDrafts
+    .filter(function (d) { return d.status !== 'loose_thread' && !d.parentId && !d.archived; })
+    .sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
+  var myPosition = seqSiblings.findIndex(function (d) { return d.id === draft.id; }) + 1;
+  var isInSequence = draft.status !== 'loose_thread' && !draft.parentId && myPosition > 0;
+
+  function update(changes) { app.updateDraft(pid, draft.id, changes); }
   function removeStrand(sid) { update({ strandTags: tagIds.filter(function (t) { return t !== sid; }) }); }
   function addStrand(sid) { update({ strandTags: tagIds.concat([sid]) }); setAddChipOpen(false); }
 
-  function handleThumb(e) {
-    var file = e.target.files && e.target.files[0];
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { alert('Image must be under 2 MB.'); return; }
-    uploadImage(file).then(function (url) { if (url) update({ thumbnail: url }); });
+  function handleStatusChange(e) {
+    var v = e.target.value;
+    if (v === 'archive') { setShowArchiveConfirm(true); return; }
+    var changes = { status: v };
+    if (v === 'loose_thread') { changes.order = null; changes.parentId = null; }
+    else if (draft.status === 'loose_thread') { changes.order = seqSiblings.length + 1; }
+    update(changes);
+  }
+  function doArchive() { update({ archived: true }); setShowArchiveConfirm(false); }
+
+  function handleSequenceChange(e) {
+    var targetOrder = parseInt(e.target.value, 10);
+    if (app.reorderDraft) app.reorderDraft(pid, draft.id, targetOrder);
   }
 
   return (
     <Drawer variant={variant || 'inline'} open={open} title="Properties" onClose={onClose}>
+
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <DraftThumbnailUpload image={draft.thumbnail} onUpload={function (url) { update({ thumbnail: url }); }} />
+      </div>
 
       <Field
         label="Title"
@@ -57,6 +77,24 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
         onBlur={function (e) { update({ title: e.target.value, updatedAt: new Date().toISOString() }); }}
       />
 
+      <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <span className="wv-field-lbl">Status</span>
+          <select className="wv-field-box" value={draft.status} onChange={handleStatusChange}>
+            {Object.keys(STATUSES).map(function (k) { return <option key={k} value={k}>{STATUSES[k].label}</option>; })}
+            <option value="archive">Archive...</option>
+          </select>
+        </div>
+        {isInSequence && (
+          <div style={{ flex: 1 }}>
+            <span className="wv-field-lbl">Sequence #</span>
+            <select className="wv-field-box" value={myPosition} onChange={handleSequenceChange}>
+              {seqSiblings.map(function (d, i) { return <option key={d.id} value={i + 1}>{i + 1}</option>; })}
+            </select>
+          </div>
+        )}
+      </div>
+
       <Field
         label="Synopsis"
         key={draft.id + '-ps'}
@@ -65,60 +103,37 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
         onBlur={function (e) { update({ synopsis: e.target.value }); }}
       />
 
-      <Section label="Thumbnail">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {draft.thumbnail && <img src={draft.thumbnail} alt="" style={{ width: 56, height: 40, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />}
-          <label style={{ cursor: 'pointer' }}>
-            <span className="btn btn-ghost btn-sm">{draft.thumbnail ? 'Change image' : 'Upload image'}</span>
-            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleThumb} />
-          </label>
-          {draft.thumbnail && (
-            <button className="btn-icon" onClick={function () { update({ thumbnail: null }); }} aria-label="Remove thumbnail">
-              <span className="mi" style={{ fontSize: 16 }}>delete</span>
-            </button>
-          )}
-        </div>
-      </Section>
-
-      <Section label="Status">
-        <StatusDotWithArchive draft={draft} app={app} showLabel={true} dotSize={16} />
-      </Section>
-
-      <Section label="Nested under">
-        <select value={draft.parentId || ''} onChange={function (e) { update({ parentId: e.target.value || null }); }}>
-          <option value="">None (top level)</option>
-          {parentOptions.map(function (d) { return <option key={d.id} value={d.id}>{d.title || 'Untitled'}</option>; })}
-        </select>
-      </Section>
-
-      <Section label="Tagged Strands">
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-          {taggedStrands.map(function (st) {
+      <div>
+        <span className="wv-field-lbl">Tagged Strands</span>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          {taggedStrands.slice(0, 6).map(function (st, i) {
             return (
-              <span key={st.id} className="chip"
-                style={{ background: st.color + '26', color: st.color, border: '1px solid ' + st.color + '55', cursor: 'pointer' }}
-                onClick={function () { onOpenStrand && onOpenStrand(st.id); }}>
-                {st.name}
-                <span style={{ marginLeft: 3, opacity: .6, fontSize: 11 }}
-                  onClick={function (e) { e.stopPropagation(); removeStrand(st.id); }}>×</span>
-              </span>
+              <div key={st.id} onClick={function () { onOpenStrand && onOpenStrand(st.id); }}
+                style={{ cursor: 'pointer', marginLeft: i > 0 ? -7 : 0, position: 'relative', zIndex: 6 - i }}
+                title={st.name}>
+                <Avatar strand={st} size={28} />
+              </div>
             );
           })}
-          <div style={{ position: 'relative' }}>
-            <span className="chip"
-              style={{ background: 'var(--bg3)', color: 'var(--mid)', border: '1px solid var(--border)', cursor: 'pointer' }}
-              onClick={function () { setAddChipOpen(!addChipOpen); }}>
-              <span className="mi" style={{ fontSize: 14 }}>add</span>
-            </span>
+          {taggedStrands.length > 6 && (
+            <span style={{ fontSize: 11, color: 'var(--mid)', marginLeft: 6 }}>+{taggedStrands.length - 6}</span>
+          )}
+          <div style={{ position: 'relative', marginLeft: taggedStrands.length > 0 ? 8 : 0 }}>
+            <button
+              onClick={function () { setAddChipOpen(!addChipOpen); }}
+              aria-label="Tag a strand"
+              style={{ width: 28, height: 28, borderRadius: '50%', border: '1px dashed var(--stroke-strong)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+              <span className="mi" style={{ fontSize: 16, color: 'var(--mid)' }}>add</span>
+            </button>
             {addChipOpen && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', boxShadow: '0 4px 16px rgba(42,31,16,.18)', minWidth: 180, maxHeight: 200, overflowY: 'auto' }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', boxShadow: '0 4px 16px rgba(42,31,16,.18)', minWidth: 190, maxHeight: 220, overflowY: 'auto' }}>
                 {untaggedStrands.map(function (st) {
                   return (
                     <div key={st.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', cursor: 'pointer', fontSize: 13 }}
                       onClick={function () { addStrand(st.id); }}
                       onMouseOver={function (e) { e.currentTarget.style.background = 'var(--bg3)'; }}
                       onMouseOut={function (e) { e.currentTarget.style.background = 'transparent'; }}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: st.color, flexShrink: 0 }} />
+                      <Avatar strand={st} size={22} />
                       <span>{st.name}</span>
                       <span style={{ fontSize: 11, color: 'var(--mid)', marginLeft: 'auto' }}>{st.collectionName}</span>
                     </div>
@@ -130,58 +145,193 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
           </div>
         </div>
         {allStrandsList.length === 0 && (
-          <span style={{ fontSize: 12, color: 'var(--mid)', display: 'block', marginTop: 8 }}>No strands yet. Go to the Strands view.</span>
+          <HelpText style={{ marginTop: 6 }}>No strands yet. Go to the Strands view.</HelpText>
         )}
-      </Section>
+      </div>
 
-      <Collapsible label="Advanced" open={advOpen} onToggle={function () { setAdvOpen(!advOpen); }}>
-        {draftFieldDefs.map(function (f) {
-          var val = (draft.customFields && draft.customFields[f.id]) || '';
-          if (f.type === 'strand_ref') {
-            var refIds = [];
-            try { var parsed = JSON.parse(val); if (Array.isArray(parsed)) refIds = parsed; } catch (e) {}
-            return (
-              <div key={f.id}>
-                <span className="wv-field-lbl">{f.label}</span>
-                <StrandRefPicker
-                  app={app}
-                  pid={app.projId}
-                  value={refIds}
-                  placeholder={'Select ' + f.label.toLowerCase() + '...'}
-                  onChange={function (ids) {
-                    var cf = Object.assign({}, draft.customFields || {});
-                    cf[f.id] = ids.length ? JSON.stringify(ids) : '';
-                    var newlyAdded = ids.filter(function (id) { return !tagIds.includes(id); });
-                    var changes = { customFields: cf };
-                    if (newlyAdded.length) changes.strandTags = tagIds.concat(newlyAdded);
-                    update(changes);
-                  }}
-                />
-              </div>
-            );
-          }
+      {draftFieldDefs.map(function (f) {
+        var val = (draft.customFields && draft.customFields[f.id]) || '';
+        if (f.type === 'strand_ref') {
+          var refIds = [];
+          try { var parsed = JSON.parse(val); if (Array.isArray(parsed)) refIds = parsed; } catch (e) {}
           return (
-            <Field
-              key={f.id}
-              label={f.label}
-              defaultValue={val}
-              placeholder={'Enter ' + f.label.toLowerCase() + '...'}
-              onBlur={function (e) {
-                var cf = Object.assign({}, draft.customFields || {});
-                cf[f.id] = e.target.value;
-                update({ customFields: cf });
-              }}
-            />
+            <div key={f.id}>
+              <span className="wv-field-lbl">{f.label}</span>
+              <StrandRefPicker
+                app={app}
+                pid={pid}
+                collection={f.refSpool}
+                value={refIds}
+                placeholder={f.refSpool ? 'Select ' + f.refSpool.toLowerCase() + '...' : 'No collection set — edit this field'}
+                onChange={function (ids) {
+                  var cf = Object.assign({}, draft.customFields || {});
+                  cf[f.id] = ids.length ? JSON.stringify(ids) : '';
+                  var newlyAdded = ids.filter(function (id) { return !tagIds.includes(id); });
+                  var changes = { customFields: cf };
+                  if (newlyAdded.length) changes.strandTags = tagIds.concat(newlyAdded);
+                  update(changes);
+                }}
+              />
+            </div>
           );
-        })}
+        }
+        return (
+          <Field
+            key={f.id}
+            label={f.label}
+            defaultValue={val}
+            placeholder={'Enter ' + f.label.toLowerCase() + '...'}
+            onBlur={function (e) {
+              var cf = Object.assign({}, draft.customFields || {});
+              cf[f.id] = e.target.value;
+              update({ customFields: cf });
+            }}
+          />
+        );
+      })}
 
-        <Section label="Custom draft fields">
-          <AddFieldInline onAdd={function (name, type) {
-            app.addDraftFieldDef(app.projId, { id: genId(), label: name.trim(), type: type || 'short_text' });
-          }} />
-        </Section>
-      </Collapsible>
+      <SecondaryButton icon="add" onClick={function () { setShowAddField(true); }}>Add new field</SecondaryButton>
+      {draftFieldDefs.length > 0 && (
+        <TertiaryButton onClick={function () { setShowEditFields(true); }}>Edit existing fields</TertiaryButton>
+      )}
+
+      {showArchiveConfirm && (
+        <ArchiveConfirmModal draft={draft} allDrafts={allDrafts} onConfirm={doArchive} onCancel={function () { setShowArchiveConfirm(false); }} />
+      )}
+
+      {showAddField && (
+        <AddFieldModal app={app} pid={pid} onClose={function () { setShowAddField(false); }} />
+      )}
+
+      {showEditFields && (
+        <ManageFieldsModal app={app} pid={pid} fields={draftFieldDefs} onClose={function () { setShowEditFields(false); }} />
+      )}
 
     </Drawer>
+  );
+}
+
+// ── Add new field ──
+function AddFieldModal({ app, pid, onClose }) {
+  var sl = useState(''); var label = sl[0]; var setLabel = sl[1];
+  var st = useState('short_text'); var type = st[0]; var setType = st[1];
+  var sc = useState(''); var refSpool = sc[0]; var setRefSpool = sc[1];
+
+  var collections = Object.keys(app.allStrands[pid] || {});
+  var canSubmit = label.trim() && (type !== 'strand_ref' || refSpool);
+
+  function submit() {
+    if (!canSubmit) return;
+    var fieldDef = { id: genId(), label: label.trim(), type: type };
+    if (type === 'strand_ref') fieldDef.refSpool = refSpool;
+    app.addDraftFieldDef(pid, fieldDef);
+    onClose();
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-backdrop" onClick={onClose} />
+      <div className="modal-box" style={{ width: 360 }}>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Add field</div>
+
+        <div style={{ marginBottom: 12 }}>
+          <span className="wv-field-lbl">Label</span>
+          <input className="wv-field-box" autoFocus value={label} onChange={function (e) { setLabel(e.target.value); }} placeholder="Field name" onKeyDown={function (e) { if (e.key === 'Enter') submit(); }} />
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <span className="wv-field-lbl">Type</span>
+          <select className="wv-field-box" value={type} onChange={function (e) { setType(e.target.value); setRefSpool(''); }}>
+            {FIELD_TYPES.map(function (t) { return <option key={t.id} value={t.id}>{t.label}</option>; })}
+          </select>
+        </div>
+
+        {type === 'strand_ref' && (
+          <div style={{ marginBottom: 4 }}>
+            <span className="wv-field-lbl">Spool collection</span>
+            <select className="wv-field-box" value={refSpool} onChange={function (e) { setRefSpool(e.target.value); }}>
+              <option value="">Choose a collection...</option>
+              {collections.map(function (c) { return <option key={c} value={c}>{c}</option>; })}
+            </select>
+            {collections.length === 0 && <HelpText style={{ marginTop: 4 }}>No spool collections in this project yet.</HelpText>}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+          <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={onClose}>Cancel</button>
+          <div style={{ flex: 1 }}><PrimaryButton onClick={submit} disabled={!canSubmit}>Add field</PrimaryButton></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Edit existing fields — reorder, rename, retype, rescope, delete ──
+function ManageFieldsModal({ app, pid, fields, onClose }) {
+  var se = useState(fields.slice()); var editing = se[0]; var setEditing = se[1];
+  var collections = Object.keys(app.allStrands[pid] || {});
+
+  function updateLocal(i, changes) {
+    var nf = editing.slice();
+    nf[i] = Object.assign({}, nf[i], changes);
+    setEditing(nf);
+  }
+  function removeLocal(i) {
+    var nf = editing.slice();
+    nf.splice(i, 1);
+    setEditing(nf);
+  }
+  function save() {
+    if (app.reorderDraftFieldDefs) app.reorderDraftFieldDefs(pid, editing);
+    onClose();
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-backdrop" onClick={onClose} />
+      <div className="modal-box" style={{ width: 440, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 600, marginBottom: 14 }}>Edit fields</div>
+
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {editing.length === 0 && <HelpText>No custom fields yet.</HelpText>}
+          {editing.map(function (f, i) {
+            return (
+              <div key={f.id} className="field-edit-row" draggable={true}
+                onDragStart={function (e) { e.dataTransfer.setData('fieldIdx', '' + i); }}
+                onDragOver={function (e) { e.preventDefault(); }}
+                onDrop={function (e) {
+                  e.preventDefault();
+                  var from = parseInt(e.dataTransfer.getData('fieldIdx'), 10);
+                  if (isNaN(from) || from === i) return;
+                  var nf = editing.slice();
+                  var item = nf.splice(from, 1)[0];
+                  nf.splice(i, 0, item);
+                  setEditing(nf);
+                }}>
+                <span className="mi" style={{ fontSize: 18, color: 'var(--border)', cursor: 'grab', flexShrink: 0 }}>drag_indicator</span>
+                <input defaultValue={f.label} style={{ maxWidth: 120, fontSize: 13 }} onBlur={function (e) { updateLocal(i, { label: e.target.value }); }} />
+                <select value={f.type} style={{ width: 100, fontSize: 13 }} onChange={function (e) { updateLocal(i, { type: e.target.value, refSpool: null }); }}>
+                  {FIELD_TYPES.map(function (t) { return <option key={t.id} value={t.id}>{t.label}</option>; })}
+                </select>
+                {f.type === 'strand_ref' && (
+                  <select value={f.refSpool || ''} style={{ fontSize: 11, flex: 1, minWidth: 90 }} onChange={function (e) { updateLocal(i, { refSpool: e.target.value }); }}>
+                    <option value="">Pick spool...</option>
+                    {collections.map(function (c) { return <option key={c} value={c}>{c}</option>; })}
+                  </select>
+                )}
+                <button className="btn-icon" onClick={function () { removeLocal(i); }} aria-label={'Delete ' + f.label}>
+                  <span className="mi" style={{ fontSize: 16, color: 'var(--danger)' }}>delete</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexShrink: 0 }}>
+          <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={onClose}>Cancel</button>
+          <div style={{ flex: 1 }}><PrimaryButton onClick={save}>Save</PrimaryButton></div>
+        </div>
+      </div>
+    </div>
   );
 }
