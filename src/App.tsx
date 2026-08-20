@@ -865,6 +865,8 @@ function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onAddDraft,onB
   var projStrands=app.allStrands[pid]||{};
   var draftFieldDefs=(app.currentProject&&app.currentProject.draftFieldDefs)||[];
   var refFields=draftFieldDefs.filter(function(f){return f.type==='strand_ref'&&f.refSpool;});
+  var boolFields=draftFieldDefs.filter(function(f){return f.type==='boolean';});
+  var selectFields=draftFieldDefs.filter(function(f){return f.type==='select'&&(f.options||[]).length>0;});
   useEffect(function(){if(searchOpen&&searchRef.current)searchRef.current.focus();},[searchOpen]);
   var criteriaCount=filterCriteriaCount(filter);
   var hasFilter=criteriaCount>0;
@@ -964,6 +966,44 @@ function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onAddDraft,onB
   <Avatar strand={s} size={22}/>
   <span style={{fontSize:13,color:'var(--text)'}}>{s.name}</span>
 </div>
+      );
+    })}
+  </div>
+</div>
+          );
+        })}
+
+        {boolFields.map(function(f){
+          var selected=(filter.customFields&&filter.customFields[f.id])||[];
+          return(
+<div key={f.id}>
+  <span style={sectLbl}>{f.label}</span>
+  <div style={{display:'flex',gap:6}}>
+    {['Yes','No'].map(function(opt){
+      var active=selected.indexOf(opt)>=0;
+      return(
+<span key={opt} onClick={function(){toggleRefField(f.id,opt);}} style={{display:'inline-flex',alignItems:'center',padding:'4px 12px',borderRadius:12,fontSize:12,fontWeight:500,cursor:'pointer',background:active?'rgba(196,94,40,.10)':'var(--bg2)',color:active?'var(--indigo)':'var(--mid)',border:'1px solid '+(active?'rgba(196,94,40,.35)':'var(--border)')}}>
+  {opt}
+</span>
+      );
+    })}
+  </div>
+</div>
+          );
+        })}
+
+        {selectFields.map(function(f){
+          var selected=(filter.customFields&&filter.customFields[f.id])||[];
+          return(
+<div key={f.id}>
+  <span style={sectLbl}>{f.label}</span>
+  <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+    {(f.options||[]).map(function(opt){
+      var active=selected.indexOf(opt)>=0;
+      return(
+<span key={opt} onClick={function(){toggleRefField(f.id,opt);}} style={{display:'inline-flex',alignItems:'center',padding:'4px 12px',borderRadius:12,fontSize:12,fontWeight:500,cursor:'pointer',background:active?'rgba(196,94,40,.10)':'var(--bg2)',color:active?'var(--indigo)':'var(--mid)',border:'1px solid '+(active?'rgba(196,94,40,.35)':'var(--border)')}}>
+  {opt}
+</span>
       );
     })}
   </div>
@@ -1234,7 +1274,8 @@ function draftMatchesFilter(draft,filterObj){
     var fid=keys[i];var wanted=cf[fid]||[];
     if(wanted.length===0)continue;
     var raw=(draft.customFields&&draft.customFields[fid])||'';
-    var have=[];try{var parsed=JSON.parse(raw);if(Array.isArray(parsed))have=parsed;}catch(e){}
+    var have=[];
+    try{var parsed=JSON.parse(raw);have=Array.isArray(parsed)?parsed:(raw?[raw]:[]);}catch(e){have=raw?[raw]:[];}
     if(!wanted.some(function(id){return have.indexOf(id)>=0;}))return false;
   }
   return true;
