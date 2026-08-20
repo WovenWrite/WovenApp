@@ -20,6 +20,7 @@ export var FIELD_TYPES = [
   { id: 'number',     label: 'Number' },
   { id: 'boolean',    label: 'Yes / No' },
   { id: 'select',     label: 'Dropdown' },
+  { id: 'date',       label: 'Date' },
   { id: 'strand_ref', label: 'Reference' }
 ];
 
