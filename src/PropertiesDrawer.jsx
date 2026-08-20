@@ -9,7 +9,7 @@
 //   <PropertiesDrawer app={app} draft={draft} variant="inline" onClose={...} />
 
 import { useState } from 'react';
-import { Drawer, Field, ArchiveConfirmModal, StrandRefPicker, StrandSearchDropdown, DraftThumbnailUpload, Avatar, PrimaryButton, SecondaryButton, TertiaryButton, HelpText, OptionsEditor } from './SharedUI';
+import { Drawer, Field, ArchiveConfirmModal, StrandRefPicker, StrandSearchDropdown, DraftThumbnailUpload, Avatar, PrimaryButton, SecondaryButton, TertiaryButton, HelpText, OptionsEditor, Radio } from './SharedUI';
 import { genId, STATUSES, FIELD_TYPES } from './utils';
 
 export default function PropertiesDrawer({ app, draft, variant, open, onClose, onOpenStrand }) {
@@ -174,17 +174,14 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
           return (
             <div key={f.id}>
               <span className="wv-field-lbl">{f.label}</span>
-              <div style={{ display: 'flex', gap: 14 }}>
+              <div style={{ display: 'flex', gap: 16 }}>
                 {['Yes', 'No'].map(function (opt) {
                   return (
-                    <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 15, fontFamily: 'var(--serif)', color: 'var(--brown, #6B4A26)' }}>
-                      <input type="radio" name={draft.id + '-' + f.id} value={opt} checked={val === opt} onChange={function () {
-                        var cf = Object.assign({}, draft.customFields || {});
-                        cf[f.id] = opt;
-                        update({ customFields: cf });
-                      }} style={{ width: 'auto' }} />
-                      {opt}
-                    </label>
+                    <Radio key={opt} on={val === opt} label={opt} onClick={function () {
+                      var cf = Object.assign({}, draft.customFields || {});
+                      cf[f.id] = opt;
+                      update({ customFields: cf });
+                    }} />
                   );
                 })}
               </div>
@@ -204,6 +201,18 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
                 {(f.options || []).map(function (o) { return <option key={o} value={o}>{o}</option>; })}
               </select>
               {(f.options || []).length === 0 && <HelpText style={{ marginTop: 4 }}>No options set yet — add some via "Edit existing fields."</HelpText>}
+            </div>
+          );
+        }
+        if (f.type === 'date') {
+          return (
+            <div key={f.id}>
+              <span className="wv-field-lbl">{f.label}</span>
+              <input className="wv-field-box" type="date" defaultValue={val} onChange={function (e) {
+                var cf = Object.assign({}, draft.customFields || {});
+                cf[f.id] = e.target.value;
+                update({ customFields: cf });
+              }} />
             </div>
           );
         }
