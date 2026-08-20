@@ -479,20 +479,67 @@ export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
 // strand in the project is searched, which gets unwieldy fast). Selecting a
 // strand does NOT tag it to a draft on its own — the caller decides whether
 // to also tag.
-export function StrandRefPicker({ app, pid, collection, value, onChange, placeholder }) {
-  var so = useState(false); var open = so[0]; var setOpen = so[1];
+// The search + list dropdown shared by every multi-select strand picker —
+// StrandRefPicker's own expand, and Properties' "tag a strand" trigger.
+// Click-outside closes it. Looks up each strand's real collection icon
+// rather than defaulting, so results match what the app shows elsewhere.
+export function StrandSearchDropdown({ app, pid, collection, excludeIds, onPick, onClose }) {
   var sq = useState(''); var query = sq[0]; var setQuery = sq[1];
   var ref = useRef(null);
 
   useEffect(function () {
-    if (!open) return;
-    function onDown(e) { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setQuery(''); } }
+    function onDown(e) { if (ref.current && !ref.current.contains(e.target)) onClose(); }
     document.addEventListener('mousedown', onDown);
     return function () { document.removeEventListener('mousedown', onDown); };
-  }, [open]);
+  }, []);
+
+  var projStrands = (app.allStrands[pid] || {});
+  var projTemplates = app.allTemplates[pid] || [];
+  function iconFor(coll) {
+    var t = projTemplates.find(function (x) { return x.name === coll; });
+    return (t && t.icon) || 'auto_stories';
+  }
+
+  var excl = excludeIds || [];
+  var all = [];
+  var collNames = collection ? [collection] : Object.keys(projStrands);
+  collNames.forEach(function (coll) {
+    (projStrands[coll] || []).forEach(function (st) {
+      if (excl.indexOf(st.id) < 0) all.push(Object.assign({}, st, { collectionName: coll }));
+    });
+  });
+
+  var filtered = all.filter(function (st) {
+    return !query || (st.name || '').toLowerCase().indexOf(query.toLowerCase()) >= 0;
+  });
+
+  return (
+    <div ref={ref} className="wv-refpick-dropdown">
+      <div className="wv-refpick-search">
+        <input autoFocus value={query} onChange={function (e) { setQuery(e.target.value); }} placeholder="Search spools..." />
+      </div>
+      <div className="wv-refpick-list">
+        {filtered.length === 0 && (
+          <HelpText style={{ padding: 14 }}>{all.length === 0 ? 'Nothing to pick.' : 'No spools match "' + query + '".'}</HelpText>
+        )}
+        {filtered.map(function (st) {
+          return <StrandResultRow key={st.id} strand={st} spoolIcon={iconFor(st.collectionName)} onClick={function () { onPick(st); }} />;
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function StrandRefPicker({ app, pid, collection, value, onChange, placeholder }) {
+  var so = useState(false); var open = so[0]; var setOpen = so[1];
 
   var selectedIds = value || [];
   var projStrands = (app.allStrands[pid] || {});
+  var projTemplates = app.allTemplates[pid] || [];
+  function iconFor(coll) {
+    var t = projTemplates.find(function (x) { return x.name === coll; });
+    return (t && t.icon) || 'auto_stories';
+  }
   var all = [];
   var collNames = collection ? [collection] : Object.keys(projStrands);
   collNames.forEach(function (coll) {
@@ -500,18 +547,13 @@ export function StrandRefPicker({ app, pid, collection, value, onChange, placeho
       all.push(Object.assign({}, st, { collectionName: coll }));
     });
   });
-
   var selected = selectedIds.map(function (id) { return all.find(function (s) { return s.id === id; }); }).filter(Boolean);
-  var available = all.filter(function (st) { return selectedIds.indexOf(st.id) < 0; });
-  var filtered = available.filter(function (st) {
-    return !query || (st.name || '').toLowerCase().indexOf(query.toLowerCase()) >= 0;
-  });
 
-  function add(st) { onChange(selectedIds.concat([st.id])); setQuery(''); }
+  function add(st) { onChange(selectedIds.concat([st.id])); setOpen(false); }
   function remove(id) { onChange(selectedIds.filter(function (i) { return i !== id; })); }
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div style={{ position: 'relative' }}>
       {selected.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
           {selected.map(function (st) {
@@ -530,19 +572,14 @@ export function StrandRefPicker({ app, pid, collection, value, onChange, placeho
         <span className="mi" style={{ fontSize: 18 }}>{open ? 'expand_less' : 'expand_more'}</span>
       </div>
       {open && (
-        <div className="wv-refpick-dropdown">
-          <div className="wv-refpick-search">
-            <input autoFocus value={query} onChange={function (e) { setQuery(e.target.value); }} placeholder="Search spools..." />
-          </div>
-          <div className="wv-refpick-list">
-            {filtered.length === 0 && (
-              <HelpText style={{ padding: 14 }}>{available.length === 0 ? 'All spools selected.' : 'No spools match "' + query + '".'}</HelpText>
-            )}
-            {filtered.map(function (st) {
-              return <StrandResultRow key={st.id} strand={st} onClick={function () { add(st); }} />;
-            })}
-          </div>
-        </div>
+        <StrandSearchDropdown
+          app={app}
+          pid={pid}
+          collection={collection}
+          excludeIds={selectedIds}
+          onPick={add}
+          onClose={function () { setOpen(false); }}
+        />
       )}
     </div>
   );
