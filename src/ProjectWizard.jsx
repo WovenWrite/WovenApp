@@ -11,11 +11,11 @@
 //   <ProjectWizard app={app} onClose={fn} />
 
 import { useState, useEffect, useRef } from 'react';
-import { Radio, HelpText } from './SharedUI';
+import { Radio, HelpText, DraftThumbnailUpload, OptionsEditor } from './SharedUI';
 import {
-  PROJ_TYPES, SEQUENCE_MODES, presetFor, buildConfig, presetDraftFields, defaultFields
+  PROJ_TYPES, SEQUENCE_MODES, GOAL_MODES, presetFor, buildConfig, presetDraftFields, defaultFields
 } from './projectConfig';
-import { genId } from './utils';
+import { genId, FIELD_TYPES } from './utils';
 
 var ALL_COLLS = [
   'Characters', 'Locations', 'Lore & World', 'Sources', 'Interviews',
@@ -26,7 +26,8 @@ var STEP_TITLES = [
   'What are you writing?',
   'Name your project',
   'Your spools',
-  'How it is structured'
+  'How it is structured',
+  'Deadline and pace'
 ];
 
 export default function ProjectWizard({ app, onClose }) {
@@ -34,6 +35,7 @@ export default function ProjectWizard({ app, onClose }) {
   var spt = useState(null); var projType = spt[0]; var setProjType = spt[1];
   var st = useState(''); var title = st[0]; var setTitle = st[1];
   var ssyn = useState(''); var synopsis = ssyn[0]; var setSynopsis = ssyn[1];
+  var sim = useState(null); var image = sim[0]; var setImage = sim[1];
   var ssc = useState([]); var selectedColls = ssc[0]; var setSelectedColls = ssc[1];
 
   // Structure step — prefilled from the type preset, editable before create
@@ -41,6 +43,12 @@ export default function ProjectWizard({ app, onClose }) {
   var sth = useState(true); var thumbnails = sth[0]; var setThumbnails = sth[1];
   var sls = useState('Draft'); var labelOne = sls[0]; var setLabelOne = sls[1];
   var slp = useState('Drafts'); var labelMany = slp[0]; var setLabelMany = slp[1];
+  var sfd = useState([]); var fields = sfd[0]; var setFields = sfd[1];
+
+  // Goals step
+  var sdd = useState(''); var dueDate = sdd[0]; var setDueDate = sdd[1];
+  var sgm = useState('none'); var goalMode = sgm[0]; var setGoalMode = sgm[1];
+  var sgw = useState(''); var goalWords = sgw[0]; var setGoalWords = sgw[1];
 
   var titleRef = useRef(null);
   useEffect(function () { if (step === 1 && titleRef.current) titleRef.current.focus(); }, [step]);
@@ -55,6 +63,7 @@ export default function ProjectWizard({ app, onClose }) {
     setThumbnails(cfg.draftThumbnails === undefined ? true : !!cfg.draftThumbnails);
     setLabelOne(labels.draft || 'Draft');
     setLabelMany(labels.drafts || 'Drafts');
+    setFields(presetDraftFields(t.id));
     setStep(1);
   }
 
@@ -73,6 +82,25 @@ export default function ProjectWizard({ app, onClose }) {
     if (!pluralTouched.current) setLabelMany(v.trim() ? v.trim() + 's' : '');
   }
 
+  // ── Draft properties (step 3) ──
+  function addField(label, type) {
+    setFields(function (f) {
+      return f.concat([{ id: genId(), label: label.trim(), type: type || 'short_text' }]);
+    });
+  }
+  function updateField(i, changes) {
+    setFields(function (f) {
+      var next = f.slice();
+      next[i] = Object.assign({}, next[i], changes);
+      if (changes.type && changes.type !== 'select') delete next[i].options;
+      if (changes.type && changes.type !== 'strand_ref') delete next[i].refSpool;
+      return next;
+    });
+  }
+  function removeField(i) {
+    setFields(function (f) { var next = f.slice(); next.splice(i, 1); return next; });
+  }
+
   function create() {
     if (!title.trim()) return;
     var typeId = projType ? projType.id : 'other';
@@ -83,10 +111,17 @@ export default function ProjectWizard({ app, onClose }) {
     var many = labelMany.trim() || (one + 's');
     var labels = (one === 'Draft' && many === 'Drafts') ? {} : { draft: one, drafts: many };
 
+    var words = parseInt(goalWords, 10);
+    if (!(words > 0)) words = 0;
+    var mode = words > 0 ? goalMode : 'none';
+
     var config = buildConfig(typeId, {
       sequenceMode: seqMode,
       draftThumbnails: thumbnails,
-      labels: labels
+      labels: labels,
+      dueDate: dueDate || null,
+      goalMode: mode,
+      goalWords: words
     });
 
     var proj = {
@@ -95,10 +130,11 @@ export default function ProjectWizard({ app, onClose }) {
       type: projType ? projType.label : 'Other',
       typeId: typeId,
       synopsis: synopsis.trim(),
+      image: image || null,
       lastEdited: now,
       createdAt: now,
       config: config,
-      draftFieldDefs: presetDraftFields(typeId)
+      draftFieldDefs: fields.filter(function (f) { return f.label && f.label.trim(); })
     };
 
     var tpls = selectedColls.map(function (c) {
@@ -113,8 +149,6 @@ export default function ProjectWizard({ app, onClose }) {
     app.setProjId(pid);
     app.setView('cards');
   }
-
-  var fields = projType ? presetDraftFields(projType.id) : [];
 
   return (
     <div className="modal-overlay">
@@ -143,6 +177,15 @@ export default function ProjectWizard({ app, onClose }) {
 
           {step === 1 && (
             <div>
+              <div style={{ marginBottom: 14 }}>
+                <span className="wv-field-lbl">Cover image</span>
+                <DraftThumbnailUpload image={image} onUpload={setImage} />
+                {image && (
+                  <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={function () { setImage(null); }}>
+                    <span className="mi" style={{ fontSize: 14 }}>close</span>Remove
+                  </button>
+                )}
+              </div>
               <input
                 ref={titleRef}
                 style={{ fontSize: 18, padding: '12px 14px', background: 'var(--bg2)', border: '2px solid var(--border)', borderRadius: 10, width: '100%', marginBottom: 14, color: 'var(--text)', fontFamily: 'var(--serif)', fontWeight: 600 }}
@@ -244,20 +287,115 @@ export default function ProjectWizard({ app, onClose }) {
                 <HelpText style={{ marginTop: 2 }}>Off makes the cards more compact.</HelpText>
               </div>
 
-              {fields.length > 0 && (
-                <div style={{ marginBottom: 18 }}>
-                  <span className="sect-lbl">Properties you will start with</span>
-                  <div className="wizard-coll-tags">
-                    {fields.map(function (f) {
-                      return <span key={f.id} className="wizard-coll-tag" style={{ cursor: 'default' }}>{f.label}</span>;
-                    })}
-                  </div>
-                  <HelpText style={{ marginTop: 6 }}>Add, rename or remove these any time.</HelpText>
+              <div style={{ marginBottom: 18 }}>
+                <span className="sect-lbl">Properties for each {labelOne.trim().toLowerCase() || 'draft'}</span>
+                {fields.length === 0 && <HelpText>None yet. Add one below, or skip and add them later.</HelpText>}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {fields.map(function (f, i) {
+                    return (
+                      <div key={f.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: 8 }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <input
+                            value={f.label}
+                            onChange={function (e) { updateField(i, { label: e.target.value }); }}
+                            placeholder="Property name"
+                            style={{ flex: 1, fontSize: 13 }}
+                          />
+                          <select
+                            value={f.type}
+                            onChange={function (e) { updateField(i, { type: e.target.value }); }}
+                            style={{ fontSize: 12, width: 110 }}
+                          >
+                            {FIELD_TYPES.map(function (ft) { return <option key={ft.id} value={ft.id}>{ft.label}</option>; })}
+                          </select>
+                          <button className="btn-icon" onClick={function () { removeField(i); }} aria-label="Remove property">
+                            <span className="mi" style={{ fontSize: 16, color: 'var(--danger)' }}>delete</span>
+                          </button>
+                        </div>
+                        {f.type === 'select' && (
+                          <div style={{ marginTop: 8 }}>
+                            <span className="wv-field-lbl">Options</span>
+                            <OptionsEditor options={f.options || []} onChange={function (opts) { updateField(i, { options: opts }); }} />
+                          </div>
+                        )}
+                        {f.type === 'strand_ref' && (
+                          <div style={{ marginTop: 8 }}>
+                            <span className="wv-field-lbl">Spool collection</span>
+                            <select
+                              value={f.refSpool || ''}
+                              onChange={function (e) { updateField(i, { refSpool: e.target.value }); }}
+                              style={{ fontSize: 12, width: '100%' }}
+                            >
+                              <option value="">Choose a collection...</option>
+                              {selectedColls.map(function (c) { return <option key={c} value={c}>{c}</option>; })}
+                            </select>
+                            {selectedColls.length === 0 && <HelpText style={{ marginTop: 4 }}>Pick some spools on the previous step first.</HelpText>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}
+                  onClick={function () { addField('', 'short_text'); }}
+                >
+                  <span className="mi" style={{ fontSize: 14 }}>add</span> Add property
+                </button>
+              </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <button className="btn btn-ghost" onClick={function () { setStep(2); }}>Back</button>
+                <button className="btn btn-primary" onClick={function () { setStep(4); }}>Next</button>
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div>
+              <div style={{ marginBottom: 18 }}>
+                <span className="sect-lbl">Deadline</span>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={function (e) { setDueDate(e.target.value); }}
+                  style={{ width: '100%' }}
+                />
+                <HelpText style={{ marginTop: 6 }}>Optional. Nothing happens at the deadline — it is yours to aim at.</HelpText>
+              </div>
+
+              <div style={{ marginBottom: 18 }}>
+                <span className="sect-lbl">Writing pace</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {GOAL_MODES.map(function (m) {
+                    return (
+                      <div key={m.id}>
+                        <Radio on={goalMode === m.id} onClick={function () { setGoalMode(m.id); }} label={m.label} />
+                        <div style={{ fontSize: 12, color: 'var(--mid)', marginLeft: 28, marginTop: -2 }}>{m.desc}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {goalMode !== 'none' && (
+                  <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      value={goalWords}
+                      onChange={function (e) { setGoalWords(e.target.value); }}
+                      placeholder={goalMode === 'daily' ? '500' : '3500'}
+                      style={{ width: 120 }}
+                    />
+                    <span style={{ fontSize: 13, color: 'var(--mid)' }}>
+                      words per {goalMode === 'daily' ? 'day' : 'week'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <button className="btn btn-ghost" onClick={function () { setStep(3); }}>Back</button>
                 <button className="btn btn-primary" onClick={create} disabled={!title.trim()}>Create Project</button>
               </div>
             </div>
