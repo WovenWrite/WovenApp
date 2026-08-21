@@ -20,6 +20,21 @@ var DRAWER_CSS = `
 .wv-drawer--inline.wv-drawer--flexw{width:auto;flex:1;min-width:0;}
 
 /* Overlay variant — slides in over the page */
+/* Popover — a small anchored panel with the same visual language as Drawer
+   (cream fill, DM Sans header, same field/chip styling inside), for
+   dropdowns and menus that shouldn't be a full drawer. First user: the
+   Define filter. Meant to be reused for other popup needs going forward. */
+.wv-popover{position:fixed;z-index:400;background:#EDE0CC;border-radius:14px;
+  box-shadow:0 10px 34px rgba(42,31,16,.20);border:1px solid #E2D0B8;
+  min-width:280px;max-height:min(420px,calc(100vh - 80px));display:flex;flex-direction:column;
+  overflow:hidden;animation:wvPopIn .16s cubic-bezier(.22,.9,.32,1);}
+@keyframes wvPopIn{from{opacity:0;transform:translateY(-4px) scale(.98);}to{opacity:1;transform:none;}}
+.wv-popover-hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 15px;border-bottom:1px solid #A88060;flex-shrink:0;}
+.wv-popover-title{font-family:'DM Sans',sans-serif;font-weight:700;font-size:16px;color:#6B4A26;}
+.wv-popover-body{flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;gap:16px;}
+.wv-popover-footer{flex-shrink:0;padding:12px 15px;border-top:1px solid #E2D0B8;display:flex;gap:8px;}
+
 .wv-drawer-overlay{position:fixed;inset:0;z-index:200;display:flex;justify-content:flex-end;}
 .wv-drawer-backdrop{position:absolute;inset:0;background:rgba(42,31,16,.25);
   animation:wvFade .18s ease;}
@@ -66,6 +81,29 @@ var DRAWER_CSS = `
   transition:background .12s ease,border-color .12s ease;}
 .wv-field-box:focus{outline:none;background:#FFFCF8;border-color:#C45E28;}
 .wv-field-box::placeholder{font-style:italic;color:var(--placeholder,#A88060);}
+
+/* Strand reference picker */
+.wv-refpick-empty{display:flex;align-items:center;justify-content:space-between;
+  width:100%;box-sizing:border-box;background:rgba(255,252,248,.5);border:1px solid #E2D0B8;
+  border-radius:8px;padding:10px 15px;font-family:'DM Sans',sans-serif;font-size:15px;
+  font-style:italic;color:#A88060;cursor:pointer;transition:background .12s ease,border-color .12s ease;}
+.wv-refpick-empty:hover{background:#FFFCF8;border-color:#C45E28;}
+.wv-refpick-selected{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;
+  background:#FFFCF8;border:1px solid #E2D0B8;border-radius:8px;padding:7px 10px;cursor:pointer;}
+.wv-refpick-name{flex:1;min-width:0;font-family:var(--serif,'Crimson Text',serif);font-weight:600;
+  font-size:16px;color:#6B4A26;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.wv-refpick-x{color:#A88060;flex-shrink:0;cursor:pointer;display:flex;}
+.wv-refpick-x:hover{color:#C45E28;}
+.wv-refpick-dropdown{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:60;
+  background:#FFFCF8;border:1px solid #E2D0B8;border-radius:10px;
+  box-shadow:0 8px 26px rgba(42,31,16,.16);max-height:280px;display:flex;flex-direction:column;
+  overflow:hidden;}
+.wv-refpick-search{flex-shrink:0;padding:8px;border-bottom:1px solid #E2D0B8;}
+.wv-refpick-search input{width:100%;box-sizing:border-box;border:1px solid #E2D0B8;border-radius:7px;
+  padding:6px 10px;font-family:'DM Sans',sans-serif;font-size:14px;color:#6B4A26;outline:none;
+  background:rgba(255,252,248,.6);}
+.wv-refpick-search input:focus{background:#FFFCF8;border-color:#C45E28;}
+.wv-refpick-list{overflow-y:auto;}
 
 /* Collapsible */
 .wv-collapse{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mid);
@@ -140,6 +178,13 @@ var DRAWER_CSS = `
 .wv-check{width:17px;height:17px;border-radius:4px;display:flex;align-items:center;
   justify-content:center;flex-shrink:0;transition:all .15s;border:1px solid var(--border);}
 .wv-check.on{border-color:var(--indigo);background:var(--indigo);}
+.wv-radio{width:17px;height:17px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;transition:all .15s;border:1px solid var(--border);
+  background:rgba(255,252,248,.5);}
+.wv-radio.on{border-color:var(--indigo);}
+.wv-radio-dot{width:9px;height:9px;border-radius:50%;background:var(--indigo);}
+.wv-radio-lbl{display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+  font-family:var(--serif,'Crimson Text',serif);font-size:15px;color:#6B4A26;}
 
 /* Large spool thumbnail — detail view, click to upload */
 .wv-thumb-upload{position:relative;width:150px;height:150px;border-radius:100px;
@@ -155,6 +200,11 @@ var DRAWER_CSS = `
   transition:opacity .15s ease;}
 .wv-thumb-upload:hover .wv-thumb-upload-overlay{opacity:1;}
 .wv-thumb-upload-overlay .mi{color:#fff;font-size:28px;}
+
+/* Draft thumbnail — 190x150, rounded rect (not circular), same hover-overlay */
+.wv-draft-thumb{width:190px;height:150px;border-radius:15px;background:#E2D0B8;}
+.wv-draft-thumb-empty{width:100%;height:100%;display:flex;align-items:center;
+  justify-content:center;color:#A88060;}
 
 /* Mobile — inline drawers become full-screen sheets */
 @media(max-width:768px){
@@ -238,6 +288,49 @@ export function Drawer({ variant, open, title, onBack, onClose, footer, padded, 
 }
 
 // ── Layout helpers ──
+
+// A small anchored panel — same visual language as Drawer, positioned off a
+// trigger element instead of being a full-height panel. Pass a ref to the
+// trigger as `anchorRef`; Popover computes its own position and handles
+// click-outside-to-close (including clicks back on the trigger itself).
+export function Popover({ anchorRef, open, onClose, title, footer, width, children }) {
+  var ref = useRef(null);
+  var sp = useState({ top: 0, left: 0 }); var pos = sp[0]; var setPos = sp[1];
+
+  useEffect(function () {
+    if (!open || !anchorRef || !anchorRef.current) return;
+    var r = anchorRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + 6, left: r.left });
+  }, [open]);
+
+  useEffect(function () {
+    if (!open) return;
+    function onDown(e) {
+      if (ref.current && ref.current.contains(e.target)) return;
+      if (anchorRef && anchorRef.current && anchorRef.current.contains(e.target)) return;
+      onClose();
+    }
+    document.addEventListener('mousedown', onDown);
+    return function () { document.removeEventListener('mousedown', onDown); };
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div ref={ref} className="wv-popover" style={{ top: pos.top, left: pos.left, width: width || undefined }}>
+      {title && (
+        <div className="wv-popover-hdr">
+          <span className="wv-popover-title">{title}</span>
+          <button className="btn-icon" onClick={onClose} aria-label="Close">
+            <span className="mi">close</span>
+          </button>
+        </div>
+      )}
+      <div className="wv-popover-body">{children}</div>
+      {footer && <div className="wv-popover-footer">{footer}</div>}
+    </div>
+  );
+}
 
 export function Section({ label, children, style }) {
   return (
@@ -445,6 +538,142 @@ export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
 // Pass any sort widget via `sortSlot` (e.g. an existing StrandSortFilter) —
 // this component only owns the search box and the row layout, not sorting
 // logic itself.
+// A multi-select, searchable strand picker — for any custom draft field
+// typed "Reference" (e.g. a user-defined "POV" field). Pass `collection` to
+// scope the picker to one spool collection (recommended — otherwise every
+// strand in the project is searched, which gets unwieldy fast). Selecting a
+// strand does NOT tag it to a draft on its own — the caller decides whether
+// to also tag.
+// The search + list dropdown shared by every multi-select strand picker —
+// StrandRefPicker's own expand, and Properties' "tag a strand" trigger.
+// Click-outside closes it. Looks up each strand's real collection icon
+// rather than defaulting, so results match what the app shows elsewhere.
+export function StrandSearchDropdown({ app, pid, collection, excludeIds, onPick, onClose, style }) {
+  var sq = useState(''); var query = sq[0]; var setQuery = sq[1];
+  var ref = useRef(null);
+
+  useEffect(function () {
+    function onDown(e) { if (ref.current && !ref.current.contains(e.target)) onClose(); }
+    document.addEventListener('mousedown', onDown);
+    return function () { document.removeEventListener('mousedown', onDown); };
+  }, []);
+
+  var projStrands = (app.allStrands[pid] || {});
+  var projTemplates = app.allTemplates[pid] || [];
+  function iconFor(coll) {
+    var t = projTemplates.find(function (x) { return x.name === coll; });
+    return (t && t.icon) || 'auto_stories';
+  }
+
+  var excl = excludeIds || [];
+  var all = [];
+  var collNames = collection ? [collection] : Object.keys(projStrands);
+  collNames.forEach(function (coll) {
+    (projStrands[coll] || []).forEach(function (st) {
+      if (excl.indexOf(st.id) < 0) all.push(Object.assign({}, st, { collectionName: coll }));
+    });
+  });
+
+  var filtered = all.filter(function (st) {
+    return !query || (st.name || '').toLowerCase().indexOf(query.toLowerCase()) >= 0;
+  });
+
+  return (
+    <div ref={ref} className="wv-refpick-dropdown" style={style}>
+      <div className="wv-refpick-search">
+        <input autoFocus value={query} onChange={function (e) { setQuery(e.target.value); }} placeholder="Search spools..." />
+      </div>
+      <div className="wv-refpick-list">
+        {filtered.length === 0 && (
+          <HelpText style={{ padding: 14 }}>{all.length === 0 ? 'Nothing to pick.' : 'No spools match "' + query + '".'}</HelpText>
+        )}
+        {filtered.map(function (st) {
+          return <StrandResultRow key={st.id} strand={st} spoolIcon={iconFor(st.collectionName)} onClick={function () { onPick(st); }} />;
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function StrandRefPicker({ app, pid, collection, value, onChange, placeholder }) {
+  var so = useState(false); var open = so[0]; var setOpen = so[1];
+
+  var selectedIds = value || [];
+  var projStrands = (app.allStrands[pid] || {});
+  var projTemplates = app.allTemplates[pid] || [];
+  function iconFor(coll) {
+    var t = projTemplates.find(function (x) { return x.name === coll; });
+    return (t && t.icon) || 'auto_stories';
+  }
+  var all = [];
+  var collNames = collection ? [collection] : Object.keys(projStrands);
+  collNames.forEach(function (coll) {
+    (projStrands[coll] || []).forEach(function (st) {
+      all.push(Object.assign({}, st, { collectionName: coll }));
+    });
+  });
+  var selected = selectedIds.map(function (id) { return all.find(function (s) { return s.id === id; }); }).filter(Boolean);
+
+  function add(st) { onChange(selectedIds.concat([st.id])); setOpen(false); }
+  function remove(id) { onChange(selectedIds.filter(function (i) { return i !== id; })); }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      {selected.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+          {selected.map(function (st) {
+            return (
+              <div key={st.id} className="wv-refpick-selected">
+                <Avatar strand={st} size={26} />
+                <span className="wv-refpick-name">{st.name}</span>
+                <span className="mi wv-refpick-x" onClick={function () { remove(st.id); }}>close</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="wv-refpick-empty" onClick={function () { setOpen(!open); }}>
+        <span>{selected.length > 0 ? 'Add another...' : (placeholder || 'Select spools...')}</span>
+        <span className="mi" style={{ fontSize: 18 }}>{open ? 'expand_less' : 'expand_more'}</span>
+      </div>
+      {open && (
+        <StrandSearchDropdown
+          app={app}
+          pid={pid}
+          collection={collection}
+          excludeIds={selectedIds}
+          onPick={add}
+          onClose={function () { setOpen(false); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// A draft's own thumbnail — 190x150, rounded rect, click-to-upload with the
+// same hover overlay as SpoolThumbnailUpload. No fallback initials (drafts
+// don't have a name-based avatar concept) — just an empty placeholder.
+export function DraftThumbnailUpload({ image, onUpload }) {
+  var inputRef = useRef(null);
+  function handleFile(e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5 MB.'); return; }
+    uploadImage(file).then(function (url) { if (url) onUpload(url); });
+  }
+  return (
+    <div className="wv-thumb-upload wv-draft-thumb" onClick={function () { inputRef.current && inputRef.current.click(); }}>
+      {image
+        ? <img src={image} alt="" />
+        : <div className="wv-draft-thumb-empty"><span className="mi" style={{ fontSize: 32 }}>image</span></div>}
+      <div className="wv-thumb-upload-overlay">
+        <span className="mi">edit</span>
+      </div>
+      <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
+    </div>
+  );
+}
+
 export function SearchSortBar({ value, onChange, placeholder, sortSlot }) {
   return (
     <div className="wv-drawer-toolbar">
@@ -477,11 +706,71 @@ export function CategoryLink({ title, onClick }) {
   );
 }
 
+// Manages a Dropdown field's option list (add/remove option strings). Used
+// wherever a "select" type field is being configured — strand template
+// fields and draft custom fields both need the exact same interaction.
+export function OptionsEditor({ options, onChange }) {
+  var si = useState(''); var input = si[0]; var setInput = si[1];
+  var opts = options || [];
+  function add() {
+    var v = input.trim();
+    if (!v || opts.indexOf(v) >= 0) return;
+    onChange(opts.concat([v]));
+    setInput('');
+  }
+  function remove(idx) {
+    onChange(opts.filter(function (_, i) { return i !== idx; }));
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4, width: '100%' }}>
+      {opts.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+          {opts.map(function (o, i) {
+            return (
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 6px 3px 10px', borderRadius: 12, background: 'rgba(196,94,40,.08)', border: '1px solid rgba(196,94,40,.25)', fontFamily: 'DM Sans, sans-serif', fontSize: 12, color: '#6B4A26' }}>
+                {o}
+                <span className="mi" style={{ fontSize: 13, cursor: 'pointer', color: '#A88060' }} onClick={function () { remove(i); }}>close</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          value={input}
+          onChange={function (e) { setInput(e.target.value); }}
+          placeholder="Add option..."
+          onKeyDown={function (e) { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          style={{ flex: 1, boxSizing: 'border-box', background: 'rgba(255,252,248,.5)', border: '1px solid #E2D0B8', borderRadius: 8, padding: '6px 10px', fontFamily: 'DM Sans, sans-serif', fontSize: 12, color: '#6B4A26', outline: 'none' }}
+          onFocus={function (e) { e.target.style.background = '#FFFCF8'; e.target.style.borderColor = '#C45E28'; }}
+          onBlur={function (e) { e.target.style.background = 'rgba(255,252,248,.5)'; e.target.style.borderColor = '#E2D0B8'; }}
+        />
+        <button onClick={add} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #E2D0B8', background: 'rgba(255,252,248,.5)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <span className="mi" style={{ fontSize: 15, color: '#6B4A26' }}>add</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function Check({ on }) {
   return (
     <span className={'wv-check' + (on ? ' on' : '')}>
       {on && <span className="mi" style={{ fontSize: 12, color: '#fff' }}>check</span>}
     </span>
+  );
+}
+
+// Styled radio button matching Check's visual language (same size/border
+// treatment) but circular with a filled dot, per radio-button convention.
+export function Radio({ on, onClick, label }) {
+  return (
+    <label className="wv-radio-lbl" onClick={onClick}>
+      <span className={'wv-radio' + (on ? ' on' : '')}>
+        {on && <span className="wv-radio-dot" />}
+      </span>
+      {label}
+    </label>
   );
 }
 
