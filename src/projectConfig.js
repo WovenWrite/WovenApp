@@ -122,11 +122,25 @@ export var DEFAULT_CONFIG = {
   version: CONFIG_VERSION,
   sequenceMode: 'numeric',
   draftThumbnails: true,
-  statuses: null,   // null = untouched defaults
-  labels: {},       // sparse
-  dueDate: null,    // 'YYYY-MM-DD'
-  reminders: []     // [{ id, offsetDays, enabled }] — stored, not yet acted on
+  statuses: null,     // null = untouched defaults
+  labels: {},         // sparse
+  dueDate: null,      // 'YYYY-MM-DD'
+  goalMode: 'none',   // 'none' | 'daily' | 'weekly'
+  goalWords: 0,       // words per day/week for this project
+  reminders: []       // [{ id, offsetDays, enabled }] — stored, not yet acted on
 };
+
+// Per-project writing goals. Distinct from the GLOBAL daily goal in
+// app.goal / StatsSection, which is a whole-account number and stays as is.
+export var GOAL_MODES = [
+  { id: 'none',   label: 'No goal',       desc: 'Just write.' },
+  { id: 'daily',  label: 'Words per day', desc: 'A steady daily target.' },
+  { id: 'weekly', label: 'Words per week', desc: 'More room to move week to week.' }
+];
+
+export function goalMode(id) {
+  return GOAL_MODES.find(function (m) { return m.id === id; }) || GOAL_MODES[0];
+}
 
 // ══════════════════════════════════════════════
 // Resolvers
@@ -141,6 +155,8 @@ export function projConfig(proj) {
     statuses: stored.statuses || null,
     labels: Object.assign({}, DEFAULT_LABELS, stored.labels || {}),
     dueDate: stored.dueDate || null,
+    goalMode: goalMode(stored.goalMode).id,
+    goalWords: Number(stored.goalWords) > 0 ? Number(stored.goalWords) : 0,
     reminders: Array.isArray(stored.reminders) ? stored.reminders : []
   };
 }
@@ -179,6 +195,34 @@ export function projIsManualOrder(proj) {
 
 export function projThumbnails(proj) {
   return projConfig(proj).draftThumbnails;
+}
+
+export function projDueDate(proj) {
+  return projConfig(proj).dueDate;
+}
+
+// Returns null when no goal is set, else { mode, words, label }.
+export function projGoal(proj) {
+  var cfg = projConfig(proj);
+  if (cfg.goalMode === 'none' || !cfg.goalWords) return null;
+  return {
+    mode: cfg.goalMode,
+    words: cfg.goalWords,
+    label: cfg.goalWords.toLocaleString() + ' words / ' + (cfg.goalMode === 'daily' ? 'day' : 'week')
+  };
+}
+
+// Whole days from today until the due date. Negative when overdue,
+// null when no due date is set.
+export function daysUntilDue(proj) {
+  var due = projDueDate(proj);
+  if (!due) return null;
+  var parts = String(due).split('-');
+  if (parts.length !== 3) return null;
+  var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  var today = new Date();
+  today = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.round((d - today) / 86400000);
 }
 
 export function projLabel(proj, key) {
