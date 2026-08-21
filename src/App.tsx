@@ -11,6 +11,7 @@ import VersionsDrawer from './VersionsDrawer'
 import LooseThreadDrawer from './LooseThreadDrawer'
 import BindDrawer from './BindDrawer'
 import ProjectWizard from './ProjectWizard'
+import ProjectDrawer from './ProjectDrawer'
 import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor, Radio } from './SharedUI'
 import {
   STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
@@ -427,30 +428,7 @@ function GlobalSaveIndicator(){
 // ArchiveConfirmModal now lives in ./SharedUI
 
 // ── ArchiveProjectConfirmModal ──
-function ArchiveProjectConfirmModal({proj,onConfirm,onCancel}){
-  return(
-<div className="modal-overlay">
-  <div className="modal-backdrop" onClick={onCancel}/>
-  <div className="modal-box" style={{maxWidth:420}}>
-    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
-      <span className="mi" style={{fontSize:28,color:'var(--indigo)'}}>inventory_2</span>
-      <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,color:'var(--text)'}}>Archive this project?</div>
-    </div>
-    <div style={{fontSize:14,color:'var(--body-text)',lineHeight:1.6,marginBottom:12}}>
-      <strong style={{color:'var(--text)'}}>{proj.title||'Untitled'}</strong> and all its content will be hidden from your dashboard.
-    </div>
-    <div style={{fontSize:13,color:'var(--mid)',marginBottom:20}}>You can restore it any time from <strong>Your Archive</strong> on the dashboard.</div>
-    <div style={{display:'flex',gap:8}}>
-      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onCancel}>Cancel</button>
-      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={onConfirm}>
-        <span className="mi" style={{fontSize:16}}>inventory_2</span>Archive project
-      </button>
-    </div>
-  </div>
-</div>
-  );
-}
-
+// Moved into ProjectDrawer — it was only ever used by ProjectEditPanel
 
 // ── OverflowTooltip ──
 function OverflowTooltip({label,names}){
@@ -585,53 +563,7 @@ function StatsSection({app,onOpenProfile,greeting}){
 }
 
 // ── ProjectEditPanel ──
-function ProjectEditPanel({proj,app,onClose}){
-  var st=useState(proj.title||'');var title=st[0];var setTitle=st[1];
-  var ss=useState(proj.synopsis||'');var synopsis=ss[0];var setSynopsis=ss[1];
-  var si=useState(proj.image||null);var image=si[0];var setImage=si[1];
-  var spa=useState(false);var projArchiveConfirm=spa[0];var setProjArchiveConfirm=spa[1];
-  var spt=useState(proj.type||'Fiction');var projType=spt[0];var setProjType=spt[1];
-  function autoSaveField(changes){
-    if(changes.title!==undefined)app.updateProjectTitle(proj.id,changes.title.trim()||proj.title);
-    if(changes.synopsis!==undefined)app.updateProjectSynopsis(proj.id,changes.synopsis);
-    if(changes.image!==undefined)app.updateProjectImage(proj.id,changes.image);
-    if(changes.type!==undefined)app.updateProjectType(proj.id,changes.type);
-  }
-  return(
-<Panel open={true} onClose={onClose} title="Edit Project" footer={null}>
-  <div style={{marginBottom:16}}>
-    <span className="sect-lbl">Cover image</span>
-    <div style={{display:'flex',alignItems:'center',gap:10}}>
-      {image&&<img src={image} alt="" style={{width:64,height:44,objectFit:'cover',borderRadius:6,flexShrink:0}}/>}
-      <label style={{cursor:'pointer'}}>
-        <span className="btn btn-ghost btn-sm">{image?'Change':'Upload cover'}</span>
-        <input type="file" accept="image/*" style={{display:'none'}} onChange={function(e){
-          var file=e.target.files&&e.target.files[0];if(!file)return;
-          if(file.size>5*1024*1024){alert('Image must be under 5 MB.');return;}
-          uploadImage(file).then(function(url){if(url){setImage(url);autoSaveField({image:url});}});
-        }}/>
-      </label>
-      {image&&<button className="btn-icon" onClick={function(){setImage(null);autoSaveField({image:null});}}><span className="mi" style={{fontSize:16}}>delete</span></button>}
-    </div>
-  </div>
-  <div style={{marginBottom:16}}><span className="sect-lbl">Title</span><input value={title} onChange={function(e){setTitle(e.target.value);}}/></div>
-  <div style={{marginBottom:16}}><span className="sect-lbl">Synopsis</span><textarea value={synopsis} onChange={function(e){setSynopsis(e.target.value);}} rows={4}/></div>
-  <div style={{marginBottom:16}}>
-    <span className="sect-lbl">Type</span>
-    <select value={projType} onChange={function(e){setProjType(e.target.value);}}>
-      {PROJ_TYPES.map(function(t){return <option key={t.id} value={t.label}>{t.label}</option>;})}
-    </select>
-  </div>
-  <div style={{paddingTop:16,borderTop:'1px solid var(--border)'}}>
-    <button className="btn btn-danger" style={{width:'100%',justifyContent:'center'}} onClick={function(){setProjArchiveConfirm(true);}}>
-      <span className="mi" style={{fontSize:16}}>inventory_2</span>Archive project
-    </button>
-  </div>
-  {projArchiveConfirm&&<ArchiveProjectConfirmModal proj={proj} onCancel={function(){setProjArchiveConfirm(false);}} onConfirm={function(){app.archiveProject(proj.id);setProjArchiveConfirm(false);onClose();}}/>}
-</Panel>
-  );
-}
-
+// Replaced by ProjectDrawer — see ./ProjectDrawer
 
 // ── GlobalLooseThreads ──
 function GlobalLooseThreads({app}){
@@ -786,7 +718,7 @@ function Dashboard({app,onOpenProfile,onNewProject}){
       </div>
     </div>
   </div>
-  {editProj&&<ProjectEditPanel proj={editProj} app={app} onClose={function(){setEditingProjId(null);}}/>}
+  {editProj&&<ProjectDrawer proj={editProj} app={app} open={true} variant="overlay" topOffset={54} onClose={function(){setEditingProjId(null);}}/>}
   <ArchiveDrawer app={app} open={archiveOpen} onClose={function(){setArchiveOpen(false);}}/>
 </div>
   );
@@ -3287,6 +3219,7 @@ function App(){
   function updateProjectTitle(pid,newTitle){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{title:newTitle});});saveDB('woven:projects',next);return next;});}
   function updateProjectSynopsis(pid,syn){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{synopsis:syn});});saveDB('woven:projects',next);return next;});}
   function updateProjectImage(pid,img){setProjects(function(prev){var old=prev.find(function(p){return p.id===pid;});if(old&&old.image&&old.image!==img)deleteStorageImage(old.image);var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{image:img});});saveDB('woven:projects',next);return next;});}
+  function updateProjectConfig(pid,patch){setProjects(function(prev){var next=prev.map(function(p){if(p.id!==pid)return p;var cfg=Object.assign({},p.config||{},patch);return Object.assign({},p,{config:cfg});});saveDB('woven:projects',next);return next;});}
   function updateProjectType(pid,type){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{type:type});});saveDB('woven:projects',next);return next;});}
   function archiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:true});});saveDB('woven:projects',next);return next;});}
   function unarchiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:false});});saveDB('woven:projects',next);return next;});}
@@ -3361,7 +3294,7 @@ function App(){
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
 
   function signOut(){
     supabase.auth.signOut().then(function(){
