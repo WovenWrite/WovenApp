@@ -215,16 +215,20 @@ export function sortDraftsBySequence(drafts, proj) {
 }
 
 // ══════════════════════════════════════════════
-// Wizard presets
+// Project types & presets
 // ══════════════════════════════════════════════
 //
-// Keyed by the same ids as PROJ_TYPES in App.jsx. PROJ_TYPES keeps
-// label/icon/desc/colls; this holds only what is new. The wizard reads both
-// by id. Worth folding PROJ_TYPES in here eventually — deliberately not done
-// now to avoid touching the monolith.
+// One entry per project type, holding everything the wizard needs:
+// presentation (label/icon/desc), the spool collections to seed, the config
+// defaults, and the draft custom fields. Previously PROJ_TYPES lived in
+// App.jsx and the config half lived here — folded together so a preset is
+// defined in exactly one place.
 
-export var PROJECT_PRESETS = {
-  fiction: {
+export var PROJ_TYPES = [
+  {
+    id: 'fiction', label: 'Fiction', icon: 'auto_stories',
+    desc: 'Novels, short fiction, narrative',
+    colls: ['Characters', 'Locations', 'Lore & World'],
     config: { sequenceMode: 'numeric', draftThumbnails: true, labels: { draft: 'Chapter', drafts: 'Chapters' } },
     draftFields: [
       { id: 'pov',         label: 'POV',         type: 'short_text' },
@@ -232,45 +236,69 @@ export var PROJECT_PRESETS = {
       { id: 'notes',       label: 'Notes',       type: 'long_text' }
     ]
   },
-  nonfiction: {
+  {
+    id: 'nonfiction', label: 'Non-Fiction', icon: 'article',
+    desc: 'Essays, memoir, journalism',
+    colls: ['Sources', 'Interviews', 'Subjects'],
     config: { sequenceMode: 'numeric', draftThumbnails: false, labels: { draft: 'Section', drafts: 'Sections' } },
     draftFields: [
       { id: 'angle', label: 'Angle', type: 'short_text' },
       { id: 'notes', label: 'Notes', type: 'long_text' }
     ]
   },
-  research: {
+  {
+    id: 'research', label: 'Research', icon: 'science',
+    desc: 'Academic or investigative writing',
+    colls: ['Sources', 'Reports', 'Interviews'],
     config: { sequenceMode: 'numeric', draftThumbnails: false, labels: { draft: 'Section', drafts: 'Sections' } },
     draftFields: [
       { id: 'question', label: 'Research question', type: 'long_text' },
       { id: 'notes',    label: 'Notes',             type: 'long_text' }
     ]
   },
-  blog: {
+  {
+    id: 'blog', label: 'Blog Series', icon: 'rss_feed',
+    desc: 'Posts, columns, newsletters',
+    colls: ['Topics', 'Sources', 'Audience Notes'],
     config: { sequenceMode: 'date', draftThumbnails: true, labels: { draft: 'Post', drafts: 'Posts' } },
     draftFields: [
       { id: 'tags',  label: 'Tags',  type: 'short_text' },
       { id: 'notes', label: 'Notes', type: 'long_text' }
     ]
   },
-  screenplay: {
+  {
+    id: 'screenplay', label: 'Screenplay', icon: 'movie',
+    desc: 'Film, TV, stage scripts',
+    colls: ['Characters', 'Locations', 'Scenes'],
     config: { sequenceMode: 'numeric', draftThumbnails: false, labels: { draft: 'Scene', drafts: 'Scenes' } },
     draftFields: [
-      { id: 'location',     label: 'Location',     type: 'short_text' },
-      { id: 'time_of_day',  label: 'Time of day',  type: 'short_text' },
-      { id: 'notes',        label: 'Notes',        type: 'long_text' }
+      { id: 'location',    label: 'Location',    type: 'short_text' },
+      { id: 'time_of_day', label: 'Time of day', type: 'short_text' },
+      { id: 'notes',       label: 'Notes',       type: 'long_text' }
     ]
   },
-  other: {
+  {
+    id: 'other', label: 'Other', icon: 'edit_note',
+    desc: 'Everything else',
+    colls: ['Characters', 'Sources'],
     config: { sequenceMode: 'none', draftThumbnails: true, labels: {} },
     draftFields: [
       { id: 'notes', label: 'Notes', type: 'long_text' }
     ]
   }
-};
+];
 
 export function presetFor(typeId) {
-  return PROJECT_PRESETS[typeId] || PROJECT_PRESETS.other;
+  return PROJ_TYPES.find(function (t) { return t.id === typeId; }) || PROJ_TYPES[PROJ_TYPES.length - 1];
+}
+
+// Legacy projects store `type` as the LABEL ('Fiction'), not the id. New
+// projects store `typeId` too. This resolves either.
+export function typeIdOf(proj) {
+  if (!proj) return 'other';
+  if (proj.typeId) return proj.typeId;
+  var match = PROJ_TYPES.find(function (t) { return t.label === proj.type; });
+  return match ? match.id : 'other';
 }
 
 // Builds the `config` object stored on a new project. Only writes keys that
