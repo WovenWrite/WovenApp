@@ -10,6 +10,7 @@ import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
 import LooseThreadDrawer from './LooseThreadDrawer'
 import BindDrawer from './BindDrawer'
+import ProjectWizard from './ProjectWizard'
 import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor, Radio } from './SharedUI'
 import {
   STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
@@ -17,6 +18,7 @@ import {
   compressImage, uploadImage, deleteStorageImage,
   saveSnapshot
 } from './utils'
+import { PROJ_TYPES } from './projectConfig'
 // Snapshot helpers, Supabase client, and env constants now live in ./utils
 
 // ── Storage ──
@@ -53,14 +55,7 @@ var VIEW_MODES=[
   {key:'cards',  icon:'book_ribbon',  label:'Storyboard', group:'main'},
   {key:'strands',icon:'gesture',      label:'Spools',     group:'strands'}
 ];
-var PROJ_TYPES=[
-  {id:'fiction',    label:'Fiction',     icon:'auto_stories',colls:['Characters','Locations','Lore & World'],desc:'Novels, short fiction, narrative'},
-  {id:'nonfiction', label:'Non-Fiction', icon:'article',     colls:['Sources','Interviews','Subjects'],      desc:'Essays, memoir, journalism'},
-  {id:'research',   label:'Research',   icon:'science',     colls:['Sources','Reports','Interviews'],        desc:'Academic or investigative writing'},
-  {id:'blog',       label:'Blog Series',icon:'rss_feed',    colls:['Topics','Sources','Audience Notes'],     desc:'Posts, columns, newsletters'},
-  {id:'screenplay', label:'Screenplay', icon:'movie',       colls:['Characters','Locations','Scenes'],       desc:'Film, TV, stage scripts'},
-  {id:'other',      label:'Other',      icon:'edit_note',   colls:['Characters','Sources'],                  desc:'Everything else'}
-];
+// PROJ_TYPES now lives in ./projectConfig (label/icon/desc/colls + presets)
 var DEFAULT_TABLE_COLS=['title','synopsis','status','strandTags'];
 
 // ── Seed Data ──
@@ -2921,64 +2916,7 @@ function ArchiveDrawer({app,open,onClose}){
 }
 
 // ── Wizard ──
-function ProjectWizard({app,onClose}){
-  var ss=useState(0);var step=ss[0];var setStep=ss[1];
-  var spt=useState(null);var projType=spt[0];var setProjType=spt[1];
-  var st=useState('');var title=st[0];var setTitle=st[1];
-  var ssyn=useState('');var synopsis=ssyn[0];var setSynopsis=ssyn[1];
-  var ssc=useState([]);var selectedColls=ssc[0];var setSelectedColls=ssc[1];
-  var titleRef=useRef(null);
-  useEffect(function(){if(step===1&&titleRef.current)titleRef.current.focus();},[step]);
-  var allColls=['Characters','Locations','Lore & World','Sources','Interviews','Subjects','Scenes','Plot Threads','Topics','Audience Notes','Reports'];
-  function selectType(t){setProjType(t);setSelectedColls(t.colls);setStep(1);}
-  function toggleColl(c){setSelectedColls(function(sc){return sc.includes(c)?sc.filter(function(x){return x!==c;}):sc.concat([c]);});}
-  function create(){if(!title.trim())return;var pid=genId();var now=new Date().toISOString();var proj={id:pid,title:title.trim(),type:projType?projType.label:'Other',synopsis:synopsis.trim(),lastEdited:now,createdAt:now,draftFieldDefs:[]};var tpls=selectedColls.map(function(c){return{id:genId(),projectId:pid,name:c,fields:defaultFields(c),sharedWith:[]};});var strandsObj={};selectedColls.forEach(function(c){strandsObj[c]=[];});app.createProject(proj,{templates:tpls,strandsObj:strandsObj});onClose();app.loadProjectData(pid);app.setProjId(pid);app.setView('cards');}
-  return(
-<div className="modal-overlay">
-  <div className="modal-backdrop" onClick={onClose}/>
-  <div className="modal-box">
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-      <div style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600}}>{step===0?'What are you writing?':step===1?'Name your project':'Your collections'}</div>
-      <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-    </div>
-    <div style={{minHeight:220}}>
-      {step===0&&(
-<div className="wizard-type-grid">
-  {PROJ_TYPES.map(function(t){return(
-<div key={t.id} className={'wizard-type-card'+(projType&&projType.id===t.id?' sel':'')} onClick={function(){selectType(t);}}>
-  <div style={{marginBottom:8}}><span className="mi" style={{fontSize:26,color:'var(--indigoL)'}}>{t.icon}</span></div>
-  <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:3}}>{t.label}</div>
-  <div style={{fontSize:12,color:'var(--mid)'}}>{t.desc}</div>
-</div>
-  );})}
-</div>
-      )}
-      {step===1&&(
-<div>
-  <input ref={titleRef} style={{fontSize:18,padding:'12px 14px',background:'var(--bg2)',border:'2px solid var(--border)',borderRadius:10,width:'100%',marginBottom:14,color:'var(--text)',fontFamily:'var(--serif)',fontWeight:600}} value={title} onChange={function(e){setTitle(e.target.value);}} placeholder="Working title..." onKeyDown={function(e){if(e.key==='Enter'&&title.trim())setStep(2);}}/>
-  <textarea style={{fontSize:14,padding:'10px 14px',background:'var(--bg2)',border:'2px solid var(--border)',borderRadius:10,width:'100%',color:'var(--text)',marginBottom:14}} value={synopsis} onChange={function(e){setSynopsis(e.target.value);}} placeholder="What is this about? (optional)" rows={3}/>
-  <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
-    <button className="btn btn-ghost" onClick={function(){setStep(0);}}>Back</button>
-    <button className="btn btn-primary" onClick={function(){setStep(2);}} disabled={!title.trim()}>Next</button>
-  </div>
-</div>
-      )}
-      {step===2&&(
-<div>
-  <div style={{fontSize:14,color:'var(--mid)',marginBottom:14}}>Select collections to include. You can add more later.</div>
-  <div className="wizard-coll-tags" style={{marginBottom:20}}>{allColls.map(function(c){return <span key={c} className={'wizard-coll-tag'+(selectedColls.includes(c)?' sel':'')} onClick={function(){toggleColl(c);}}>{c}</span>;})}</div>
-  <div style={{display:'flex',justifyContent:'space-between'}}>
-    <button className="btn btn-ghost" onClick={function(){setStep(1);}}>Back</button>
-    <button className="btn btn-primary" onClick={create} disabled={!title.trim()}>Create Project</button>
-  </div>
-</div>
-      )}
-    </div>
-    <div className="wizard-dots">{[0,1,2].map(function(i){return <div key={i} className={'wizard-dot'+(step===i?' active':'')}/>;})}</div>
-  </div>
-</div>
-  );
-}
+// ProjectWizard now lives in ./ProjectWizard
 
 // ── Profile Panel ──
 // ProfilePanel moved to its own file — see ./ProfileDrawer
