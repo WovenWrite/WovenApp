@@ -16,8 +16,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Woven" />
 
-    <title>Woven: Explore ideas. Pull threads.See where they lead.</title>
-    <meta name="description" content="Woven helps you capture ideas, connect meaning, and develop polished written work along the way." />
+    <title>Woven — Where your story comes together</title>
+    <meta name="description" content="A graph-native writing environment for novelists. Connect ideation, planning, and drafting in one space." />
 
     <!-- Social sharing preview (iMessage, Slack, Twitter, etc.) -->
     <meta property="og:type" content="website" />
@@ -33,6 +33,18 @@
     <meta name="twitter:image" content="https://wovenwrite.com/og-image.png" />
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+    <!-- Quill — required by DraftEditor.jsx. Without these, window.Quill is
+         undefined and the editor silently never initializes. -->
+    <link href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css" rel="stylesheet"/>
+    <link href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.bubble.css" rel="stylesheet"/>
+    <script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
+
+    <!-- Editor font choices — required by DraftEditor.jsx's font picker.
+         Crimson Text / DM Sans already load via App.jsx's CSS; the rest of
+         the FONTS list needs this to render correctly instead of falling
+         back to system fonts. -->
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=Merriweather:ital,wght@0,300;0,400;1,300&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Inter:wght@300;400;500&family=Roboto:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Open+Sans:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Nunito:wght@300;400;500;600&family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet"/>
   </head>
   <body>
     <div id="root"></div>
