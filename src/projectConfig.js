@@ -244,6 +244,17 @@ export function draftDateOf(draft) {
   return (draft.createdAt || '').slice(0, 10);
 }
 
+// 'YYYY-MM-DD' → 'Mar 4, 2026'. Returns '' for anything unparseable so
+// callers can just render the result without guarding.
+export function formatDraftDate(dateStr) {
+  if (!dateStr) return '';
+  var parts = String(dateStr).slice(0, 10).split('-');
+  if (parts.length !== 3) return '';
+  var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export function sortDraftsBySequence(drafts, proj) {
   var list = (drafts || []).slice();
   if (projSequence(proj) === 'date') {
