@@ -1410,8 +1410,11 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
         height (see .draft-card), so a second top-level flex child here was
         silently eating into the synopsis area below. */}
     <div style={{flexShrink:0}}>
-      {(seqNumbered||(seqByDate&&cardDate))&&(
-<div style={{fontFamily:'DM Sans, sans-serif',fontSize:11,fontWeight:600,letterSpacing:'.08em',textTransform:'uppercase',color:'#A88060',padding:'0 4px',marginBottom:2}}>{seqNumbered?label:cardDate}</div>
+      {/* Date eyebrow — numbered mode goes back to inline "1- Title" below,
+          matching the original styling exactly. Date has no prior precedent
+          to match, so it keeps the small caption treatment. */}
+      {seqByDate&&cardDate&&(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:11,fontWeight:600,letterSpacing:'.08em',textTransform:'uppercase',color:'#A88060',padding:'0 4px',marginBottom:2}}>{cardDate}</div>
       )}
       {structureMode&&editTitle?(
 <textarea autoFocus rows={2} value={titleVal} onChange={function(e){setTitleVal(e.target.value);}} onBlur={function(){app.updateDraft(pid,draft.id,{title:titleVal});setEditTitle(false);}} style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,background:'transparent',border:'2px solid '+AMBER,borderRadius:8,outline:'none',resize:'none',padding:'4px 8px',width:'100%',boxSizing:'border-box'}}/>
@@ -1421,7 +1424,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   onClick={function(){if(structureMode){setTitleVal(draft.title||'');setEditTitle(true);}}}
   onMouseEnter={function(e){if(structureMode)e.currentTarget.style.background='rgba(196,94,40,.06)';}}
   onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
-  {draft.title||'Untitled'}
+  {seqNumbered?label+'- ':''}{draft.title||'Untitled'}
 </div>
       )}
     </div>
