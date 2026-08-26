@@ -19,7 +19,7 @@ import {
   compressImage, uploadImage, deleteStorageImage,
   saveSnapshot
 } from './utils'
-import { PROJ_TYPES } from './projectConfig'
+import { PROJ_TYPES, projIsNumbered, projIsManualOrder, projSequence, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
 // Snapshot helpers, Supabase client, and env constants now live in ./utils
 
 // ── Storage ──
@@ -215,7 +215,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .view-layout{display:flex;flex-direction:column;flex:1;overflow:hidden;position:relative;}
 .view-area{flex:1;overflow-y:auto;padding:0;display:flex;flex-direction:column;}
 .cards-grid{display:flex;flex-wrap:wrap;gap:16px;padding:20px;align-content:flex-start;flex:1;}
-.draft-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s,box-shadow .15s;height:226px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
+.draft-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s,box-shadow .15s;height:244px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
 .draft-card:hover{box-shadow:0 4px 12px rgba(42,31,16,.08);}
 .draft-card.drag-over{border-color:var(--indigo);background:rgba(196,94,40,.03);}
 .draft-card.drop-before{border-left:3px solid var(--indigo);background:transparent;}
@@ -1358,6 +1358,12 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   function showOverflow(){if(!overflowRef.current||!overflowTt.current)return;var r=overflowRef.current.getBoundingClientRect();overflowTt.current.style.left=(r.left+r.width/2)+'px';overflowTt.current.style.top=(r.bottom+6)+'px';overflowTt.current.style.opacity='1';}
   function hideOverflow(){if(overflowTt.current)overflowTt.current.style.opacity='0';}
 
+  var cardProj=app.currentProject;
+  var seqNumbered=projIsNumbered(cardProj);
+  var seqByDate=projSequence(cardProj)==='date';
+  var canReorder=projIsManualOrder(cardProj);
+  var cardDate=seqByDate?formatDraftDate(draftDateOf(draft)):'';
+
   var AMBER='#c45e28';
 
   return(
@@ -1398,18 +1404,27 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   {/* Content */}
   <div style={{flex:1,background:'#F5EDE0',padding:'10px 15px',display:'flex',flexDirection:'column',gap:10,minHeight:0,borderRadius:'0 0 13px 13px',overflow:'hidden'}}>
 
-    {/* Title */}
-    {structureMode&&editTitle?(
+    {/* Title block — eyebrow (number or date) plus title share ONE flex slot
+        in the card's gap:10 column, so the eyebrow adds only its own line
+        height rather than a whole extra gapped row. The card has a fixed
+        height (see .draft-card), so a second top-level flex child here was
+        silently eating into the synopsis area below. */}
+    <div style={{flexShrink:0}}>
+      {(seqNumbered||(seqByDate&&cardDate))&&(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:11,fontWeight:600,letterSpacing:'.08em',textTransform:'uppercase',color:'#A88060',padding:'0 4px',marginBottom:2}}>{seqNumbered?label:cardDate}</div>
+      )}
+      {structureMode&&editTitle?(
 <textarea autoFocus rows={2} value={titleVal} onChange={function(e){setTitleVal(e.target.value);}} onBlur={function(){app.updateDraft(pid,draft.id,{title:titleVal});setEditTitle(false);}} style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,background:'transparent',border:'2px solid '+AMBER,borderRadius:8,outline:'none',resize:'none',padding:'4px 8px',width:'100%',boxSizing:'border-box'}}/>
-    ):(
+      ):(
 <div
-  style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',flexShrink:0,borderRadius:6,padding:'2px 4px',transition:'background .15s',cursor:structureMode?'text':'inherit',border:'2px solid transparent'}}
+  style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',borderRadius:6,padding:'2px 4px',transition:'background .15s',cursor:structureMode?'text':'inherit',border:'2px solid transparent'}}
   onClick={function(){if(structureMode){setTitleVal(draft.title||'');setEditTitle(true);}}}
   onMouseEnter={function(e){if(structureMode)e.currentTarget.style.background='rgba(196,94,40,.06)';}}
   onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
-  {label}- {draft.title||'Untitled'}
+  {draft.title||'Untitled'}
 </div>
-    )}
+      )}
+    </div>
 
     {/* Synopsis / preview */}
     {structureMode&&editSyn?(
@@ -1468,8 +1483,8 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   )}
 </div>
       )}
-      {/* Left: arrows in structure mode */}
-      {structureMode&&(
+      {/* Left: arrows in structure mode — hidden when order is derived from dates */}
+      {structureMode&&canReorder&&(
 <div style={{display:'flex',alignItems:'center',gap:4}}>
   <button onClick={function(e){e.stopPropagation();if(onMoveUp)onMoveUp(draft.id);}} title="Move left" style={{width:26,height:26,borderRadius:6,border:'1px solid var(--border)',background:'var(--bg2)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
     <span className="material-symbols-outlined" style={{fontSize:16,color:'var(--mid)'}}>arrow_back</span>
@@ -1732,7 +1747,7 @@ function CardsView({app}){
   function addDraft(){var nid=genId();app.addDraft(app.projId,{id:nid,projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqDrafts.length+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});app.openDraft(nid);}
   function moveUp(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<=0)return;app.reorderDraft(app.projId,did,sorted[idx-1].order||0);}
   function moveDown(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<0||idx>=sorted.length-1)return;app.reorderDraft(app.projId,did,sorted[idx+1].order||0);}
-  var displayed=applyFS(tree,filter,sort).filter(function(p){
+  var displayed=(sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort),app.currentProject):applyFS(tree,filter,sort)).filter(function(p){
     if(!searchQ.trim())return true;
     var q=searchQ.toLowerCase();
     var matchTitle=(p.title||'').toLowerCase().includes(q);
@@ -1787,7 +1802,7 @@ function TilesView({app}){
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
   function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
-  var displayed=applyFS(tree,filter,sort);
+  var displayed=sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort),app.currentProject):applyFS(tree,filter,sort);
   return(
 <div className="view-layout">
   <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
@@ -1831,6 +1846,8 @@ function TilesView({app}){
 
 // ── TableView ──
 function TableView({app}){
+  var tblNumbered=projIsNumbered(app.currentProject);
+  var tblByDate=projSequence(app.currentProject)==='date';
   var sf=useState(function(){return loadFilterState(app.projId);});var filter=sf[0];var setFilterRaw=sf[1];
   function setFilter(next){setFilterRaw(next);persistFilterState(app.projId,next);}
   var ss=useState('order');var sort=ss[0];var setSort=ss[1];
@@ -1873,7 +1890,7 @@ function TableView({app}){
   var allDrafts=app.allDrafts[app.projId]||[];
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
   var ltDrafts=allDrafts.filter(function(d){return d.status==='loose_thread'&&!d.archived;});
-  var displayed=applyFS(tree,filter,sort).filter(function(p){
+  var displayed=(sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort),app.currentProject):applyFS(tree,filter,sort)).filter(function(p){
     if(!searchQ.trim())return true;
     var q=searchQ.toLowerCase();
     return (p.title||'').toLowerCase().includes(q)||(p.synopsis||'').toLowerCase().includes(q)||(p.body?stripHtml(p.body).toLowerCase().includes(q):false);
@@ -1927,13 +1944,15 @@ function TableView({app}){
     <span draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}} style={{cursor:'grab',color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:18}}>drag_indicator</span></span>
     {isNested&&<button className="btn-icon" style={{padding:2}} title="Unnest draft" onClick={function(){app.updateDraft(app.projId,draft.id,{parentId:null,order:Date.now()});}}><span className="mi" style={{fontSize:14,color:'var(--mid)'}}>vertical_align_top</span></button>}
   </div></td>
+  {(tblNumbered||tblByDate)&&(
   <td style={{color:'var(--mid)',fontSize:11,whiteSpace:'nowrap',paddingLeft:isNested?28:12}}>
     <div style={{display:'flex',alignItems:'center',gap:2}}>
       {hasChildren&&<span className="mi" style={{fontSize:16,cursor:'pointer',color:'var(--mid)',flexShrink:0,lineHeight:1}} onClick={function(){app.updateDraft(app.projId,draft.id,{nestExpanded:!isExpanded});}}>{isExpanded?'expand_less':'expand_more'}</span>}
       {isNested&&<span className="mi" style={{fontSize:12,color:'var(--border)',flexShrink:0}}>subdirectory_arrow_right</span>}
-      {label}
+      {tblNumbered?label:formatDraftDate(draftDateOf(draft))}
     </div>
   </td>
+  )}
   {visCols.map(function(col){return <td key={col}>{renderCell(col,draft)}</td>;})}
   <td><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
     <span className="material-symbols-outlined" style={{fontSize:20}}>arrow_forward</span>
@@ -1950,7 +1969,8 @@ function TableView({app}){
     <thead>
       <tr style={{background:'#E2D0B8'}}>
         <th style={{width:28,background:'#E2D0B8'}}/>
-        <th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>
+        {tblNumbered&&<th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>}
+        {tblByDate&&<th style={{width:96,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>Date</th>}
         {visCols.map(function(col,ci){var av=allAvailCols.find(function(c){return c.id===col;});return(
 <th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600,cursor:'grab',userSelect:'none'}} className="resizable"
   draggable={true}
