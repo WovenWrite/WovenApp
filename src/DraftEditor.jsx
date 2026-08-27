@@ -1,753 +1,1445 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import PropertiesDrawer from './PropertiesDrawer'
-import StrandsDrawer from './StrandsDrawer'
-import VersionsDrawer from './VersionsDrawer'
-// ── DraftEditor.jsx ──
-// Quill-based draft editor.
-// Requires in index.html:
-//   <link href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css" rel="stylesheet"/>
-//   <link href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.bubble.css" rel="stylesheet"/>
-//   <script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
-// Google Fonts (add to index.html):
-//   <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&family=Merriweather:ital,wght@0,300;0,400;1,300&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Inter:wght@300;400;500&family=Roboto:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Open+Sans:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Nunito:wght@300;400;500;600&family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet"/>
+// @ts-nocheck
+// Woven — ExploreCanvas v2
+// src/ExploreCanvas.jsx
+//
+// Prerequisites:
+//   - @xyflow/react in package.json
+//   - import '@xyflow/react/dist/style.css' in src/main.tsx
+//   - vite.config: resolve: { dedupe: ['react','react-dom'] }
+//
+// Usage in App.jsx:
+//   import ExploreCanvas from './ExploreCanvas'
+//   if(view==='canvas') vc = <ExploreCanvas app={app} />;
 
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import {
+  ReactFlow, ReactFlowProvider, Background, BackgroundVariant,
+  Controls, MiniMap, addEdge, useNodesState, useEdgesState, useReactFlow,
+  Handle, Position, NodeResizer, MarkerType,
+} from '@xyflow/react'
+import { Drawer, DeleteConfirmModal } from './SharedUI'
+import { STATUSES, genId, initials, getSupabase } from './utils'
 
-var T={
-  navBg:'#E2D0B8',
-  toolBg:'#FDF8F0',
-  bodyBg:'#FDF8F0',
-  text:'#7A5A38',
-  textDark:'#2a1f10',
-  bodyText:'#4A3520',
-  primary:'#6B4A26',
-  amber:'#c45e28',
-  border:'#E2D0B8',
-  stroke:'#A88060',
-  bg1:'#f5ede0',
-  bg2:'#ede0cc',
-  white:'#ffffff',
-};
+// ─────────────────────────────────────────────────────────────
+// STYLES
+// ─────────────────────────────────────────────────────────────
+const CANVAS_CSS = `
+.ex-shell{display:flex;flex-direction:column;height:100%;width:100%;overflow:hidden;}
+.ex-body{display:flex;flex:1;overflow:hidden;min-height:0;}
+.ex-canvas-col{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0;}
 
-var FONTS=['Crimson Text','Times New Roman','Lora','Merriweather','Playfair Display','Source Serif 4','DM Sans','Inter','Roboto','Open Sans','Nunito','IBM Plex Mono'];
-var FONT_LABELS={'Crimson Text':'Crimson Text','Times New Roman':'Times New Roman','Lora':'Lora','Merriweather':'Merriweather','Playfair Display':'Playfair Display','Source Serif 4':'Source Serif 4','DM Sans':'DM Sans','Inter':'Inter','Roboto':'Roboto','Open Sans':'Open Sans','Nunito':'Nunito','IBM Plex Mono':'IBM Plex Mono'};
-var ZOOM_OPTS=[50,75,100,125,150,175,200];
-var DEFAULT_FONT_SIZE=19;
+/* Board tabs — styled to match the Strands page subnav/tab treatment */
+.ex-tabs{display:flex;align-items:flex-end;height:55px;background:#EDE0CC;
+  border-bottom:1px solid #A88060;padding:0 16px;gap:0;flex-shrink:0;overflow:hidden;}
+.ex-tab{display:flex;align-items:center;gap:6px;height:44px;padding:0 18px;
+  border-radius:10px 10px 0 0;font-size:16px;font-family:'DM Sans',sans-serif;font-weight:600;
+  cursor:pointer;color:rgba(122,90,56,.75);border:1px solid transparent;border-bottom:none;
+  transition:all .15s;white-space:nowrap;max-width:240px;flex-shrink:0;margin-right:2px;
+  position:relative;bottom:0;}
+.ex-tab:hover:not(.active){color:#7A5A38;background:rgba(253,248,240,.4);}
+.ex-tab.active{background:#FDF8F0;color:#6B4A26;border-color:#A88060;
+  border-bottom:2px solid #FDF8F0;margin-bottom:-1px;}
+.ex-tab-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
+.ex-tab-name-input{background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;
+  font-size:16px;font-weight:600;color:inherit;width:100px;padding:0;border-radius:0;}
+.ex-tab-close{font-size:15px;color:rgba(122,90,56,.5);border-radius:3px;padding:1px 2px;
+  display:flex;align-items:center;justify-content:center;font-family:'Material Icons';
+  line-height:1;flex-shrink:0;}
+.ex-tab-close:hover{background:rgba(168,128,96,.25);color:#6B4A26;}
+.ex-tab-add{width:32px;height:32px;border-radius:8px;border:1px dashed #A88060;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  color:rgba(122,90,56,.6);font-size:20px;flex-shrink:0;margin:0 0 6px 6px;
+  transition:all .12s;line-height:1;user-select:none;}
+.ex-tab-add:hover{border-color:var(--indigo);color:var(--indigo);background:rgba(196,94,40,.08);}
 
-function countWords(t){if(!t||!t.trim())return 0;return t.trim().split(/\s+/).filter(function(w){return w.length>0;}).length;}
-function genId(){return '_'+Math.random().toString(36).slice(2)+Date.now().toString(36);}
+/* Canvas row */
+.ex-canvas-row{flex:1;display:flex;overflow:hidden;min-height:0;}
+.ex-canvas-area{flex:1;position:relative;overflow:hidden;min-height:0;}
 
-// ── iOS Toggle ──
-function IOSToggle({on,onChange,label}){
-  return(
-<div style={{display:'flex',alignItems:'center',gap:8}}>
-  {label&&<span style={{fontSize:13,color:T.text,fontFamily:'DM Sans, sans-serif'}}>{label}</span>}
-  <div onClick={function(){onChange(!on);}} style={{width:40,height:22,borderRadius:11,background:on?T.amber:T.border,cursor:'pointer',position:'relative',transition:'background .2s',flexShrink:0}}>
-    <div style={{position:'absolute',top:2,left:on?20:2,width:18,height:18,borderRadius:'50%',background:T.white,boxShadow:'0 1px 3px rgba(0,0,0,.2)',transition:'left .2s'}}/>
-  </div>
-</div>
-  );
+/* React Flow */
+.react-flow__attribution{display:none!important;}
+.react-flow__background{background:var(--bg0)!important;}
+.react-flow__controls{box-shadow:0 2px 8px rgba(42,31,16,.10)!important;
+  border:1px solid var(--border)!important;border-radius:var(--r)!important;overflow:hidden;}
+.react-flow__controls-button{background:var(--bg1)!important;
+  border-bottom:1px solid var(--border)!important;fill:var(--mid)!important;}
+.react-flow__controls-button:hover{background:var(--bg2)!important;}
+.react-flow__minimap{border:1px solid var(--border)!important;border-radius:var(--r)!important;
+  overflow:hidden;box-shadow:0 2px 8px rgba(42,31,16,.10)!important;}
+.react-flow__edge-path{stroke:var(--bg4);stroke-width:2;}
+.react-flow__edge.selected .react-flow__edge-path{stroke:var(--indigo);}
+.react-flow__handle{width:12px!important;height:12px!important;
+  background:var(--bg3)!important;border:2px solid var(--bg4)!important;
+  border-radius:50%!important;transition:all .2s;opacity:0;}
+.react-flow__node:hover .react-flow__handle{opacity:1;background:var(--indigo)!important;
+  border-color:var(--indigoL)!important;box-shadow:0 0 0 3px rgba(196,94,40,.25);}
+.react-flow__handle:hover{transform:scale(1.4);opacity:1!important;
+  background:var(--indigo)!important;box-shadow:0 0 0 4px rgba(196,94,40,.3)!important;}
+.react-flow__node:hover .woven-card:not(.selected){
+  box-shadow:0 0 0 2px rgba(196,94,40,.2),0 4px 16px rgba(42,31,16,.1);}
+
+/* Right panel */
+.ex-right{display:flex;flex-direction:row-reverse;flex-shrink:0;}
+
+/* Toolbar */
+.ex-toolbar{width:60px;background:var(--bg1);display:flex;flex-direction:column;
+  align-items:center;padding:10px 0;gap:1px;flex-shrink:0;border-left:1px solid var(--border);}
+.ex-tool{width:52px;min-height:46px;border-radius:8px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;cursor:pointer;color:var(--mid);
+  transition:all .12s;gap:2px;padding:4px 2px;}
+.ex-tool:hover{background:var(--bg2);color:var(--text);}
+.ex-tool.active{background:rgba(196,94,40,.12);color:var(--indigo);}
+.ex-tool .mi{font-size:18px;line-height:1;}
+.ex-tool-lbl{font-size:9px;font-weight:500;text-align:center;line-height:1;}
+.ex-tool-sep{width:32px;height:1px;background:var(--border);margin:4px 0;flex-shrink:0;}
+
+/* Drawer */
+.ex-drawer{width:0;overflow:hidden;transition:width .2s ease;background:var(--bg1);
+  border-left:1px solid var(--border);display:flex;flex-direction:column;position:relative;}
+.ex-drawer.open{margin:5px 5px 5px 0;border:1px solid var(--border);border-radius:var(--r);}
+.ex-drawer.resizing{transition:none;}
+.ex-drawer-inner{display:flex;flex-direction:column;height:100%;overflow:hidden;}
+.ex-drawer-resize-handle{position:absolute;top:0;left:-4px;width:8px;height:100%;
+  cursor:col-resize;z-index:5;touch-action:none;}
+.ex-drawer-resize-handle::after{content:'';position:absolute;top:0;left:3px;width:2px;height:100%;
+  background:transparent;transition:background .15s;}
+.ex-drawer-resize-handle:hover::after,.ex-drawer.resizing .ex-drawer-resize-handle::after{
+  background:var(--indigo);}
+.ex-edrawer-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+
+/* Strand collection tabs — scrollable with overflow arrows */
+.ex-coll-tabs-wrap{display:flex;align-items:center;border-bottom:1px solid var(--border);
+  flex-shrink:0;background:var(--bg1);}
+.ex-coll-tabs-scroll{display:flex;overflow-x:auto;flex:1;scrollbar-width:none;}
+.ex-coll-tabs-scroll::-webkit-scrollbar{display:none;}
+.ex-coll-tab{padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;
+  color:var(--mid);border-bottom:2px solid transparent;white-space:nowrap;
+  transition:color .12s;flex-shrink:0;}
+.ex-coll-tab:hover{color:var(--text);}
+.ex-coll-tab.active{color:var(--indigo);border-bottom-color:var(--indigo);}
+.ex-coll-arrow{width:24px;height:32px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--mid);flex-shrink:0;font-size:14px;}
+.ex-coll-arrow:hover{color:var(--text);}
+
+.ex-edrawer-section{padding:10px 14px;}
+.ex-edrawer-lbl{font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;
+  letter-spacing:.08em;margin-bottom:7px;display:block;}
+.ex-edrawer-row{display:flex;align-items:center;gap:10px;padding:9px 14px;
+  border-bottom:1px solid var(--border);cursor:grab;user-select:none;transition:background .12s;}
+.ex-edrawer-row:hover{background:var(--bg2);}
+.ex-edrawer-row:active{cursor:grabbing;}
+.ex-edrawer-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0;overflow:hidden;}
+.ex-edrawer-av img{width:100%;height:100%;object-fit:cover;}
+.ex-edrawer-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.ex-edrawer-info{flex:1;min-width:0;}
+.ex-edrawer-name{font-family:var(--serif);font-size:14px;font-weight:600;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ex-edrawer-sub{font-size:11px;color:var(--mid);}
+.ex-edrawer-hint{font-size:12px;color:var(--placeholder);font-family:var(--scribble);
+  opacity:0;transition:opacity .12s;flex-shrink:0;}
+.ex-edrawer-row:hover .ex-edrawer-hint{opacity:1;}
+
+/* Woven cards */
+.woven-card{background:var(--bg1);border:1.5px solid var(--border);border-radius:10px;
+  display:flex;flex-direction:column;font-family:var(--ui);overflow:hidden;position:relative;
+  box-shadow:0 2px 8px rgba(42,31,16,.08);min-width:180px;max-width:260px;}
+.woven-card.selected{border-color:var(--indigo);box-shadow:0 0 0 2px rgba(196,94,40,.15);}
+.woven-card-hdr{display:flex;align-items:center;gap:7px;padding:8px 10px;
+  background:var(--bg0);flex-shrink:0;}
+.woven-card-av{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;
+  align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;overflow:hidden;}
+.woven-card-av img{width:100%;height:100%;object-fit:cover;}
+.woven-card-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.woven-card-name{font-family:var(--serif);font-size:14px;font-weight:600;color:var(--text);
+  flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.woven-card-status-badge{font-size:9px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.05em;color:#fff;padding:2px 5px;border-radius:3px;flex-shrink:0;}
+.woven-card-body.has-content{padding:7px 10px;border-top:1px solid var(--border);}
+.woven-card-field{margin-bottom:5px;}
+.woven-card-field:last-child{margin-bottom:0;}
+.woven-card-field-lbl{font-size:9px;font-weight:600;color:var(--indigo);text-transform:uppercase;
+  letter-spacing:.06em;margin-bottom:1px;}
+.woven-card-field-val{font-size:11px;color:var(--body-text);line-height:1.4;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+
+/* Sticky note */
+.ex-sticky{border-radius:8px;display:flex;flex-direction:column;overflow:hidden;position:relative;
+  min-width:160px;min-height:60px;box-shadow:2px 3px 10px rgba(0,0,0,.08);}
+.ex-sticky-drag{height:18px;cursor:grab;display:flex;align-items:center;
+  padding:0 6px;flex-shrink:0;opacity:.4;}
+.ex-sticky-drag:active{cursor:grabbing;}
+.ex-sticky-drag .mi{font-size:13px;}
+.ex-sticky-content{padding:4px 12px 10px;flex:1;display:flex;min-height:0;}
+.ex-sticky-input{background:none;border:none;outline:none;width:100%;resize:none;line-height:1.45;
+  flex:1;min-height:0;height:100%;box-sizing:border-box;}
+.ex-sticky-input.is-title{font-family:var(--serif);font-size:16px;font-weight:600;}
+.ex-sticky-input.is-body{font-family:var(--ui);font-size:13px;}
+.ex-sticky-input::placeholder{opacity:.4;}
+
+/* Image node — no header bar, corner grip only */
+.ex-image-node{border:1.5px solid var(--border);border-radius:8px;overflow:hidden;
+  box-shadow:0 2px 8px rgba(42,31,16,.08);background:var(--bg1);
+  display:flex;align-items:center;justify-content:center;position:relative;}
+.ex-image-grip{position:absolute;top:4px;left:4px;width:20px;height:20px;
+  border-radius:4px;background:rgba(255,255,255,.7);display:flex;align-items:center;
+  justify-content:center;cursor:grab;z-index:1;opacity:0;transition:opacity .15s;}
+.ex-image-node:hover .ex-image-grip{opacity:1;}
+.ex-image-grip:active{cursor:grabbing;}
+.ex-image-grip .mi{font-size:13px;color:var(--mid);}
+.ex-image-node img{display:block;width:100%;height:100%;object-fit:cover;}
+.ex-image-empty{width:180px;height:130px;display:flex;align-items:center;
+  justify-content:center;flex-direction:column;gap:6px;cursor:pointer;color:var(--placeholder);}
+.ex-image-empty .mi{font-size:32px;}
+.ex-image-empty span{font-size:12px;}
+
+/* Always-tappable node menu button — touch parity for right-click-only
+   secondary actions (colour, shape, style). Subtle on desktop, but never
+   hover-gated, so it works on touch devices with no hover state. */
+.ex-node-menu-btn{position:absolute;top:4px;right:4px;width:26px;height:26px;
+  border-radius:6px;background:rgba(255,255,255,.6);border:none;display:flex;
+  align-items:center;justify-content:center;cursor:pointer;z-index:3;
+  opacity:.6;transition:opacity .15s,background .15s;padding:0;}
+.ex-node-menu-btn:hover,.ex-node-menu-btn:focus-visible{opacity:1;background:rgba(255,255,255,.9);}
+.ex-node-menu-btn .mi{font-size:16px;color:var(--mid);}
+.ex-node-menu-btn--inline{position:static;flex-shrink:0;background:transparent;}
+.ex-node-menu-btn--inline:hover,.ex-node-menu-btn--inline:focus-visible{background:var(--bg2);}
+
+/* Shape node */
+.ex-shape-node{position:relative;box-shadow:0 2px 8px rgba(42,31,16,.08);}
+
+/* Text node — no chrome, just editable text on the canvas */
+.ex-text-node{position:relative;display:flex;flex-direction:column;min-width:60px;min-height:30px;}
+.ex-text-drag{height:14px;cursor:grab;display:flex;align-items:center;
+  padding:0 4px;flex-shrink:0;opacity:0;transition:opacity .15s;}
+.ex-text-node:hover .ex-text-drag{opacity:.4;}
+.ex-text-drag:active{cursor:grabbing;}
+.ex-text-drag .mi{font-size:12px;}
+.ex-text-input{background:none;border:none;outline:none;width:100%;flex:1;resize:none;
+  font-family:var(--serif);line-height:1.3;}
+.ex-text-input::placeholder{opacity:.35;}
+
+/* Shape tool popover — hangs off the Shape toolbar button */
+.ex-shape-popover{position:absolute;right:64px;top:0;background:var(--bg1);
+  border:1px solid var(--border);border-radius:var(--r);box-shadow:0 8px 28px rgba(42,31,16,.16);
+  padding:6px;display:flex;flex-direction:column;gap:2px;z-index:20;}
+.ex-shape-popover-item{width:38px;height:38px;border-radius:6px;display:flex;
+  align-items:center;justify-content:center;cursor:pointer;color:var(--mid);transition:all .12s;}
+.ex-shape-popover-item:hover{background:var(--bg2);color:var(--indigo);}
+.ex-shape-popover-item .mi{font-size:20px;}
+
+/* Context menu */
+.ex-ctx{position:fixed;z-index:9999;background:var(--bg1);border:1px solid var(--border);
+  border-radius:var(--rl);box-shadow:0 8px 32px rgba(42,31,16,.16);
+  min-width:220px;font-family:var(--ui);}
+.ex-ctx-lbl{font-size:9px;font-weight:600;color:var(--indigo);text-transform:uppercase;
+  letter-spacing:.08em;padding:8px 14px 3px;}
+.ex-ctx-row{display:flex;align-items:center;gap:8px;padding:6px 14px;cursor:pointer;
+  transition:background .1s;font-size:13px;color:var(--body-text);}
+.ex-ctx-row:hover{background:var(--bg2);color:var(--text);}
+.ex-ctx-check{width:16px;height:16px;border-radius:3px;border:1.5px solid var(--bg4);
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  background:var(--bg0);transition:all .1s;}
+.ex-ctx-check.on{background:var(--indigo);border-color:var(--indigo);}
+.ex-ctx-check svg{display:block;}
+.ex-ctx-swatches{display:flex;align-items:center;gap:6px;padding:6px 14px 10px;}
+.ex-ctx-swatch{width:18px;height:18px;border-radius:50%;cursor:pointer;
+  border:2px solid transparent;transition:transform .1s;flex-shrink:0;}
+.ex-ctx-swatch:hover,.ex-ctx-swatch.active{transform:scale(1.25);border-color:rgba(0,0,0,.25);}
+.ex-ctx-div{height:1px;background:var(--border);margin:4px 0;}
+.ex-ctx-action{display:flex;align-items:center;gap:8px;padding:7px 14px;
+  cursor:pointer;transition:background .1s;font-size:13px;}
+.ex-ctx-action:hover{background:var(--bg2);}
+.ex-ctx-action.danger{color:var(--danger);}
+.ex-ctx-action .mi{font-size:15px;}
+
+`
+
+function CanvasStyles() {
+  return <style dangerouslySetInnerHTML={{ __html: CANVAS_CSS }} />
 }
 
-// ── Editable Title ──
-function EditableTitle({value,onChange,color}){
-  var se=useState(false);var editing=se[0];var setEditing=se[1];
-  var sv=useState(value);var val=sv[0];var setVal=sv[1];
-  var ref=useRef(null);
-  var measureRef=useRef(null);
-  useEffect(function(){setVal(value);},[value]);
-  useEffect(function(){if(editing&&ref.current){ref.current.focus();ref.current.select();}},[editing]);
-  function commit(){setEditing(false);if(val.trim()&&val.trim()!==value)onChange(val.trim());else setVal(value);}
-  // Shared text style so span and input look identical
-  var textStyle={fontFamily:'Crimson Text, serif',fontSize:16,fontWeight:600,color:color||T.textDark,padding:'2px 8px',borderRadius:6,whiteSpace:'nowrap'};
-  return(
-<div style={{position:'relative',display:'inline-flex',maxWidth:'40ch',minWidth:'4ch'}}>
-  {/* Hidden measuring span — always rendered, sizes the container */}
-  <span ref={measureRef} aria-hidden="true" style={Object.assign({},textStyle,{visibility:'hidden',position:'absolute',pointerEvents:'none',maxWidth:'40ch',overflow:'hidden'})}>
-    {(editing?val:value)||'Untitled draft'}
-  </span>
-  {editing?(
-<input ref={ref} value={val}
-  onChange={function(e){setVal(e.target.value);}}
-  onBlur={commit}
-  onKeyDown={function(e){if(e.key==='Enter')commit();if(e.key==='Escape'){setVal(value);setEditing(false);}}}
-  style={Object.assign({},textStyle,{background:'transparent',border:'1px solid '+T.amber,outline:'none',width:'100%',boxSizing:'border-box',color:color||T.textDark})}/>
-  ):(
-<span onClick={function(){setEditing(true);}} title="Click to edit"
-  style={Object.assign({},textStyle,{border:'1px solid transparent',cursor:'text',overflow:'hidden',textOverflow:'ellipsis',display:'block',width:'100%',transition:'border-color .15s'})}
-  onMouseOver={function(e){e.currentTarget.style.borderColor=T.stroke;}}
-  onMouseOut={function(e){e.currentTarget.style.borderColor='transparent';}}>
-  {value||'Untitled draft'}
-</span>
-  )}
-</div>
-  );
+// ─────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────
+// STATUSES now lives in ./utils
+
+const STICKY_COLORS = [
+  { id: 'none',  bg: '#fdf8f0', border: '#e2d0b8', text: '#2a1f10' },
+  { id: 'amber', bg: '#fff4e0', border: '#f0c878', text: '#5a3800' },
+  { id: 'sage',  bg: '#eaf5ee', border: '#9ecfaa', text: '#1a3d25' },
+  { id: 'rose',  bg: '#fdeef2', border: '#f0a8bc', text: '#5a1a2a' },
+  { id: 'sky',   bg: '#e8f2fc', border: '#9abee8', text: '#1a3050' },
+  { id: 'lilac', bg: '#f2eefa', border: '#c8aae8', text: '#3a1a5a' },
+]
+
+const TOOL_ITEMS = [
+  { id: 'select',  icon: 'near_me',            label: 'Select'  },
+  { id: 'connect', icon: 'account_tree',       label: 'Connect' },
+  { id: 'text',    icon: 'text_fields',        label: 'Text'    },
+  { id: 'shape',   icon: 'category',           label: 'Shape'   },
+  { id: 'sticky',  icon: 'sticky_note_2',       label: 'Sticky'  },
+  { id: 'image',   icon: 'add_photo_alternate', label: 'Image'   },
+]
+const SHAPE_VARIANTS = [
+  { id: 'rectangle', icon: 'rectangle',       label: 'Rectangle' },
+  { id: 'ellipse',   icon: 'circle',          label: 'Ellipse'   },
+  { id: 'diamond',   icon: 'diamond',         label: 'Diamond'   },
+  { id: 'triangle',  icon: 'change_history',  label: 'Triangle'  },
+]
+const DRAWER_ITEMS = [
+  { id: 'strands',       icon: 'share',        label: 'Strands' },
+  { id: 'drafts',        icon: 'edit_note',    label: 'Drafts'  },
+  { id: 'loose_threads', icon: 'scatter_plot', label: 'Threads' },
+]
+const DRAWER_MIN_W = 220
+const DRAWER_MAX_W = 520
+
+// A tool id is "place mode" if choosing it means the next canvas click/tap
+// drops a new node — sticky, image, text, or any shape:<variant>.
+function isPlaceModeTool(tool) {
+  return tool === 'sticky' || tool === 'image' || tool === 'text' || tool.startsWith('shape:')
 }
 
-// ── Icon Button ──
-function IconBtn({icon,title,onClick,active,color}){
-  return(
-<button onClick={onClick} title={title} style={{display:'flex',alignItems:'center',justifyContent:'center',padding:10,background:active?'rgba(196,94,40,.12)':'transparent',border:'none',borderRadius:8,cursor:'pointer',color:color||(active?T.amber:T.text),transition:'background .15s,color .15s',flexShrink:0}}
-  onMouseOver={function(e){if(!active){e.currentTarget.style.background='rgba(42,31,16,.06)';}}}
-  onMouseOut={function(e){if(!active){e.currentTarget.style.background='transparent';}}}>
-  <span className="mi" style={{fontSize:22}}>{icon}</span>
-</button>);
+// ─────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────
+// genId and initials now live in ./utils
+function accentColor(item) {
+  if (!item) return '#aaa'
+  if (item.itemType === 'strand') return item.color || '#aaa'
+  return STATUSES[item.status]?.color || '#aaa'
 }
 
-// ── Select dropdown styled ──
-function StyledSelect({value,onChange,options,style}){
-  return(
-<select value={value} onChange={function(e){onChange(e.target.value);}} style={Object.assign({padding:'4px 8px',background:T.toolBg,border:'1px solid '+T.stroke,borderRadius:6,fontSize:13,color:T.text,fontFamily:'DM Sans, sans-serif',cursor:'pointer',outline:'none'},style||{})}>
-  {options.map(function(o){return(<option key={o.value} value={o.value}>{o.label}</option>);})}
-</select>);
-}
-
-// ── Branch Dropdown ──
-function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}){
-  var so=useState(false);var open=so[0];var setOpen=so[1];
-  var sc=useState(false);var creating=sc[0];var setCreating=sc[1];
-  var sn=useState('');var newName=sn[0];var setNewName=sn[1];
-  var ref=useRef(null);
-  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
-  var hasBranches=branches&&branches.length>1;
-  var activeBranch=branches&&branches.find(function(b){return b.id===activeBranchId;})||branches&&branches[0];
-  var btnLabel=hasBranches?(branches.length+' strands'):'Create strand';
-  function handleCreate(){setCreating(true);var num=branches?branches.length+1:2;var draft=activeBranch&&activeBranch.draftTitle||'Draft';setNewName(draft+'_Strand_'+num);}
-  function confirmCreate(){if(newName.trim())onCreate(newName.trim());setCreating(false);setNewName('');setOpen(false);}
-  var sorted=branches?[].concat(branches.filter(function(b){return b.id===activeBranchId;}),branches.filter(function(b){return b.id!==activeBranchId;})):[];
-  return(
-<div ref={ref} style={{position:'relative'}}>
-  <button onClick={function(){if(!hasBranches){handleCreate();setOpen(true);}else setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background:'transparent',border:'1px solid '+T.border,borderRadius:6,cursor:'pointer',fontSize:13,color:hasBranches?T.text:T.text,fontFamily:'DM Sans, sans-serif',flexShrink:0,opacity:hasBranches?1:.55}}>
-    <span className="mi" style={{fontSize:16}}>{hasBranches?'account_tree':'add'}</span>
-    {btnLabel}
-    {hasBranches&&<span className="mi" style={{fontSize:14,transform:open?'rotate(180deg)':'rotate(0)',transition:'transform .15s'}}>expand_more</span>}
-  </button>
-  {open&&(
-<div style={{position:'absolute',top:'calc(100% + 6px)',left:0,zIndex:600,background:T.toolBg,border:'1px solid '+T.border,borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.14)',minWidth:220,overflow:'hidden'}}>
-  {creating?(
-<div style={{padding:'10px 12px'}}>
-  <div style={{fontSize:11,color:T.text,fontWeight:600,marginBottom:6,textTransform:'uppercase',letterSpacing:'.06em',fontFamily:'DM Sans, sans-serif'}}>Strand name</div>
-  <input autoFocus value={newName} onChange={function(e){setNewName(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')confirmCreate();if(e.key==='Escape'){setCreating(false);setOpen(false);}}} style={{width:'100%',padding:'7px 10px',fontSize:13,border:'1px solid '+T.border,borderRadius:6,background:T.bg1,color:T.textDark,fontFamily:'DM Sans, sans-serif',boxSizing:'border-box',marginBottom:8}}/>
-  <div style={{display:'flex',gap:6}}>
-    <button onClick={confirmCreate} style={{flex:1,padding:'6px 0',background:T.primary,color:T.white,border:'none',borderRadius:6,fontSize:12,cursor:'pointer',fontFamily:'DM Sans, sans-serif',fontWeight:600}}>Create</button>
-    <button onClick={function(){setCreating(false);}} style={{padding:'6px 10px',background:'transparent',border:'1px solid '+T.border,borderRadius:6,fontSize:12,cursor:'pointer',color:T.text,fontFamily:'DM Sans, sans-serif'}}>Cancel</button>
-  </div>
-</div>
-  ):(
-<div>
-  {sorted.map(function(b,i){var isActive=b.id===activeBranchId;return(
-<div key={b.id} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',borderBottom:i<sorted.length-1?'1px solid '+T.border:'none',cursor:'pointer',background:isActive?'rgba(196,94,40,.06)':'transparent',transition:'background .1s'}}
-  onClick={function(){if(!isActive){onSwitch(b.id);setOpen(false);}}}
-  onMouseOver={function(e){if(!isActive)e.currentTarget.style.background='rgba(42,31,16,.04)';}}
-  onMouseOut={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
-  <span style={{flex:1,fontSize:13,fontWeight:isActive?600:400,color:isActive?T.amber:T.textDark,fontFamily:'Crimson Text, serif'}}>{b.name}</span>
-  <button onClick={function(e){e.stopPropagation();onSetPrimary(b.id);}} style={{background:'none',border:'none',cursor:'pointer',padding:2,display:'flex',alignItems:'center',color:b.isPrimary?T.amber:T.border,transition:'color .15s'}}
-    onMouseOver={function(e){e.currentTarget.style.color=T.amber;}}
-    onMouseOut={function(e){e.currentTarget.style.color=b.isPrimary?T.amber:T.border;}}>
-    <span className="mi" style={{fontSize:18,fontVariationSettings:b.isPrimary?"'FILL' 1":"'FILL' 0"}}>star</span>
-  </button>
-</div>
-  );})}
-  <div style={{padding:'8px 14px',borderTop:'1px solid '+T.border}}>
-    <button onClick={handleCreate} style={{width:'100%',padding:'7px 0',background:'transparent',border:'1px dashed '+T.border,borderRadius:6,fontSize:12,color:T.text,cursor:'pointer',fontFamily:'DM Sans, sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-      <span className="mi" style={{fontSize:14}}>add</span>New strand
-    </button>
-  </div>
-</div>
-  )}
-</div>
-  )}
-</div>);
-}
-
-
-// ── ExportButton with loading state ──
-function ExportButton({icon,label,onExport,onDone}){
-  var sl=useState(false);var loading=sl[0];var setLoading=sl[1];
-  var sd=useState(false);var done=sd[0];var setDone=sd[1];
-  function handle(){
-    setLoading(true);
-    setTimeout(function(){
-      onExport();
-      setLoading(false);setDone(true);
-      setTimeout(function(){setDone(false);if(onDone)onDone();},1200);
-    },200);
+function buildPayload(raw, itemType, templates) {
+  if (itemType === 'strand') {
+    const tpl = (templates || []).find(t => t.id === raw.templateId)
+    return { ...raw, itemType, fieldDefs: tpl?.fields || [] }
   }
-  return(
-<button onClick={handle} disabled={loading} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:done?'rgba(47,153,102,.08)':'transparent',border:'none',borderBottom:'1px solid '+T.border,cursor:'pointer',textAlign:'left',fontFamily:'DM Sans, sans-serif',transition:'background .15s'}}
-  onMouseOver={function(e){if(!loading&&!done)e.currentTarget.style.background='rgba(42,31,16,.04)';}}
-  onMouseOut={function(e){if(!done)e.currentTarget.style.background='transparent';}}>
-  <span className="mi" style={{fontSize:20,color:done?'#2f9966':T.text}}>
-    {loading?'hourglass_top':done?'check_circle':icon}
-  </span>
-  <span style={{fontSize:13,fontWeight:600,color:done?'#2f9966':T.textDark}}>
-    {loading?'Preparing…':done?'Downloaded!':label}
-  </span>
-</button>
-  );
+  if (itemType === 'draft') {
+    return {
+      ...raw, itemType, name: raw.title,
+      fields: { synopsis: raw.synopsis },
+      fieldDefs: [
+        { id: 'synopsis', label: 'Synopsis' },
+        { id: 'status',   label: 'Status'   },
+      ],
+    }
+  }
+  return {
+    ...raw, itemType, name: raw.title || raw.synopsis || '(untitled)',
+    fields: { synopsis: raw.synopsis },
+    fieldDefs: [{ id: 'synopsis', label: 'Synopsis' }],
+  }
 }
 
-// ── Share Dropdown ──
-function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepublish}){
-  var so=useState(false);var open=so[0];var setOpen=so[1];
-  var sl=useState(false);var loading=sl[0];var setLoading=sl[1];
-  var sc=useState(false);var copied=sc[0];var setCopied=sc[1];
-  var ref=useRef(null);
-  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
-  function handleCopy(){navigator.clipboard&&navigator.clipboard.writeText(shareLink);setCopied(true);setTimeout(function(){setCopied(false);},2500);}
-  async function handleGenerate(){setLoading(true);await onGenerateLink();setLoading(false);}
-  return(
-<div ref={ref} style={{position:'relative'}}>
-  <button onClick={function(){setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',background:T.primary,color:T.white,border:'none',borderRadius:7,cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'DM Sans, sans-serif',whiteSpace:'nowrap'}}
-    onMouseOver={function(e){e.currentTarget.style.opacity='.88';}}
-    onMouseOut={function(e){e.currentTarget.style.opacity='1';}}>
-    <span>Share</span>
-    <span className="mi" style={{fontSize:18,lineHeight:1,display:'flex',alignItems:'center',transform:open?'rotate(180deg)':'rotate(0deg)',transition:'transform .15s'}}>expand_more</span>
-  </button>
-  {open&&(
-<div style={{position:'absolute',top:'calc(100% + 6px)',right:0,zIndex:600,background:T.toolBg,border:'1px solid '+T.border,borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.14)',width:280,overflow:'hidden'}}>
-  <ExportButton icon="picture_as_pdf" label="Export PDF" onExport={onExportPDF} onDone={function(){setOpen(false);}}/>
-  <ExportButton icon="description" label="Export Docx" onExport={onExportDocx} onDone={function(){setOpen(false);}}/>
-  <div style={{padding:'12px 16px'}}>
-    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:shareLink?10:0}}>
-      <span className="mi" style={{fontSize:20,color:T.text}}>link</span>
-      <div style={{flex:1}}>
-        <div style={{fontSize:13,fontWeight:600,color:T.textDark}}>Read-only link</div>
-        <div style={{fontSize:11,color:T.text}}>{shareLink?'Live — anyone with the link can read':'Generate a shareable web link'}</div>
-      </div>
-      {!shareLink&&<button onClick={handleGenerate} disabled={loading} style={{padding:'6px 12px',background:T.primary,color:T.white,border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'DM Sans, sans-serif',opacity:loading?.6:1}}>{loading?'Generating…':'Generate'}</button>}
+// ─────────────────────────────────────────────────────────────
+// PERSISTENCE via wf_data (matches main app pattern exactly)
+// ─────────────────────────────────────────────────────────────
+// getClient() replaced by getSupabase() from ./utils
+
+function canvasSave(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)) } catch {}
+  const uid = window.__wovenUserId
+  if (!uid) return
+  const sb = getSupabase()
+  if (sb) sb.from('wf_data').upsert(
+    { key, user_id: uid, value: val, updated_at: new Date().toISOString() },
+    { onConflict: 'key,user_id' }
+  ).then(() => {})
+}
+
+function canvasLoad(key, def) {
+  const uid = window.__wovenUserId
+  if (!uid) {
+    try { const r = localStorage.getItem(key); return Promise.resolve(r ? JSON.parse(r) : def) }
+    catch { return Promise.resolve(def) }
+  }
+  const sb = getSupabase()
+  if (!sb) {
+    try { const r = localStorage.getItem(key); return Promise.resolve(r ? JSON.parse(r) : def) }
+    catch { return Promise.resolve(def) }
+  }
+  return sb.from('wf_data').select('value').eq('key', key).eq('user_id', uid)
+    .maybeSingle().then(r => {
+      if (r.data?.value !== undefined) return r.data.value
+      try { const local = localStorage.getItem(key); return local ? JSON.parse(local) : def }
+      catch { return def }
+    })
+}
+
+// ─────────────────────────────────────────────────────────────
+// HANDLES
+// ─────────────────────────────────────────────────────────────
+function Handles() {
+  return (
+    <>
+      <Handle type="source" position={Position.Top}    id="top"     style={{ opacity: 0 }} />
+      <Handle type="source" position={Position.Right}  id="right"   style={{ opacity: 0 }} />
+      <Handle type="source" position={Position.Bottom} id="bottom"  style={{ opacity: 0 }} />
+      <Handle type="source" position={Position.Left}   id="left"    style={{ opacity: 0 }} />
+      <Handle type="target" position={Position.Top}    id="top-t"   style={{ opacity: 0 }} />
+      <Handle type="target" position={Position.Right}  id="right-t" style={{ opacity: 0 }} />
+      <Handle type="target" position={Position.Bottom} id="bot-t"   style={{ opacity: 0 }} />
+      <Handle type="target" position={Position.Left}   id="left-t"  style={{ opacity: 0 }} />
+    </>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// CHECKBOX
+// ─────────────────────────────────────────────────────────────
+function Checkbox({ checked }) {
+  return (
+    <div className={`ex-ctx-check ${checked ? 'on' : ''}`}>
+      {checked && (
+        <svg width="10" height="8" viewBox="0 0 10 8" fill="none" style={{ display: 'block' }}>
+          <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8"
+            strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
     </div>
-    {shareLink&&(
-<div>
-  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-    <button onClick={handleCopy} style={{flex:1,padding:'7px 12px',background:T.bg1,border:'1px solid '+T.border,borderRadius:7,fontSize:13,cursor:'pointer',color:T.textDark,fontFamily:'DM Sans, sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-      <span className="mi" style={{fontSize:16}}>{copied?'check':'content_copy'}</span>
-      {copied?'Link copied!':'Copy link'}
-    </button>
-  </div>
-  <IOSToggle on={true} onChange={function(v){if(!v)onDepublish();}} label="Link active"/>
-</div>
-    )}
-  </div>
-</div>
-  )}
-</div>);
+  )
 }
 
+// ─────────────────────────────────────────────────────────────
+// WOVEN CARD NODE
+// ─────────────────────────────────────────────────────────────
+function WovenCardNode({ id, data, selected }) {
+  const { itemType, name, color, visibleFields = [], showStatus, onCtx, findItemFn } = data
+  // Re-resolve item on every render so ctx menu always has fresh data
+  const item = findItemFn ? findItemFn(data.itemId) : null
+  const statusInfo = item?.status ? STATUSES[item.status] : null
+  const shownFields = (item?.fieldDefs || []).filter(
+    fd => fd.id !== 'status' && visibleFields.includes(fd.id) && item?.fields?.[fd.id]
+  )
 
-// ── NavCollapseMenu (mobile ≤720px) ──
-function NavCollapseMenu({branches,activeBranchId,onSwitch,onCreate,onSetPrimary,onVersions,onProperties,onSpool}){
-  var so=useState(false);var open=so[0];var setOpen=so[1];
-  var ref=useRef(null);
-  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
-  var hasBranches=branches&&branches.length>1;
-  var items=[
-    {icon:'account_tree',label:hasBranches?(branches.length+' strands'):'Create strand',action:function(){onCreate&&onCreate('Strand '+(branches?branches.length+1:2));setOpen(false);}},
-    {icon:'history',label:'Versions',action:function(){onVersions();setOpen(false);}},
-    {icon:'settings',label:'Properties',action:function(){onProperties();setOpen(false);}},
-    {icon:'gesture',label:'Spools',action:function(){onSpool();setOpen(false);}},
-  ];
-  return(
-<div ref={ref} className="nav-collapse" style={{display:'none',position:'relative'}}>
-  <button onClick={function(){setOpen(!open);}} style={{display:'flex',alignItems:'center',justifyContent:'center',padding:10,background:'transparent',border:'none',cursor:'pointer',color:T.text,borderRadius:8}}>
-    <span className="mi" style={{fontSize:22}}>more_vert</span>
-  </button>
-  {open&&(
-<div style={{position:'absolute',top:'calc(100% + 4px)',right:0,zIndex:600,background:T.toolBg,border:'1px solid '+T.border,borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.14)',minWidth:180,overflow:'hidden'}}>
-  {items.map(function(item){return(
-<button key={item.icon} onClick={item.action} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'11px 16px',background:'transparent',border:'none',borderBottom:'1px solid '+T.border,cursor:'pointer',fontFamily:'DM Sans, sans-serif',fontSize:13,color:T.textDark,textAlign:'left'}}
-  onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.04)';}}
-  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
-  <span className="mi" style={{fontSize:18,color:T.text}}>{item.icon}</span>{item.label}
-</button>
-  );})}
-</div>
-  )}
-</div>
-  );
-}
-
-// ── Main DraftEditor ──
-function DraftEditor({app}){
-  var pid=app&&app.projId;
-  var did=app&&app.draftId;
-  var draft=(app&&app.allDrafts&&app.allDrafts[pid]&&app.allDrafts[pid].find(function(d){return d.id===did;}))||{};
-
-  var st=useState(draft.title||'Untitled draft');var title=st[0];var setTitle=st[1];
-  var sw=useState(draft.wordCount||0);var wordCount=sw[0];var setWordCount=sw[1];
-  var ss=useState('saved');var saveState=ss[0];var setSaveState=ss[1];
-  // Build branch list from the strand family this draft belongs to.
-  // Walk up to the true root first (rather than only looking at this
-  // draft's own children) so the dropdown shows the full sibling set no
-  // matter which strand in the family you're currently viewing.
-  function buildBranches(){
-    var all=(app&&app.allDrafts&&app.allDrafts[pid])||[];
-    var rootDraft=draft;
-    var guard=0;
-    while(rootDraft&&rootDraft.parentId&&guard<10){
-      var p=all.find(function(d){return d.id===rootDraft.parentId;});
-      if(!p)break;
-      rootDraft=p;guard++;
-    }
-    var rootId=(rootDraft&&rootDraft.id)||did;
-    var children=all.filter(function(d){return d.parentId===rootId&&!d.archived;});
-    var rootTitle=(rootDraft&&rootDraft.title)||'Untitled draft';
-    var main=[{id:rootId,name:rootTitle,isPrimary:true,draftTitle:rootTitle}];
-    var rest=children.map(function(d){return{id:d.id,name:d.title||'Strand',isPrimary:false,draftTitle:d.title||'Strand'};});
-    return main.concat(rest);
-  }
-  var sb=useState(buildBranches);var branches=sb[0];var setBranches=sb[1];
-  // Keep the branch list in sync with the actual data whenever it changes
-  // (e.g. after promoting a strand to primary) without navigating away —
-  // you should stay on whatever strand you're currently drafting.
-  useEffect(function(){
-    setBranches(buildBranches());
-  },[app&&app.allDrafts&&app.allDrafts[pid]]);
-  var sab=useState(did);var activeBranchId=sab[0];var setActiveBranchId=sab[1];
-  var slink=useState(null);var shareLink=slink[0];var setShareLink=slink[1];
-  var ssid=useState(null);var shareId=ssid[0];var setShareId=ssid[1];
-  var spv=useState(false);var showVersions=spv[0];var setShowVersions=spv[1];
-  var spp=useState(false);var showProperties=spp[0];var setShowProperties=spp[1];
-  var sps=useState(false);var showSpool=sps[0];var setShowSpool=sps[1];
-  var ssd=useState(null);var strandDetailId=ssd[0];var setStrandDetailId=ssd[1];
-  var sf=useState(window.innerWidth<720);var flowMode=sf[0];var setFlowMode=sf[1];
-  // Auto flow on resize
-  useEffect(function(){
-    function onResize(){if(window.innerWidth<720)setFlowMode(true);}
-    window.addEventListener('resize',onResize);
-    return function(){window.removeEventListener('resize',onResize);};
-  },[]);
-  var szoom=useState(100);var zoom=szoom[0];var setZoom=szoom[1];
-  var sfont=useState('Crimson Text');var font=sfont[0];var setFont=sfont[1];
-  var sheader=useState('');var headerStyle=sheader[0];var setHeaderStyle=sheader[1];
-  var saf=useState('');var activeFormat=saf[0];var setActiveFormat=saf[1];
-
-  var quillRef=useRef(null);
-  var editorContainerRef=useRef(null);
-  var saveTimer=useRef(null);
-  var initialised=useRef(false);
-  var sessionStartWc=useRef(draft.wordCount||0);
-
-  // Derived font size from zoom
-  var baseFontSize=DEFAULT_FONT_SIZE;
-  var fontSize=Math.round(baseFontSize*(zoom/100));
-  // Max width scales with zoom — 900px at 100%, grows proportionally
-  var maxWidth=Math.round(900*(zoom/100));
-
-  // ── Init Quill ──
-  useEffect(function(){
-    if(initialised.current)return;
-    if(!editorContainerRef.current||!window.Quill)return;
-    var isMobile=window.innerWidth<720;
-    var q=new window.Quill(editorContainerRef.current,{
-      theme:isMobile?'bubble':'snow',
-      modules:{toolbar:false},
-      placeholder:'Start writing…',
-    });
-    if(draft&&draft.body){
-      q.clipboard.dangerouslyPasteHTML(draft.body);
-      if(q.history)q.history.clear();
-    }
-    // Set from actual Quill content after paste — not stale React state
-    var initialWc=countWords(q.getText());
-    setWordCount(initialWc);
-    sessionStartWc.current=initialWc;
-    q.on('selection-change',function(range){
-      if(!range||range.length===0){
-        // cursor position — get format at cursor
-        var fmt=q.getFormat(range||0);
-        if(fmt.blockquote)setActiveFormat('quote');
-        else if(fmt.header)setActiveFormat(String(fmt.header));
-        else setActiveFormat('');
-        return;
-      }
-      var fmt=q.getFormat(range);
-      if(fmt.blockquote)setActiveFormat('quote');
-      else if(fmt.header)setActiveFormat(String(fmt.header));
-      else setActiveFormat('');
-    });
-    // Also update on text-change (when typing changes format context)
-    q.on('editor-change',function(){
-      var range=q.getSelection();
-      if(!range)return;
-      var fmt=q.getFormat(range);
-      if(fmt.blockquote)setActiveFormat('quote');
-      else if(fmt.header)setActiveFormat(String(fmt.header));
-      else setActiveFormat('');
-    });
-    var loadComplete=false;
-    setTimeout(function(){loadComplete=true;},100); // flag set after initial load
-    q.on('text-change',function(delta,oldDelta,source){
-      if(source!=='user'&&!loadComplete)return; // ignore only the initial paste-in
-      var txt=q.getText();
-      var wc=countWords(txt);
-      setWordCount(wc);
-      setSaveState('saving');
-      if(saveTimer.current)clearTimeout(saveTimer.current);
-      saveTimer.current=setTimeout(function(){
-        var html=q.root.innerHTML;
-        if(app&&app.updateDraft)app.updateDraft(pid,did,{body:html,wordCount:wc,updatedAt:new Date().toISOString()});
-        setSaveState('saved');
-      // Record words written this session for dashboard stats
-      var added=Math.max(0,wc-sessionStartWc.current);
-      if(added>0){
-        if(app&&app.recordSession)app.recordSession(pid,added);
-        sessionStartWc.current=wc;
-      } else if(wc<sessionStartWc.current){
-        // Word count went down (deletion) — update baseline so future additions are correct
-        sessionStartWc.current=wc;
-      }
-      // Snapshot every hour (mirrors App.jsx saveSnapshot logic)
-      var snKey='woven:versions:'+did;
-      try{
-        var snaps=JSON.parse(localStorage.getItem(snKey)||'[]');
-        var now2=Date.now();
-        if(!snaps.length||(now2-snaps[0].ts)>60*60*1000){
-          var snap={id:genId(),ts:now2,label:'auto',body:html,wordCount:wc};
-          snaps=[snap].concat(snaps).slice(0,20);
-          localStorage.setItem(snKey,JSON.stringify(snaps));
+  return (
+    <div
+      className={`woven-card ${selected ? 'selected' : ''}`}
+      onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onCtx?.(e, id, data) }}
+    >
+      <Handles />
+      <div className="woven-card-hdr">
+        {itemType === 'strand'
+          ? <div className="woven-card-av" style={{ background: color }}>
+              {item?.image ? <img src={item.image} alt={name} /> : initials(name)}
+            </div>
+          : <div className="woven-card-dot" style={{ background: color }} />
         }
-      }catch(e){}
-      // If a share link is live, keep it in sync
-      if(shareId){
-        var sc=window.supabase&&window.supabase.createClient?window.supabase.createClient('https://mxsdiqrbxlvcwexfdtrj.supabase.co','sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u'):null;
-        if(sc)sc.from('shared_drafts').update({body:html,title:title}).eq('id',shareId).then(function(){});
-      }
-      },800);
-    });
-    quillRef.current=q;
-    initialised.current=true;
-    return function(){if(saveTimer.current)clearTimeout(saveTimer.current);};
-  },[]);
-
-  // Apply font size and font family to Quill editor
-  useEffect(function(){
-    if(!editorContainerRef.current)return;
-    editorContainerRef.current.style.fontSize=fontSize+'px';
-    editorContainerRef.current.style.fontFamily=font+', serif';
-  },[fontSize,font]);
-
-  // ── Ctrl+scroll and Ctrl+plus/minus for zoom in flow mode ──
-  useEffect(function(){
-    if(!flowMode)return;
-    function onWheel(e){
-      if(!e.ctrlKey)return;
-      e.preventDefault();
-      setZoom(function(z){
-        var delta=e.deltaY<0?25:-25;
-        return Math.min(200,Math.max(50,z+delta));
-      });
-    }
-    function onKeyDown(e){
-      if(!e.ctrlKey)return;
-      if(e.key==='='||e.key==='+'){e.preventDefault();setZoom(function(z){return Math.min(200,z+25);});}
-      if(e.key==='-'){e.preventDefault();setZoom(function(z){return Math.max(50,z-25);});}
-    }
-    window.addEventListener('wheel',onWheel,{passive:false});
-    window.addEventListener('keydown',onKeyDown);
-    return function(){window.removeEventListener('wheel',onWheel);window.removeEventListener('keydown',onKeyDown);};
-  },[flowMode]);
-
-  function fmt(type,value){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,cur[type]===value?false:value);}}
-  function toggleFmt(type){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,!cur[type]);}}
-
-  function handleRestoreVersion(body){
-    if(!quillRef.current)return;
-    quillRef.current.setContents([]);
-    quillRef.current.clipboard.dangerouslyPasteHTML(body);
-    if(quillRef.current.history)quillRef.current.history.clear();
-    var wc=countWords(quillRef.current.getText());
-    setWordCount(wc);
-    setSaveState('saving');
-    if(app&&app.updateDraft)app.updateDraft(pid,did,{body:body,wordCount:wc,updatedAt:new Date().toISOString()});
-    setSaveState('saved');
-    setShowVersions(false);
-  }
-
-
-  function handleSwitchBranch(branchDraftId){
-    // A strand is a real draft — navigate to it
-    if(app&&app.openDraft)app.openDraft(branchDraftId);
-  }
-  function handleCreateBranch(name){
-    // Create a real nested draft as a strand of the family root — always
-    // the root, even if you're currently viewing a non-root strand, so
-    // the sibling group stays flat rather than nesting a level deeper.
-    if(!app||!pid||!did)return;
-    var rootId=(branches&&branches.length&&branches[0].id)||did;
-    var body=quillRef.current?quillRef.current.root.innerHTML:(draft.body||'');
-    var now=new Date().toISOString();
-    var newId=genId();
-    var nb={
-      id:newId,projectId:pid,title:name||title+'_Strand_2',
-      synopsis:draft.synopsis||'',status:draft.status||'first_draft',
-      order:draft.order,parentId:rootId,
-      nestExpanded:true,body:body,wordCount:draft.wordCount||0,
-      strandTags:draft.strandTags||[],
-      customFields:draft.customFields||{},createdAt:now,updatedAt:now
-    };
-    if(app.addDraft)app.addDraft(pid,nb);
-    // Update local branches list for the dropdown
-    setBranches(function(p){return p.concat([{id:newId,name:name,isPrimary:false,draftTitle:title}]);});
-    // Navigate to the new strand
-    if(app.openDraft)app.openDraft(newId);
-  }
-  function handleSetPrimary(id){
-    // Always promote against the true root, not whichever strand happens
-    // to be open — otherwise starring a sibling while viewing a non-root
-    // strand would swap against the wrong reference point.
-    var rootId=(branches&&branches.length&&branches[0].id)||did;
-    if(id===rootId)return; // already primary
-    if(app&&app.promoteStrand)app.promoteStrand(pid,rootId,id);
-    // Don't navigate — you stay on whatever strand you're currently
-    // drafting; the branch list above refreshes itself in place once
-    // app.allDrafts updates.
-  }
-  async function handleGenerateLink(){
-    if(!app||!app.currentUser)return;
-    var shareId=genId();
-    var profile=app.profile||{};
-    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim()||'Unknown';
-    var projName=(app.currentProject&&app.currentProject.title)||'';
-    var body=quillRef.current?quillRef.current.root.innerHTML:'';
-    var client=window.supabase&&window.supabase.createClient?window.supabase.createClient(
-      'https://mxsdiqrbxlvcwexfdtrj.supabase.co',
-      'sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u'
-    ):null;
-    if(!client)return;
-    var res=await client.from('shared_drafts').insert({id:shareId,title:title,body:body,project_name:projName,author_name:authorName});
-    if(res.error){console.error('Share error:',res.error);return;}
-    var link=window.location.origin+'/?share='+shareId;
-    setShareLink(link);
-    setShareId(shareId);
-  }
-  async function handleDepublish(){
-    if(!shareId)return;
-    var client=window.supabase&&window.supabase.createClient?window.supabase.createClient(
-      'https://mxsdiqrbxlvcwexfdtrj.supabase.co',
-      'sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u'
-    ):null;
-    if(client)await client.from('shared_drafts').delete().eq('id',shareId);
-    setShareLink(null);
-    setShareId(null);
-  }
-  function getExportDraft(){
-    // Use live Quill content, not stale state
-    var liveBody=quillRef.current?quillRef.current.root.innerHTML:(draft.body||'');
-    var liveWc=quillRef.current?countWords(quillRef.current.getText()):draft.wordCount||0;
-    return Object.assign({},draft,{body:liveBody,wordCount:liveWc,title:title});
-  }
-  function handleExportPDF(){
-    if(!draft||!pid)return;
-    var profile=app&&app.profile||{};
-    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
-    var project=app&&app.currentProject;
-    var exportDraft=getExportDraft();
-    if(window.doExport)window.doExport('PDF',[exportDraft],project,true,authorName);
-  }
-  function handleExportDocx(){
-    if(!draft||!pid)return;
-    var profile=app&&app.profile||{};
-    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
-    var project=app&&app.currentProject;
-    var exportDraft=getExportDraft();
-    if(window.doExport)window.doExport('Word (.docx)',[exportDraft],project,true,authorName);
-  }
-
-  var styleOpts=[{value:'',label:'Normal text'},{value:'1',label:'Heading 1'},{value:'2',label:'Heading 2'},{value:'3',label:'Heading 3'},{value:'quote',label:'Quote'}];
-  var fontOpts=FONTS.map(function(f){return{value:f,label:FONT_LABELS[f]};});
-  var zoomOpts=ZOOM_OPTS.map(function(z){return{value:String(z),label:z+'%'};});
-
-  // cls: collapses at breakpoint — secondary@960px, tertiary@720px
-  var fmtBtns=[
-    {icon:'format_bold',title:'Bold',action:function(){toggleFmt('bold');}},
-    {icon:'format_italic',title:'Italic',action:function(){toggleFmt('italic');}},
-    {icon:'format_underlined',title:'Underline',action:function(){toggleFmt('underline');}},
-    {sep:true},
-    {icon:'title',title:'Heading 1',cls:'toolbar-secondary',action:function(){var r=quillRef.current&&quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('header',cur.header===1?false:1);}}},
-    {icon:'format_h2',title:'Heading 2',cls:'toolbar-secondary',action:function(){var r=quillRef.current&&quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('header',cur.header===2?false:2);}}},
-    {sep:true,sepClass:'toolbar-secondary'},
-    {icon:'format_align_left',title:'Align left',cls:'toolbar-tertiary',action:function(){fmt('align','');}},
-    {icon:'format_align_center',title:'Align center',cls:'toolbar-tertiary',action:function(){fmt('align','center');}},
-    {icon:'format_align_right',title:'Align right',cls:'toolbar-tertiary',action:function(){fmt('align','right');}},
-    {sep:true,sepClass:'toolbar-tertiary'},
-    {icon:'format_indent_increase',title:'Indent',cls:'toolbar-tertiary',action:function(){if(quillRef.current){var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('indent',(cur.indent||0)+1);}}}},
-    {icon:'format_indent_decrease',title:'Outdent',cls:'toolbar-tertiary',action:function(){if(quillRef.current){var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('indent',Math.max(0,(cur.indent||1)-1));}}}},
-    {sep:true,sepClass:'toolbar-secondary'},
-    {icon:'format_list_bulleted',title:'Bullets',cls:'toolbar-secondary',action:function(){fmt('list','bullet');}},
-    {icon:'format_list_numbered',title:'Numbered',cls:'toolbar-secondary',action:function(){fmt('list','ordered');}},
-    {sep:true,sepClass:'toolbar-tertiary'},
-    {icon:'link',title:'Insert link',cls:'toolbar-tertiary',action:function(){var url=prompt('URL:');if(url&&quillRef.current){var r=quillRef.current.getSelection();if(r)quillRef.current.format('link',url);}}}
-  ];
-
-  function handleStyleChange(val){
-    if(!quillRef.current)return;
-    var r=quillRef.current.getSelection();
-    if(!r)return;
-    if(val==='quote'){quillRef.current.format('blockquote',true);quillRef.current.format('header',false);}
-    else if(val===''){quillRef.current.format('header',false);quillRef.current.format('blockquote',false);}
-    else{quillRef.current.format('header',parseInt(val));quillRef.current.format('blockquote',false);}
-    setHeaderStyle(val);
-  }
-
-  // ── Flow mode minimal bar ──
-  var FlowBar=(
-<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 20px',background:'transparent',position:'relative',zIndex:10}}>
-  <div style={{display:'flex',alignItems:'center',gap:10}}>
-    <IconBtn icon="arrow_back" title="Back" onClick={function(){setFlowMode(false);if(app&&app.setView)app.setView('cards');if(app&&app.setDraftId)app.setDraftId(null);}} color={T.text}/>
-    <span style={{fontFamily:'Crimson Text, serif',fontSize:18,fontWeight:600,color:T.text,opacity:.7}}>{title}</span>
-  </div>
-  <IOSToggle on={true} onChange={function(v){if(!v)setFlowMode(false);}} label="Flow"/>
-</div>
-  );
-
-  // ── Editor body styles ──
-  var editorBodyStyle={
-    fontSize:fontSize+'px',
-    fontFamily:font+', serif',
-    lineHeight:'160%',
-    color:T.bodyText,
-    minHeight:'calc(100vh - 260px)',
-    paddingBottom:20,
-  };
-
-  // ── Quill prose overrides (injected globally once) ──
-  useEffect(function(){
-    var id='woven-quill-overrides';
-    if(document.getElementById(id))return;
-    var style=document.createElement('style');
-    style.id=id;
-    style.textContent=`
-      .ql-editor { padding: 0 !important; outline: none !important; } .ql-editor ::selection { background: rgba(196,94,40,.22); } ::selection { background: rgba(196,94,40,.22); }
-      .ql-editor p { margin-bottom: 15px; margin-top: 0; }
-      .ql-editor h1 { font-family: 'Crimson Text', serif; font-size: 2em; font-weight: 600; margin-bottom: 12px; color: #2a1f10; }
-      .ql-editor h2 { font-family: 'Crimson Text', serif; font-size: 1.5em; font-weight: 600; margin-bottom: 10px; color: #2a1f10; }
-      .ql-editor h3 { font-family: 'Crimson Text', serif; font-size: 1.2em; font-weight: 600; margin-bottom: 8px; color: #2a1f10; }
-      .ql-editor blockquote { border-left: 3px solid #A88060; padding: 4px 0 4px 16px; margin: 0 0 15px 0; color: #7A5A38; font-style: italic; }
-      .ql-editor ol, .ql-editor ul { padding-left: 1.5em; margin-bottom: 15px; font-size: inherit; font-weight: 400; } .ql-editor li { line-height: 130%; margin-bottom: 6px; font-weight: 400; }
-      .ql-editor a { color: #c45e28; }
-      .ql-container { border: none !important; }
-      .ql-editor.ql-blank::before { color: #b8a090; font-style: italic; font-family: 'Crimson Text', serif; }
-      .ql-bubble .ql-toolbar { border-radius: 8px; background: #2a1f10; }
-      .ql-container::-webkit-scrollbar { width: 6px; }
-      .editor-scroll-area { padding-right: 56px; }
-      ::-webkit-scrollbar { width: 5px; }
-      ::-webkit-scrollbar-track { background: transparent; margin-top: 8px; margin-bottom: 8px; margin-right: 8px; }
-      ::-webkit-scrollbar-thumb { background: #D4B896; border-radius: 10px; }
-      ::-webkit-scrollbar-thumb:hover { background: #A88060; }
-      .ql-bubble .ql-stroke { stroke: #fdf8f0; }
-
-      /* ── Mobile responsive ── */
-      @media (max-width: 960px) {
-        .wc-full { display: none !important; }
-        .wc-short { display: inline !important; }
-        .font-select { display: none !important; }
-        .toolbar-secondary { display: none !important; }
-      }
-      @media (max-width: 720px) {
-        .font-select { display: none !important; }
-        .toolbar-secondary { display: none !important; }
-        .toolbar-tertiary { display: none !important; }
-        .nav-drawers { display: none !important; }
-        .nav-collapse { display: flex !important; }
-      }
-      .ql-bubble .ql-fill { fill: #fdf8f0; }
-    `;
-    document.head.appendChild(style);
-  },[]);
-
-  return(
-<div style={{display:'flex',flexDirection:'column',height:'100vh',background:T.bodyBg,overflow:'hidden'}}>
-
-  {/* ── Nav (slides up in flow mode; always full width, never covered by a drawer) ── */}
-  <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:T.navBg,padding:'10px 20px',gap:10,borderBottom:'1px solid rgba(42,31,16,.1)',flexShrink:0,transform:flowMode?'translateY(-110%)':'translateY(0)',transition:'transform .3s cubic-bezier(.4,0,.2,1)',pointerEvents:flowMode?'none':'auto',position:flowMode?'absolute':'relative',width:'100%',zIndex:20}}>
-    <div style={{display:'flex',alignItems:'center',gap:10,flex:1,minWidth:0}}>
-      <IconBtn icon="arrow_back" title="Back to sequence" onClick={function(){if(app&&app.setView)app.setView('cards');if(app&&app.setDraftId)app.setDraftId(null);}} style={{flexShrink:0}}/>
-      <EditableTitle value={title} onChange={function(v){setTitle(v);if(app&&app.updateDraft)app.updateDraft(pid,did,{title:v});}}/>
-      <span className="wc-label" data-short={wordCount.toLocaleString()+'w'} style={{fontSize:11,color:T.text,whiteSpace:'nowrap',flexShrink:0,fontFamily:'DM Sans, sans-serif',opacity:.6}}>
-        <span className="wc-full">{wordCount.toLocaleString()} words</span>
-        <span className="wc-short" style={{display:'none'}}>{wordCount.toLocaleString()}w</span>
-      </span>
-    </div>
-    <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-      <div className="nav-drawers" style={{display:'flex',alignItems:'center',gap:10}}>
-        <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary}/>
-        <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
-        <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowSpool(false);}} active={showProperties}/>
-        <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowProperties(false);if(showSpool)setStrandDetailId(null);}} active={showSpool}/>
+        <div className="woven-card-name" title={name}>{name}</div>
+        {showStatus && statusInfo && (
+          <div className="woven-card-status-badge" style={{ background: statusInfo.color }}>
+            {statusInfo.label}
+          </div>
+        )}
+        <button className="ex-node-menu-btn ex-node-menu-btn--inline nodrag" title="Options"
+          onClick={e => { e.stopPropagation(); onCtx?.(e, id, data) }}>
+          <span className="mi">more_vert</span>
+        </button>
       </div>
-      {/* Mobile collapsed menu */}
-      <NavCollapseMenu branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onVersions={function(){setShowVersions(!showVersions);}} onProperties={function(){setShowProperties(!showProperties);}} onSpool={function(){setShowSpool(!showSpool);}}/>
-      <ShareDropdown onExportPDF={handleExportPDF} onExportDocx={handleExportDocx} shareLink={shareLink} onGenerateLink={handleGenerateLink} onDepublish={handleDepublish}/>
-    </div>
-  </nav>
-
-  {/* ── Flow mode minimal bar (slides down when flow active) ── */}
-  <div style={{position:'absolute',top:0,left:0,right:0,zIndex:30,transform:flowMode?'translateY(0)':'translateY(-100%)',transition:'transform .3s cubic-bezier(.4,0,.2,1)',pointerEvents:flowMode?'auto':'none'}}>
-    {FlowBar}
-  </div>
-
-  {/* ── Main area: editor column (toolbar + scroll area) + drawers, side by side below nav ── */}
-  <div style={{display:'flex',flex:1,overflow:'hidden',marginTop:flowMode?'48px':'0',transition:'margin-top .3s'}}>
-
-    {/* Editor column — this whole column (including its toolbar) squeezes when a drawer opens */}
-    <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden',minWidth:0}}>
-
-      {/* Format toolbar — collapses via max-height in flow mode (stays in normal
-          flex flow rather than being removed via position:absolute, so it
-          doesn't cause its own layout reflow independent of nav's) */}
-      <div style={{flexShrink:0,maxHeight:flowMode?0:200,overflow:'hidden',transition:'max-height .3s cubic-bezier(.4,0,.2,1)',pointerEvents:flowMode?'none':'auto'}}>
-        <div style={{display:'flex',alignItems:'center',padding:'6px 20px',background:T.toolBg,borderBottom:'1px solid '+T.stroke,gap:4,minWidth:0}}>
-          {/* Left: style, font, size */}
-          <div style={{display:'flex',alignItems:'center',gap:8,marginRight:12}}>
-            <StyledSelect value={activeFormat} onChange={handleStyleChange} options={styleOpts} style={{minWidth:110}}/>
-            <select value={font} onChange={function(e){setFont(e.target.value);}} className="font-select" style={{padding:'4px 8px',background:T.toolBg,border:'1px solid '+T.stroke,borderRadius:6,fontSize:13,color:T.text,cursor:'pointer',outline:'none',minWidth:130,fontFamily:font+', sans-serif'}}>
-              {FONTS.map(function(f){return(<option key={f} value={f} style={{fontFamily:f+', sans-serif'}}>{f}</option>);})}
-            </select>
-          </div>
-          {/* Middle: format buttons */}
-          <div style={{display:'flex',alignItems:'center',gap:0,flex:1,justifyContent:'center',minWidth:0,overflow:'hidden'}}>
-            {fmtBtns.map(function(b,i){
-              if(b.sep)return(<div key={'s'+i} className={b.sepClass||''} style={{width:1,height:20,background:T.stroke,margin:'0 4px',flexShrink:0}}/>);
-              var cls=b.cls||'';
-              return(
-<button key={b.icon} onClick={b.action} title={b.title} className={cls} style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,transition:'background .12s'}}
-  onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.08)';}}
-  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
-  <span className="mi" style={{fontSize:18}}>{b.icon}</span>
-</button>
-              );
-            })}
-          </div>
-          {/* Right: zoom + flow */}
-          <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto'}}>
-            <StyledSelect value={String(zoom)} onChange={function(v){setZoom(parseInt(v));}} options={zoomOpts} style={{minWidth:70}}/>
-            <IOSToggle on={false} onChange={function(v){if(v)setFlowMode(true);}} label="Flow"/>
-          </div>
+      {shownFields.length > 0 && (
+        <div className="woven-card-body has-content">
+          {shownFields.map(fd => (
+            <div className="woven-card-field" key={fd.id}>
+              <div className="woven-card-field-lbl">{fd.label}</div>
+              <div className="woven-card-field-val">{item.fields[fd.id]}</div>
+            </div>
+          ))}
         </div>
-      </div>
-
-      {/* Editor scroll area */}
-      <div style={{flex:1,overflowY:'scroll',WebkitOverflowScrolling:'touch',paddingTop:48,paddingBottom:20,paddingLeft:40,paddingRight:56,background:T.bodyBg}} className="editor-scroll-area">
-        <div style={{maxWidth:maxWidth+'px',margin:'0 auto',transition:'max-width .2s'}}>
-          <div ref={editorContainerRef} style={editorBodyStyle}/>
-        </div>
-      </div>
+      )}
     </div>
-
-    {/* Drawers */}
-    {!flowMode&&showProperties&&(
-      <PropertiesDrawer app={app} draft={draft} variant="inline" onClose={function(){setShowProperties(false);}} onOpenStrand={function(sid){setShowProperties(false);setShowSpool(true);setStrandDetailId(sid);}}/>
-    )}
-    {!flowMode&&showSpool&&(
-      <StrandsDrawer app={app} draft={draft} variant="inline" strandId={strandDetailId} onOpenStrand={setStrandDetailId} onClose={function(){setShowSpool(false);setStrandDetailId(null);}}/>
-    )}
-    {!flowMode&&showVersions&&(
-      <VersionsDrawer draftId={did} variant="inline" onClose={function(){setShowVersions(false);}} onRestore={handleRestoreVersion}/>
-    )}
-  </div>
-
-</div>
-  );
+  )
 }
 
-export default DraftEditor;
+// ─────────────────────────────────────────────────────────────
+// STICKY NOTE NODE
+// ─────────────────────────────────────────────────────────────
+function StickyNoteNode({ id, data, selected }) {
+  const { setNodes } = useReactFlow()
+  const scheme = STICKY_COLORS.find(c => c.id === (data.colorId ?? 'amber')) || STICKY_COLORS[1]
+
+  function patch(p) {
+    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...p } } : n))
+  }
+
+  return (
+    <div
+      className="ex-sticky"
+      style={{
+        background: scheme.bg, border: `1.5px solid ${scheme.border}`,
+        outline: selected ? '2px solid var(--indigo)' : 'none',
+        outlineOffset: 2, width: '100%', height: '100%',
+      }}
+      onContextMenu={e => {
+        e.preventDefault(); e.stopPropagation()
+        e.target.dispatchEvent(new CustomEvent('woven:ctx', {
+          bubbles: true,
+          detail: { nodeId: id, nodeType: 'stickyNote', x: e.clientX, y: e.clientY, data }
+        }))
+      }}
+    >
+      <NodeResizer isVisible={selected} minWidth={140} minHeight={60}
+        lineStyle={{ border: '1px dashed var(--indigo)' }}
+        handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
+      <Handles />
+      <button className="ex-node-menu-btn nodrag" title="Options"
+        onClick={e => {
+          e.stopPropagation()
+          e.currentTarget.dispatchEvent(new CustomEvent('woven:ctx', {
+            bubbles: true,
+            detail: { nodeId: id, nodeType: 'stickyNote', x: e.clientX, y: e.clientY, data }
+          }))
+        }}>
+        <span className="mi">more_vert</span>
+      </button>
+      <div className="ex-sticky-drag drag-handle__custom">
+        <span className="mi">drag_indicator</span>
+      </div>
+      <div className="ex-sticky-content">
+        <textarea
+          className={`ex-sticky-input nodrag ${data.isTitle !== false ? 'is-title' : 'is-body'}`}
+          value={data.text || ''}
+          placeholder={data.isTitle !== false ? 'Note title...' : 'Write a note...'}
+          onChange={e => patch({ text: e.target.value })}
+          style={{ color: scheme.text }}
+          rows={data.isTitle !== false ? 2 : 4}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// IMAGE NODE — no header bar, corner grip only
+// ─────────────────────────────────────────────────────────────
+function ImageNode({ id, data, selected }) {
+  const { setNodes } = useReactFlow()
+  const inputRef = useRef(null)
+
+  function handleFile(e) {
+    const file = e.target.files[0]; if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      setNodes(nds => nds.map(n => n.id === id
+        ? { ...n, data: { ...n.data, src: ev.target.result } } : n))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <div
+      className="ex-image-node"
+      style={{
+        outline: selected ? '2px solid var(--indigo)' : 'none',
+        outlineOffset: 2, width: '100%', height: '100%', minWidth: 120, minHeight: 80,
+      }}
+      onContextMenu={e => {
+        e.preventDefault(); e.stopPropagation()
+        e.target.dispatchEvent(new CustomEvent('woven:ctx', {
+          bubbles: true,
+          detail: { nodeId: id, nodeType: 'imageNode', x: e.clientX, y: e.clientY, data }
+        }))
+      }}
+    >
+      <NodeResizer isVisible={selected} minWidth={100} minHeight={80}
+        lineStyle={{ border: '1px dashed var(--indigo)' }}
+        handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
+      <Handles />
+      <button className="ex-node-menu-btn nodrag" title="Options"
+        onClick={e => {
+          e.stopPropagation()
+          e.currentTarget.dispatchEvent(new CustomEvent('woven:ctx', {
+            bubbles: true,
+            detail: { nodeId: id, nodeType: 'imageNode', x: e.clientX, y: e.clientY, data }
+          }))
+        }}>
+        <span className="mi">more_vert</span>
+      </button>
+      {/* Corner grip — drag handle */}
+      <div className="ex-image-grip drag-handle__custom">
+        <span className="mi">drag_indicator</span>
+      </div>
+      {data.src
+        ? <img src={data.src} alt="canvas"
+            onClick={() => inputRef.current?.click()}
+            style={{ cursor: 'pointer', width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        : <div className="ex-image-empty nodrag" onClick={() => inputRef.current?.click()}>
+            <span className="mi">add_photo_alternate</span>
+            <span>Click to add image</span>
+          </div>
+      }
+      <input ref={inputRef} type="file" accept="image/*"
+        style={{ display: 'none' }} onChange={handleFile} />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// SHAPE NODE — rectangle / ellipse / diamond / triangle, connectable,
+// colourable, resizable. No built-in text (use the Text tool to label).
+// ─────────────────────────────────────────────────────────────
+function ShapeNode({ id, data, selected }) {
+  const scheme = STICKY_COLORS.find(c => c.id === (data.colorId ?? 'sky')) || STICKY_COLORS[4]
+  const variant = data.variant || 'rectangle'
+  const clipPath = variant === 'diamond'
+    ? 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)'
+    : variant === 'triangle'
+    ? 'polygon(50% 0%, 100% 100%, 0% 100%)'
+    : 'none'
+  const borderRadius = variant === 'ellipse' ? '50%' : variant === 'rectangle' ? 8 : 0
+
+  function openMenu(e) {
+    e.stopPropagation()
+    e.currentTarget.dispatchEvent(new CustomEvent('woven:ctx', {
+      bubbles: true,
+      detail: { nodeId: id, nodeType: 'shapeNode', x: e.clientX, y: e.clientY, data }
+    }))
+  }
+
+  return (
+    <div
+      className="ex-shape-node"
+      style={{
+        background: scheme.bg, border: `2px solid ${scheme.border}`, clipPath, borderRadius,
+        outline: selected ? '2px solid var(--indigo)' : 'none', outlineOffset: 2,
+        width: '100%', height: '100%', minWidth: 60, minHeight: 60,
+      }}
+      onContextMenu={e => {
+        e.preventDefault(); e.stopPropagation()
+        e.target.dispatchEvent(new CustomEvent('woven:ctx', {
+          bubbles: true,
+          detail: { nodeId: id, nodeType: 'shapeNode', x: e.clientX, y: e.clientY, data }
+        }))
+      }}
+    >
+      <NodeResizer isVisible={selected} minWidth={40} minHeight={40}
+        lineStyle={{ border: '1px dashed var(--indigo)' }}
+        handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
+      <Handles />
+      <button className="ex-node-menu-btn nodrag" title="Options" onClick={openMenu}>
+        <span className="mi">more_vert</span>
+      </button>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// TEXT NODE — chromeless editable text, for labelling shapes,
+// connectors, or freestanding notes on the canvas.
+// ─────────────────────────────────────────────────────────────
+function TextNode({ id, data, selected }) {
+  const { setNodes } = useReactFlow()
+
+  function patch(p) {
+    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...p } } : n))
+  }
+
+  return (
+    <div
+      className="ex-text-node"
+      style={{
+        outline: selected ? '2px solid var(--indigo)' : 'none', outlineOffset: 4,
+        width: '100%', height: '100%',
+      }}
+      onContextMenu={e => {
+        e.preventDefault(); e.stopPropagation()
+        e.target.dispatchEvent(new CustomEvent('woven:ctx', {
+          bubbles: true,
+          detail: { nodeId: id, nodeType: 'textNode', x: e.clientX, y: e.clientY, data }
+        }))
+      }}
+    >
+      <NodeResizer isVisible={selected} minWidth={60} minHeight={30}
+        lineStyle={{ border: '1px dashed var(--indigo)' }}
+        handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
+      <Handles />
+      <button className="ex-node-menu-btn nodrag" title="Options"
+        onClick={e => {
+          e.stopPropagation()
+          e.currentTarget.dispatchEvent(new CustomEvent('woven:ctx', {
+            bubbles: true,
+            detail: { nodeId: id, nodeType: 'textNode', x: e.clientX, y: e.clientY, data }
+          }))
+        }}>
+        <span className="mi">more_vert</span>
+      </button>
+      <div className="ex-text-drag drag-handle__custom">
+        <span className="mi">drag_indicator</span>
+      </div>
+      <textarea
+        className="ex-text-input nodrag"
+        value={data.text || ''}
+        placeholder="Text..."
+        onChange={e => patch({ text: e.target.value })}
+        style={{ color: data.color || '#2a1f10', fontSize: data.size || 18, fontWeight: 600 }}
+      />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONTEXT MENU
+// ─────────────────────────────────────────────────────────────
+function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function onAny(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    document.addEventListener('click', onAny, true)
+    document.addEventListener('contextmenu', onAny, true)
+    return () => {
+      document.removeEventListener('click', onAny, true)
+      document.removeEventListener('contextmenu', onAny, true)
+    }
+  }, [onClose])
+
+  const { nodeId, nodeType, x, y, data } = ctx
+  // Always re-resolve item fresh so checkboxes reflect current state
+  const item = nodeType === 'wovenCard' ? findItem(data.itemId) : null
+  const visibleFields = data.visibleFields || []
+  const showStatus    = data.showStatus    || false
+
+  return (
+    <div className="ex-ctx" ref={ref} style={{
+      left: Math.min(x, window.innerWidth  - 250),
+      top:  Math.min(y, window.innerHeight - 400),
+    }}>
+      {/* Card fields */}
+      {nodeType === 'wovenCard' && item?.fieldDefs?.length > 0 && (
+        <>
+          <div className="ex-ctx-lbl">Show on card</div>
+          {item.itemType !== 'strand' && (
+            <div className="ex-ctx-row"
+              onClick={() => onUpdateNode(nodeId, { showStatus: !showStatus })}>
+              <Checkbox checked={showStatus} /><span>Status</span>
+            </div>
+          )}
+          {item.fieldDefs.filter(fd => fd.id !== 'status').map(fd => {
+            const checked  = visibleFields.includes(fd.id)
+            const hasValue = !!(item.fields?.[fd.id])
+            return (
+              <div key={fd.id} className="ex-ctx-row"
+                style={{ opacity: hasValue ? 1 : 0.45 }}
+                onClick={() => {
+                  const next = checked
+                    ? visibleFields.filter(f => f !== fd.id)
+                    : [...visibleFields, fd.id]
+                  onUpdateNode(nodeId, { visibleFields: next })
+                }}>
+                <Checkbox checked={checked} /><span>{fd.label}</span>
+                {!hasValue && (
+                  <span style={{ fontSize: 10, color: 'var(--placeholder)', marginLeft: 'auto' }}>empty</span>
+                )}
+              </div>
+            )
+          })}
+        </>
+      )}
+
+      {/* Sticky options */}
+      {nodeType === 'stickyNote' && (
+        <>
+          <div className="ex-ctx-lbl">Style</div>
+          <div className="ex-ctx-row" onClick={() => onUpdateNode(nodeId, { isTitle: true })}>
+            <Checkbox checked={data.isTitle !== false} /><span>Title style</span>
+          </div>
+          <div className="ex-ctx-row" onClick={() => onUpdateNode(nodeId, { isTitle: false })}>
+            <Checkbox checked={data.isTitle === false} /><span>Body style</span>
+          </div>
+          <div className="ex-ctx-lbl">Colour</div>
+          <div className="ex-ctx-swatches">
+            {STICKY_COLORS.map(c => (
+              <div key={c.id}
+                className={`ex-ctx-swatch ${data.colorId === c.id ? 'active' : ''}`}
+                style={{ background: c.bg, border: `2px solid ${c.border}` }}
+                onClick={() => onUpdateNode(nodeId, { colorId: c.id })}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Shape options */}
+      {nodeType === 'shapeNode' && (
+        <>
+          <div className="ex-ctx-lbl">Shape</div>
+          {SHAPE_VARIANTS.map(v => (
+            <div key={v.id} className="ex-ctx-row"
+              onClick={() => onUpdateNode(nodeId, { variant: v.id })}>
+              <Checkbox checked={(data.variant || 'rectangle') === v.id} />
+              <span className="mi" style={{ fontSize: 15 }}>{v.icon}</span>
+              <span>{v.label}</span>
+            </div>
+          ))}
+          <div className="ex-ctx-lbl">Colour</div>
+          <div className="ex-ctx-swatches">
+            {STICKY_COLORS.map(c => (
+              <div key={c.id}
+                className={`ex-ctx-swatch ${(data.colorId ?? 'sky') === c.id ? 'active' : ''}`}
+                style={{ background: c.bg, border: `2px solid ${c.border}` }}
+                onClick={() => onUpdateNode(nodeId, { colorId: c.id })}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Text options */}
+      {nodeType === 'textNode' && (
+        <>
+          <div className="ex-ctx-lbl">Size</div>
+          {[['14', 'Small'], ['18', 'Medium'], ['28', 'Large']].map(([sz, lbl]) => (
+            <div key={sz} className="ex-ctx-row" onClick={() => onUpdateNode(nodeId, { size: Number(sz) })}>
+              <Checkbox checked={(data.size || 18) === Number(sz)} /><span>{lbl}</span>
+            </div>
+          ))}
+          <div className="ex-ctx-lbl">Colour</div>
+          <div className="ex-ctx-swatches">
+            {STICKY_COLORS.map(c => (
+              <div key={c.id}
+                className={`ex-ctx-swatch ${(data.color === c.text) ? 'active' : ''}`}
+                style={{ background: c.text, border: '2px solid rgba(0,0,0,.15)' }}
+                onClick={() => onUpdateNode(nodeId, { color: c.text })}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="ex-ctx-div" />
+      <div className="ex-ctx-action danger"
+        onClick={() => { onDeleteNode(nodeId); onClose() }}>
+        <span className="mi">delete</span>Remove from canvas
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// STRANDS DRAWER — tabs from live strandsObj keys only
+// ─────────────────────────────────────────────────────────────
+function ExploreStrandsPalette({ strandsObj, templates, onDragStart }) {
+  // Derive collection names from live data — not hardcoded, not from templates
+  const collections = Object.keys(strandsObj)
+  const [activeIdx, setActiveIdx] = useState(0)
+  const scrollRef = useRef(null)
+
+  // Reset active tab if collections change and current idx is out of bounds
+  useEffect(() => {
+    if (activeIdx >= collections.length && collections.length > 0) {
+      setActiveIdx(0)
+    }
+  }, [collections.length])
+
+  const activeColl = collections[activeIdx] || ''
+  const items = strandsObj[activeColl] || []
+
+  function scrollTabs(dir) {
+    if (scrollRef.current) scrollRef.current.scrollLeft += dir * 80
+  }
+
+  if (collections.length === 0) {
+    return (
+      <div style={{ padding: '16px 14px', fontSize: 13, color: 'var(--mid)' }}>
+        No strand collections yet. Create one in the Strands view.
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="ex-coll-tabs-wrap">
+        <div className="ex-coll-arrow" onClick={() => scrollTabs(-1)}>
+          <span className="mi" style={{ fontSize: 16 }}>chevron_left</span>
+        </div>
+        <div className="ex-coll-tabs-scroll" ref={scrollRef}>
+          {collections.map((coll, i) => (
+            <div key={coll}
+              className={`ex-coll-tab ${i === activeIdx ? 'active' : ''}`}
+              onClick={() => setActiveIdx(i)}>
+              {coll}
+            </div>
+          ))}
+        </div>
+        <div className="ex-coll-arrow" onClick={() => scrollTabs(1)}>
+          <span className="mi" style={{ fontSize: 16 }}>chevron_right</span>
+        </div>
+      </div>
+      <div className="ex-edrawer-body">
+        {items.length === 0
+          ? <div style={{ padding: '12px 14px', fontSize: 13, color: 'var(--mid)' }}>
+              No {activeColl.toLowerCase()} yet.
+            </div>
+          : items.map(s => (
+              <div key={s.id} className="ex-edrawer-row" draggable
+                onDragStart={e => onDragStart(e, buildPayload(s, 'strand', templates))}>
+                <div className="ex-edrawer-av" style={{ background: s.color }}>
+                  {s.image ? <img src={s.image} alt={s.name} /> : initials(s.name)}
+                </div>
+                <div className="ex-edrawer-info">
+                  <div className="ex-edrawer-name">{s.name}</div>
+                </div>
+                <span className="ex-edrawer-hint">drag</span>
+              </div>
+            ))
+        }
+      </div>
+    </>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// DRAWER CONTENT
+// ─────────────────────────────────────────────────────────────
+function DrawerContent({ panel, templates, strandsObj, drafts, looseThreads, onDragStart }) {
+  if (panel === 'strands') {
+    return (
+      <ExploreStrandsPalette
+        strandsObj={strandsObj}
+        templates={templates}
+        onDragStart={onDragStart}
+      />
+    )
+  }
+  if (panel === 'drafts') {
+    return (
+      <div className="ex-edrawer-body">
+        <div className="ex-edrawer-section">
+          <span className="ex-edrawer-lbl">Drafts</span>
+        </div>
+        {drafts.length === 0
+          ? <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--mid)' }}>No drafts yet.</div>
+          : drafts.map(d => (
+              <div key={d.id} className="ex-edrawer-row" draggable
+                onDragStart={e => onDragStart(e, buildPayload(d, 'draft', templates))}>
+                <div className="ex-edrawer-dot" style={{ background: STATUSES[d.status]?.color }} />
+                <div className="ex-edrawer-info">
+                  <div className="ex-edrawer-name">
+                    {d.title || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
+                  </div>
+                  <div className="ex-edrawer-sub">{STATUSES[d.status]?.label}</div>
+                </div>
+                <span className="ex-edrawer-hint">drag</span>
+              </div>
+            ))
+        }
+      </div>
+    )
+  }
+  if (panel === 'loose_threads') {
+    return (
+      <div className="ex-edrawer-body">
+        <div className="ex-edrawer-section">
+          <span className="ex-edrawer-lbl">Loose Threads</span>
+        </div>
+        {looseThreads.length === 0
+          ? <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--mid)' }}>No loose threads.</div>
+          : looseThreads.map(lt => (
+              <div key={lt.id} className="ex-edrawer-row" draggable
+                onDragStart={e => onDragStart(e, buildPayload(lt, 'loose_thread', templates))}>
+                <div className="ex-edrawer-dot" style={{ background: STATUSES.loose_thread.color }} />
+                <div className="ex-edrawer-info">
+                  <div className="ex-edrawer-name">
+                    {lt.title || lt.synopsis || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
+                  </div>
+                </div>
+                <span className="ex-edrawer-hint">drag</span>
+              </div>
+            ))
+        }
+      </div>
+    )
+  }
+  return null
+}
+
+// ─────────────────────────────────────────────────────────────
+// CANVAS TABS
+// ─────────────────────────────────────────────────────────────
+function CanvasTabs({ tabs, activeTab, onSelect, onAdd, onRename, onDeleteRequest }) {
+  const [editing, setEditing] = useState(null)
+  const [editVal, setEditVal] = useState('')
+  const inputRef = useRef(null)
+
+  function startEdit(tab, e) {
+    e.stopPropagation(); setEditing(tab.id); setEditVal(tab.name)
+    setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select() }, 30)
+  }
+  function commitEdit(id) {
+    if (editVal.trim()) onRename(id, editVal.trim())
+    setEditing(null)
+  }
+
+  return (
+    <div className="ex-tabs">
+      {tabs.map(tab => (
+        <div key={tab.id}
+          className={`ex-tab ${activeTab === tab.id ? 'active' : ''}`}
+          onClick={() => onSelect(tab.id)}
+          onDoubleClick={e => startEdit(tab, e)}
+          title="Double-click to rename">
+          {editing === tab.id
+            ? <input
+                ref={inputRef}
+                className="ex-tab-name-input"
+                value={editVal}
+                onChange={e => setEditVal(e.target.value)}
+                onBlur={() => commitEdit(tab.id)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') commitEdit(tab.id)
+                  if (e.key === 'Escape') setEditing(null)
+                  e.stopPropagation()
+                }}
+                onClick={e => e.stopPropagation()}
+              />
+            : <span className="ex-tab-name">{tab.name}</span>
+          }
+          {tabs.length > 1 && (
+            <span className="ex-tab-close"
+              onClick={e => { e.stopPropagation(); onDeleteRequest(tab) }}>
+              close
+            </span>
+          )}
+        </div>
+      ))}
+      <div className="ex-tab-add" onClick={onAdd} title="New board">+</div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// TOOLBAR
+// ─────────────────────────────────────────────────────────────
+function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle }) {
+  const [shapePickerOpen, setShapePickerOpen] = useState(false)
+  const shapeWrapRef = useRef(null)
+  const shapeActive = activeTool.startsWith('shape:')
+
+  useEffect(() => {
+    if (!shapePickerOpen) return
+    function onAny(e) {
+      if (shapeWrapRef.current && !shapeWrapRef.current.contains(e.target)) setShapePickerOpen(false)
+    }
+    document.addEventListener('mousedown', onAny, true)
+    return () => document.removeEventListener('mousedown', onAny, true)
+  }, [shapePickerOpen])
+
+  function handleClick(t) {
+    if (t.id === 'shape') { setShapePickerOpen(o => !o); return }
+    onToolSelect(t.id)
+  }
+  function pickShape(variant) {
+    onToolSelect(`shape:${variant}`)
+    setShapePickerOpen(false)
+  }
+
+  return (
+    <div className="ex-toolbar">
+      {TOOL_ITEMS.map(t => (
+        <div key={t.id} style={{ position: 'relative' }} ref={t.id === 'shape' ? shapeWrapRef : null}>
+          <div className={`ex-tool ${(t.id === 'shape' ? shapeActive : activeTool === t.id) ? 'active' : ''}`}
+            onClick={() => handleClick(t)} title={t.label}>
+            <span className="mi">{t.icon}</span>
+            <span className="ex-tool-lbl">{t.label}</span>
+          </div>
+          {t.id === 'shape' && shapePickerOpen && (
+            <div className="ex-shape-popover">
+              {SHAPE_VARIANTS.map(v => (
+                <div key={v.id} className="ex-shape-popover-item"
+                  onClick={() => pickShape(v.id)} title={v.label}>
+                  <span className="mi">{v.icon}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+      <div className="ex-tool-sep" />
+      {DRAWER_ITEMS.map(p => (
+        <div key={p.id} className={`ex-tool ${activeDrawer === p.id ? 'active' : ''}`}
+          onClick={() => onDrawerToggle(p.id)} title={p.label}>
+          <span className="mi">{p.icon}</span>
+          <span className="ex-tool-lbl">{p.label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// DELETE BOARD MODAL
+// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// FLOW CANVAS
+// ─────────────────────────────────────────────────────────────
+function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, strandsObj, drafts, looseThreads }) {
+  const { screenToFlowPosition } = useReactFlow()
+  const [nodes, setNodes, onNodesChange] = useNodesState([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState([])
+  const [ctx, setCtx] = useState(null)
+  const [connectFrom, setConnectFrom] = useState(null)
+  const canvasRef = useRef(null)
+  const saveTimer = useRef(null)
+  const boardIdRef = useRef(boardId)
+  useEffect(() => { boardIdRef.current = boardId }, [boardId])
+
+  // Build live item lookup — always reflects latest app data
+  const findItem = useCallback((id) => {
+    for (const items of Object.values(strandsObj)) {
+      const s = items.find(s => s.id === id)
+      if (s) return buildPayload(s, 'strand', templates)
+    }
+    const d = drafts.find(d => d.id === id)
+    if (d) return buildPayload(d, 'draft', templates)
+    const lt = looseThreads.find(l => l.id === id)
+    if (lt) return buildPayload(lt, 'loose_thread', templates)
+    return null
+  }, [strandsObj, drafts, looseThreads, templates])
+
+  // Load state on board change
+  useEffect(() => {
+    canvasLoad(`canvas:state:${projId}:${boardId}`, null).then(saved => {
+      setNodes(saved?.nodes || [])
+      setEdges(saved?.edges || [])
+    })
+  }, [projId, boardId])
+
+  // Debounced auto-save
+  useEffect(() => {
+    clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      canvasSave(`canvas:state:${projId}:${boardIdRef.current}`, { nodes, edges })
+    }, 800)
+    return () => clearTimeout(saveTimer.current)
+  }, [nodes, edges, projId])
+
+  // Listen for sticky/image context menu events
+  useEffect(() => {
+    const el = canvasRef.current
+    function onWovenCtx(e) {
+      const { nodeId, nodeType, x, y, data } = e.detail
+      setCtx({ nodeId, nodeType, x, y, data })
+    }
+    el?.addEventListener('woven:ctx', onWovenCtx)
+    return () => el?.removeEventListener('woven:ctx', onWovenCtx)
+  }, [])
+
+  // Re-create nodeTypes when findItem changes so cards always see fresh data
+  const nodeTypes = useMemo(() => ({
+    wovenCard: (props) => (
+      <WovenCardNode {...props} data={{
+        ...props.data,
+        findItemFn: findItem,
+        onCtx: (e, id, data) => setCtx({ nodeId: id, nodeType: 'wovenCard', x: e.clientX, y: e.clientY, data }),
+      }} />
+    ),
+    stickyNote: StickyNoteNode,
+    imageNode:  ImageNode,
+    shapeNode:  ShapeNode,
+    textNode:   TextNode,
+  }), [findItem])
+
+  function updateNode(nodeId, patch) {
+    setNodes(nds => nds.map(n => n.id !== nodeId ? n : { ...n, data: { ...n.data, ...patch } }))
+    // Also update ctx data so checkboxes reflect new state immediately
+    setCtx(prev => prev?.nodeId === nodeId
+      ? { ...prev, data: { ...prev.data, ...patch } }
+      : prev
+    )
+  }
+  function deleteNode(nodeId) {
+    setNodes(nds => nds.filter(n => n.id !== nodeId))
+    setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId))
+  }
+
+  const onConnect = useCallback((params) => {
+    setEdges(eds => addEdge({
+      ...params,
+      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 18, height: 18 },
+      style: { stroke: 'var(--bg4)', strokeWidth: 2 },
+    }, eds))
+  }, [setEdges])
+
+  // Click-to-connect — a touch-friendly alternative to dragging from a
+  // (hover-only, hard to hit on touch) handle. Tap a first node, then a
+  // second, to draw a connection between them.
+  const clearConnectPick = useCallback(() => {
+    setConnectFrom(null)
+    setNodes(nds => nds.map(n => n.selected ? { ...n, selected: false } : n))
+  }, [setNodes])
+
+  useEffect(() => {
+    if (activeTool !== 'connect') clearConnectPick()
+  }, [activeTool, clearConnectPick])
+
+  const onNodeClick = useCallback((e, node) => {
+    if (activeTool !== 'connect') return
+    e.stopPropagation()
+    if (!connectFrom) {
+      setConnectFrom(node.id)
+      setNodes(nds => nds.map(n => ({ ...n, selected: n.id === node.id })))
+      return
+    }
+    if (connectFrom === node.id) { clearConnectPick(); return }
+    setEdges(eds => addEdge({
+      source: connectFrom, target: node.id,
+      sourceHandle: 'bottom', targetHandle: 'top-t',
+      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 18, height: 18 },
+      style: { stroke: 'var(--bg4)', strokeWidth: 2 },
+    }, eds))
+    clearConnectPick()
+  }, [activeTool, connectFrom, setNodes, setEdges, clearConnectPick])
+
+  const onDragOver = useCallback((e) => {
+    e.preventDefault(); e.dataTransfer.dropEffect = 'copy'
+  }, [])
+
+  const onDrop = useCallback((e) => {
+    e.preventDefault()
+    const raw = e.dataTransfer.getData('application/woven-item')
+    if (!raw) return
+    const item = JSON.parse(raw)
+    const rect = canvasRef.current.getBoundingClientRect()
+    const position = screenToFlowPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+    setNodes(nds => [...nds, {
+      id: genId(), type: 'wovenCard', position,
+      data: {
+        itemId: item.id, itemType: item.itemType,
+        name: item.name, color: accentColor(item),
+        visibleFields: [], showStatus: false,
+      },
+    }])
+  }, [screenToFlowPosition, setNodes])
+
+  const onPaneClick = useCallback((e) => {
+    if (activeTool === 'connect') { clearConnectPick(); return }
+    if (!isPlaceModeTool(activeTool)) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    const position = screenToFlowPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+    if (activeTool === 'sticky') {
+      setNodes(nds => [...nds, {
+        id: genId(), type: 'stickyNote', position,
+        dragHandle: '.drag-handle__custom',
+        data: { text: '', colorId: 'amber', isTitle: true },
+      }])
+    }
+    if (activeTool === 'image') {
+      setNodes(nds => [...nds, {
+        id: genId(), type: 'imageNode', position,
+        dragHandle: '.drag-handle__custom',
+        data: { src: null },
+      }])
+    }
+    if (activeTool === 'text') {
+      setNodes(nds => [...nds, {
+        id: genId(), type: 'textNode', position,
+        dragHandle: '.drag-handle__custom',
+        data: { text: '', color: '#2a1f10', size: 18 },
+      }])
+    }
+    if (activeTool.startsWith('shape:')) {
+      const variant = activeTool.split(':')[1]
+      setNodes(nds => [...nds, {
+        id: genId(), type: 'shapeNode', position,
+        data: { variant, colorId: 'sky' },
+      }])
+    }
+    onToolReset()
+  }, [activeTool, screenToFlowPosition, setNodes, onToolReset, clearConnectPick])
+
+  const isPlaceMode = isPlaceModeTool(activeTool)
+
+  return (
+    <div ref={canvasRef} style={{ width: '100%', height: '100%' }}>
+      <ReactFlow
+        nodes={nodes} edges={edges}
+        onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+        onConnect={onConnect} onDrop={onDrop} onDragOver={onDragOver}
+        onPaneClick={onPaneClick} onNodeClick={onNodeClick}
+        nodeTypes={nodeTypes}
+        panOnDrag={!isPlaceMode}
+        selectionOnDrag={!isPlaceMode}
+        deleteKeyCode={['Delete', 'Backspace']}
+        style={{ cursor: (isPlaceMode || activeTool === 'connect') ? 'crosshair' : 'default' }}
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={36} size={1.5}
+          color="rgba(160,120,70,0.3)" style={{ background: 'var(--bg0)' }} />
+        <Controls showInteractive={false} />
+        <MiniMap nodeColor={n => n.data?.color || 'var(--bg3)'}
+          maskColor="rgba(253,248,240,0.7)" style={{ background: 'var(--bg1)' }} />
+      </ReactFlow>
+
+      {ctx && (
+        <ContextMenu
+          ctx={ctx}
+          findItem={findItem}
+          onClose={() => setCtx(null)}
+          onUpdateNode={updateNode}
+          onDeleteNode={deleteNode}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// ROOT
+// ─────────────────────────────────────────────────────────────
+const INIT_ID     = genId()
+const INIT_BOARDS = [{ id: INIT_ID, name: 'Board 1' }]
+
+export default function ExploreCanvas({ app }) {
+  const projId       = app.projId
+  const templates    = app.allTemplates?.[projId] || []
+  const strandsObj   = app.allStrands?.[projId]   || {}
+  const allDrafts    = app.allDrafts?.[projId]     || []
+  const drafts       = allDrafts.filter(d => d.status !== 'loose_thread')
+  const looseThreads = allDrafts.filter(d => d.status === 'loose_thread')
+
+  const [boards, setBoards]           = useState(INIT_BOARDS)
+  const [activeBoard, setActiveBoard] = useState(INIT_ID)
+  const [activeDrawer, setActiveDrawer] = useState(null)
+  const [activeTool, setActiveTool]   = useState('select')
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [boardsLoaded, setBoardsLoaded] = useState(false)
+
+  // Resizable Strands/Drafts/Threads drawer width — remembered across sessions.
+  const [drawerWidth, setDrawerWidth] = useState(() => {
+    const saved = Number(localStorage.getItem('woven:canvasDrawerWidth'))
+    return saved >= DRAWER_MIN_W && saved <= DRAWER_MAX_W ? saved : 280
+  })
+  const [isResizingDrawer, setIsResizingDrawer] = useState(false)
+  const drawerDragRef = useRef(null)
+
+  function startDrawerResize(e) {
+    e.preventDefault()
+    drawerDragRef.current = { startX: e.clientX, startWidth: drawerWidth }
+    setIsResizingDrawer(true)
+    function onMove(ev) {
+      const { startX, startWidth } = drawerDragRef.current
+      // Drawer sits to the right of the canvas, so dragging left widens it.
+      const next = Math.min(DRAWER_MAX_W, Math.max(DRAWER_MIN_W, startWidth - (ev.clientX - startX)))
+      setDrawerWidth(next)
+    }
+    function onUp() {
+      setIsResizingDrawer(false)
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      setDrawerWidth(w => { localStorage.setItem('woven:canvasDrawerWidth', String(w)); return w })
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+  }
+
+  // Load board list for this project
+  useEffect(() => {
+    if (!projId) return
+    canvasLoad(`canvas:boards:${projId}`, null).then(saved => {
+      if (saved?.boards?.length) {
+        setBoards(saved.boards)
+        setActiveBoard(saved.activeId || saved.boards[0].id)
+      }
+      setBoardsLoaded(true)
+    })
+  }, [projId])
+
+  // Save board list whenever it changes
+  useEffect(() => {
+    if (!boardsLoaded || !projId) return
+    canvasSave(`canvas:boards:${projId}`, { boards, activeId: activeBoard })
+  }, [boards, activeBoard, boardsLoaded, projId])
+
+  function addBoard() {
+    const nb = { id: genId(), name: `Board ${boards.length + 1}` }
+    setBoards(b => [...b, nb]); setActiveBoard(nb.id)
+  }
+  function renameBoard(id, name) {
+    setBoards(b => b.map(board => board.id === id ? { ...board, name } : board))
+  }
+  function confirmDelete() {
+    canvasSave(`canvas:state:${projId}:${deleteTarget.id}`, null)
+    try { localStorage.removeItem(`canvas:state:${projId}:${deleteTarget.id}`) } catch {}
+    const next = boards.filter(b => b.id !== deleteTarget.id)
+    const idx  = boards.findIndex(b => b.id === deleteTarget.id)
+    setBoards(next)
+    if (activeBoard === deleteTarget.id)
+      setActiveBoard(next[Math.max(0, idx - 1)]?.id || next[0]?.id)
+    setDeleteTarget(null)
+  }
+
+  function toggleDrawer(panel) { setActiveDrawer(d => d === panel ? null : panel) }
+  function handleToolSelect(tool) { setActiveTool(t => t === tool ? 'select' : tool) }
+  function handleDragStart(e, item) {
+    e.dataTransfer.setData('application/woven-item', JSON.stringify(item))
+    e.dataTransfer.effectAllowed = 'copy'
+  }
+
+  const drawerLabel = DRAWER_ITEMS.find(p => p.id === activeDrawer)?.label || ''
+  if (!projId) return null
+
+  return (
+    <div className="ex-shell">
+      <CanvasStyles />
+      <div className="ex-body">
+        <div className="ex-canvas-col">
+          <CanvasTabs
+            tabs={boards} activeTab={activeBoard}
+            onSelect={setActiveBoard} onAdd={addBoard}
+            onRename={renameBoard} onDeleteRequest={tab => setDeleteTarget(tab)}
+          />
+          <div className="ex-canvas-row">
+            <div className="ex-canvas-area"
+              style={{ cursor: (isPlaceModeTool(activeTool) || activeTool === 'connect') ? 'crosshair' : undefined }}>
+              <ReactFlowProvider>
+                <FlowCanvas
+                  key={`${projId}:${activeBoard}`}
+                  boardId={activeBoard} projId={projId}
+                  activeTool={activeTool} onToolReset={() => setActiveTool('select')}
+                  templates={templates} strandsObj={strandsObj}
+                  drafts={drafts} looseThreads={looseThreads}
+                />
+              </ReactFlowProvider>
+            </div>
+            <div className="ex-right">
+              <Toolbar
+                activeTool={activeTool} onToolSelect={handleToolSelect}
+                activeDrawer={activeDrawer} onDrawerToggle={toggleDrawer}
+              />
+              <div className={`ex-drawer ${activeDrawer ? 'open' : ''} ${isResizingDrawer ? 'resizing' : ''}`}
+                style={{ width: activeDrawer ? drawerWidth : 0 }}>
+                {activeDrawer && (
+                  <div className="ex-drawer-resize-handle"
+                    onPointerDown={startDrawerResize}
+                    title="Drag to resize" />
+                )}
+                <div className="ex-drawer-inner" style={{ width: drawerWidth }}>
+                  <Drawer variant="inline" open={true} title={drawerLabel} onClose={() => setActiveDrawer(null)} padded={false} width={drawerWidth}>
+                    <DrawerContent
+                      panel={activeDrawer}
+                      templates={templates} strandsObj={strandsObj}
+                      drafts={drafts} looseThreads={looseThreads}
+                      onDragStart={handleDragStart}
+                    />
+                  </Drawer>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {deleteTarget && (
+        <DeleteConfirmModal
+          itemName={deleteTarget.name}
+          message={<>All cards on this board will be permanently removed.</>}
+          confirmLabel="Delete board"
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+    </div>
+  )
+}
+
