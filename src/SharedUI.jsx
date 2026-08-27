@@ -549,6 +549,63 @@ export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
 // StrandRefPicker's own expand, and Properties' "tag a strand" trigger.
 // Click-outside closes it. Looks up each strand's real collection icon
 // rather than defaulting, so results match what the app shows elsewhere.
+// ══════════════════════════════════════════════
+// FloatingPanel
+// A shared positioning primitive for any anchored popover/dropdown:
+// fixed-position (immune to being clipped by a scrollable ancestor),
+// placed just below (or above, if there isn't room below) the anchor
+// element, then measured once rendered and nudged to keep a 15px margin
+// from the viewport's left/right/bottom edges. Also handles
+// click-outside-to-close. Callers own all visual styling of their
+// content — this only handles placement.
+// ══════════════════════════════════════════════
+
+export function FloatingPanel({ anchorRef, open, onClose, children, minWidth, gap }) {
+  var actualGap = gap == null ? 6 : gap;
+  var wrapRef = useRef(null);
+  var sp = useState(null); var pos = sp[0]; var setPos = sp[1];
+  var EDGE = 15;
+
+  useEffect(function () {
+    if (!open) { setPos(null); return; }
+    if (!anchorRef.current) return;
+    var r = anchorRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + actualGap, left: r.left, anchorTop: r.top });
+  }, [open]);
+
+  useEffect(function () {
+    if (!open || !pos || !wrapRef.current) return;
+    var rect = wrapRef.current.getBoundingClientRect();
+    var vw = window.innerWidth; var vh = window.innerHeight;
+    var newLeft = pos.left; var newTop = pos.top;
+    if (rect.right > vw - EDGE) newLeft = Math.max(EDGE, vw - EDGE - rect.width);
+    if (rect.left < EDGE) newLeft = EDGE;
+    if (rect.bottom > vh - EDGE) {
+      var aboveTop = pos.anchorTop - actualGap - rect.height;
+      newTop = aboveTop >= EDGE ? aboveTop : Math.max(EDGE, vh - EDGE - rect.height);
+    }
+    if (newLeft !== pos.left || newTop !== pos.top) setPos(Object.assign({}, pos, { top: newTop, left: newLeft }));
+  }, [open, pos && pos.top, pos && pos.left]);
+
+  useEffect(function () {
+    if (!open) return;
+    function onDown(e) {
+      if (wrapRef.current && wrapRef.current.contains(e.target)) return;
+      if (anchorRef.current && anchorRef.current.contains(e.target)) return;
+      onClose && onClose();
+    }
+    document.addEventListener('mousedown', onDown);
+    return function () { document.removeEventListener('mousedown', onDown); };
+  }, [open]);
+
+  if (!open || !pos) return null;
+  return (
+    <div ref={wrapRef} style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 600, minWidth: minWidth }}>
+      {children}
+    </div>
+  );
+}
+
 export function StrandSearchDropdown({ app, pid, collection, excludeIds, onPick, onClose, style }) {
   var sq = useState(''); var query = sq[0]; var setQuery = sq[1];
   var ref = useRef(null);

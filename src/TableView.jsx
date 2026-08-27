@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import BindDrawer from './BindDrawer'
 import StrandsDrawer from './StrandsDrawer'
-import { StatusSelect, StrandSearchDropdown } from './SharedUI'
+import { StatusSelect, StrandSearchDropdown, FloatingPanel } from './SharedUI'
 import { genId, stripHtml, initials } from './utils'
 import { projIsNumbered, projSequence, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
 import { buildTree, applyFS, loadFilterState, persistFilterState, ViewHeader, DraftLoadingSpinner, EmptyDrafts, LooseThreadsSection, TaggedSpoolsEditor } from './App'
@@ -91,39 +91,11 @@ function SpoolsCell({draft,app,pid,expanded}){
 // The click-target for an empty spool-reference custom field: clicking it
 // opens the same search dropdown used everywhere else in the app for
 // picking a spool, and also tags the draft (matching PropertiesDrawer's
-// behavior for this same field type). Positioned as a viewport-fixed
-// overlay (computed from the trigger's own position) rather than
-// CSS-absolute, since an absolutely-positioned dropdown nested inside
-// this table's scrollable wrapper gets clipped by that wrapper's own
-// overflow — fixed positioning is immune to that.
+// behavior for this same field type). Positioning/viewport-clamping is
+// handled by the shared FloatingPanel.
 function SpoolRefEmptyPicker({app,pid,draft,fieldDef}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
-  var sp=useState({top:0,left:0});var pos=sp[0];var setPos=sp[1];
   var triggerRef=useRef(null);
-  var wrapRef=useRef(null);
-  var EDGE=15;
-  function toggle(e){
-    e.stopPropagation();
-    if(!open&&triggerRef.current){
-      var r=triggerRef.current.getBoundingClientRect();
-      setPos({top:r.bottom+6,left:r.left});
-    }
-    setOpen(!open);
-  }
-  // First pass positions it just below the trigger; once it's actually
-  // rendered we know its real size, so nudge it back inside the viewport
-  // with a consistent 15px margin from the left/right/bottom edges.
-  useEffect(function(){
-    if(!open||!wrapRef.current)return;
-    var el=wrapRef.current;
-    var rect=el.getBoundingClientRect();
-    var vw=window.innerWidth;var vh=window.innerHeight;
-    var newLeft=pos.left;var newTop=pos.top;
-    if(rect.right>vw-EDGE)newLeft=Math.max(EDGE,vw-EDGE-rect.width);
-    if(rect.left<EDGE)newLeft=EDGE;
-    if(rect.bottom>vh-EDGE)newTop=Math.max(EDGE,vh-EDGE-rect.height);
-    if(newLeft!==pos.left||newTop!==pos.top)setPos({top:newTop,left:newLeft});
-  },[open]);
   function pick(st){
     var cf=Object.assign({},draft.customFields||{});
     cf[fieldDef.id]=JSON.stringify([st.id]);
@@ -135,20 +107,57 @@ function SpoolRefEmptyPicker({app,pid,draft,fieldDef}){
   }
   return(
 <div style={{display:'inline-block'}}>
-  <span ref={triggerRef} onClick={toggle} style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'var(--placeholder)',fontStyle:'italic',cursor:'pointer'}}>Click to select…</span>
-  {open&&(
-<div ref={wrapRef} style={{position:'fixed',top:pos.top,left:pos.left,zIndex:600}}>
-  <StrandSearchDropdown
-    app={app}
-    pid={pid}
-    collection={fieldDef.refSpool}
-    excludeIds={[]}
-    onPick={pick}
-    onClose={function(){setOpen(false);}}
-    style={{position:'static',width:220}}
-  />
+  <span ref={triggerRef} onClick={function(e){e.stopPropagation();setOpen(!open);}} style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'var(--placeholder)',fontStyle:'italic',cursor:'pointer'}}>Click to select…</span>
+  <FloatingPanel anchorRef={triggerRef} open={open} onClose={function(){setOpen(false);}} minWidth={220}>
+    <StrandSearchDropdown
+      app={app}
+      pid={pid}
+      collection={fieldDef.refSpool}
+      excludeIds={[]}
+      onPick={pick}
+      onClose={function(){setOpen(false);}}
+      style={{position:'static',width:220}}
+    />
+  </FloatingPanel>
 </div>
-  )}
+  );
+}
+
+// ── BranchCell ──
+// The dedicated branch column: "N Strands" + an expand/collapse arrow
+// when this draft already has branches; a muted "-" when it doesn't.
+// Clicking the "-" opens a small named-input popover (Enter creates the
+// branch — a new draft nested under this one, which then renders as a
+// new row).
+function BranchCell({app,draft,hasChildren,childCount,isExpanded}){
+  var so=useState(false);var open=so[0];var setOpen=so[1];
+  var sv=useState('');var name=sv[0];var setName=sv[1];
+  var btnRef=useRef(null);
+  function createBranch(){
+    var title=name.trim();
+    if(!title)return;
+    var pid=app.projId;
+    var siblingCount=(app.allDrafts[pid]||[]).filter(function(d){return d.parentId===draft.id;}).length;
+    app.addDraft(pid,{id:genId(),projectId:pid,title:title,synopsis:'',status:draft.status||'first_draft',order:siblingCount+1,parentId:draft.id,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+    if(!isExpanded)app.updateDraft(pid,draft.id,{nestExpanded:true});
+    setName('');setOpen(false);
+  }
+  if(hasChildren){
+    return(
+<div onClick={function(e){e.stopPropagation();app.updateDraft(app.projId,draft.id,{nestExpanded:!isExpanded});}} style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer',color:isExpanded?'#C45E28':'var(--mid)'}}>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,fontWeight:500,whiteSpace:'nowrap'}}>{childCount} Strand{childCount===1?'':'s'}</span>
+  <span className="mi" style={{fontSize:16}}>{isExpanded?'expand_less':'expand_more'}</span>
+</div>
+    );
+  }
+  return(
+<div style={{display:'inline-block'}}>
+  <span ref={btnRef} onClick={function(e){e.stopPropagation();setOpen(!open);}} style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'var(--placeholder)',cursor:'pointer'}}>-</span>
+  <FloatingPanel anchorRef={btnRef} open={open} onClose={function(){setOpen(false);setName('');}} minWidth={200}>
+    <div onClick={function(e){e.stopPropagation();}} style={{background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:10,boxShadow:'0 4px 16px rgba(42,31,16,.12)',padding:8}}>
+      <input autoFocus value={name} onChange={function(e){setName(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')createBranch();if(e.key==='Escape'){setName('');setOpen(false);}}} placeholder="New strand name…" style={{width:'100%',padding:'6px 8px',fontSize:13,border:'1px solid var(--border)',borderRadius:6,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',boxSizing:'border-box'}}/>
+    </div>
+  </FloatingPanel>
 </div>
   );
 }
@@ -164,7 +173,6 @@ function TableView({app}){
   var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
   var so2=useState(null);var dragOver=so2[0];var setDragOver=so2[1];
   var sco=useState(false);var colOpen=sco[0];var setColOpen=sco[1];
-  var scp=useState({top:0,left:0,right:0});var colPos=scp[0];var setColPos=scp[1];
   var colRef=useRef(null);
   // Spool drawer (opened by clicking a spool thumbnail in the Strands column)
   var ssv=useState(null);var spoolView=ssv[0];var setSpoolView=ssv[1]; // {draftId,strandId} | null
@@ -247,24 +255,6 @@ function TableView({app}){
     }
     document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
   }
-  var colDropRef=useRef(null);
-  useEffect(function(){if(!colOpen)return;function onDown(e){
-    if(colRef.current&&colRef.current.contains(e.target))return;
-    if(colDropRef.current&&colDropRef.current.contains(e.target))return;
-    setColOpen(false);
-  }document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[colOpen]);
-  // Keep the columns dropdown at least 15px inside the viewport on every
-  // edge — it's initially positioned off the settings button, which can
-  // push it past the left or bottom edge on a narrow/short viewport.
-  useEffect(function(){
-    if(!colOpen||!colDropRef.current)return;
-    var rect=colDropRef.current.getBoundingClientRect();
-    var vw=window.innerWidth;var vh=window.innerHeight;
-    var next=Object.assign({},colPos);var changed=false;
-    if(rect.left<15){next.right=Math.max(0,vw-15-rect.width);changed=true;}
-    if(rect.bottom>vh-15){next.top=Math.max(15,vh-15-rect.height);changed=true;}
-    if(changed)setColPos(next);
-  },[colOpen]);
   var allDrafts=app.allDrafts[app.projId]||[];
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
   var ltDrafts=allDrafts.filter(function(d){return d.status==='loose_thread'&&!d.archived;});
@@ -296,13 +286,13 @@ function TableView({app}){
   }
   function renderCell(col,draft,rowCtx){
     if(col==='title'){
-      var canPromote=rowCtx&&(rowCtx.hasChildren||rowCtx.isNested);
+      var showStar=rowCtx&&(rowCtx.isNested||(rowCtx.hasChildren&&rowCtx.branchesOpen));
       return(
-<div style={{display:'flex',alignItems:'flex-start',gap:2}}>
-  <div style={{flex:'0 1 auto',minWidth:0,maxWidth:canPromote?'calc(100% - 26px)':'100%'}}>
+<div style={{display:'flex',alignItems:'flex-start',gap:4}}>
+  <div style={{flex:1,minWidth:0}}>
     <ExpandingCell value={draft.title} placeholder="Untitled" rowExpanded={rowCtx&&rowCtx.rowExpanded} style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2a1f10'}} onCommit={function(v){app.updateDraft(app.projId,draft.id,{title:v});}}/>
   </div>
-  {canPromote&&(rowCtx.isNested?(
+  {showStar&&(rowCtx.isNested?(
 <button className="btn-icon" style={{padding:2,flexShrink:0,marginTop:1}} title="Make this the primary strand" onClick={function(e){e.stopPropagation();app.promoteStrand(app.projId,rowCtx.parentId,draft.id);}}>
   <span className="mi" style={{fontSize:16,color:'var(--mid)'}}>star_outline</span>
 </button>
@@ -338,7 +328,7 @@ function TableView({app}){
     }
     return null;
   }
-  function renderRow(draft,label,isNested,parentId,hasChildren,isExpanded){
+  function renderRow(draft,label,isNested,parentId,hasChildren,isExpanded,childCount){
     var rowExp=expandedRowId===draft.id;
     var vAlign=rowExp?'top':'middle';
     return(
@@ -347,19 +337,21 @@ function TableView({app}){
   onDragOver={function(e){e.preventDefault();setDragOver(draft.id);}}
   onDragLeave={function(){setDragOver(null);}}
   onDrop={function(e){e.preventDefault();setDragOver(null);var fromId=e.dataTransfer.getData('draftId');if(fromId&&fromId!==draft.id){var fromDraft=(app.allDrafts[app.projId]||[]).find(function(d){return d.id===fromId;});if(fromDraft&&fromDraft.status==='loose_thread'){app.updateDraft(app.projId,fromId,{status:'first_draft',order:draft.order||0,parentId:null});}else{app.reorderDraft(app.projId,fromId,draft.order||0);}}}}>
-  <td style={{verticalAlign:vAlign}}><div style={{display:'flex',alignItems:'center',gap:2}}>
+  <td style={{verticalAlign:vAlign}}>
     <span draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}} style={{cursor:'grab',color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:18}}>drag_indicator</span></span>
-    {hasChildren&&<span className="mi" style={{fontSize:16,cursor:'pointer',color:isExpanded?'#C45E28':'var(--mid)',flexShrink:0}} title={isExpanded?'Collapse branches':'Expand branches'} onClick={function(e){e.stopPropagation();app.updateDraft(app.projId,draft.id,{nestExpanded:!isExpanded});}}>account_tree</span>}
-  </div></td>
+  </td>
+  <td style={{verticalAlign:vAlign,paddingLeft:12}} onClick={function(e){e.stopPropagation();}}>
+    {!isNested&&<BranchCell app={app} draft={draft} hasChildren={hasChildren} childCount={childCount} isExpanded={isExpanded}/>}
+  </td>
   {(tblNumbered||tblByDate)&&(
   <td style={{color:'var(--mid)',fontSize:11,whiteSpace:'nowrap',paddingLeft:isNested?28:12,verticalAlign:vAlign}}>
     <div style={{display:'flex',alignItems:'center',gap:2}}>
       {isNested&&<span className="mi" style={{fontSize:12,color:'var(--border)',flexShrink:0}}>subdirectory_arrow_right</span>}
-      {tblNumbered?label:formatDraftDate(draftDateOf(draft))}
+      {isNested?(tblNumbered?null:formatDraftDate(draftDateOf(draft))):(tblNumbered?label:formatDraftDate(draftDateOf(draft)))}
     </div>
   </td>
   )}
-  {visCols.map(function(col){var td=<td key={col} style={{verticalAlign:vAlign}}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId,rowExpanded:rowExp})}</td>;if(col==='title')return [td,<td key="__arrowcol" style={{verticalAlign:vAlign}} onClick={function(e){e.stopPropagation();}}><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
+  {visCols.map(function(col){var td=<td key={col} style={{verticalAlign:vAlign}}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId,rowExpanded:rowExp,branchesOpen:isExpanded})}</td>;if(col==='title')return [td,<td key="__arrowcol" style={{verticalAlign:vAlign}} onClick={function(e){e.stopPropagation();}}><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
     <span className="material-symbols-outlined" style={{fontSize:18}}>arrow_forward</span>
   </button></td>];return td;})}
   <td style={{verticalAlign:vAlign}}/>
@@ -376,6 +368,9 @@ function TableView({app}){
     <thead>
       <tr style={{background:'#E2D0B8'}}>
         <th style={{width:28,background:'#E2D0B8'}}/>
+        <th style={{width:110,background:'#E2D0B8',textAlign:'left',paddingLeft:12}}>
+          <span className="mi" style={{fontSize:18,color:'#6B4A26'}}>account_tree</span>
+        </th>
         {tblNumbered&&<th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>}
         {tblByDate&&<th style={{width:96,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>Date</th>}
         {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});var thEl=(
@@ -389,7 +384,7 @@ function TableView({app}){
 </th>
         );if(col==='title')return [thEl,<th key="__arrowcol" style={{width:34,background:'#E2D0B8'}}/>];return thEl;})}
         <th style={{width:46,background:'#E2D0B8'}}>
-          <button ref={colRef} className="btn-icon" style={{padding:2,color:'var(--mid)'}} onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setColPos({top:r.bottom+4,right:window.innerWidth-r.right});setColOpen(!colOpen);}} title="Edit columns">
+          <button ref={colRef} className="btn-icon" style={{padding:2,color:'var(--mid)'}} onClick={function(){setColOpen(!colOpen);}} title="Edit columns">
             <span className="mi" style={{fontSize:18}}>settings</span>
           </button>
         </th>
@@ -399,10 +394,11 @@ function TableView({app}){
       {displayed.map(function(parent,i){
         var isExpanded=parent.nestExpanded!==false;
         var hasChildren=parent.children&&parent.children.length>0;
+        var childCount=parent.children?parent.children.length:0;
         var origIdx=tree.findIndex(function(d){return d.id===parent.id;});
         var lbl=''+(origIdx+1);
-        var rows=[renderRow(parent,lbl,false,null,hasChildren,isExpanded)];
-        if(hasChildren&&isExpanded){parent.children.forEach(function(child,ci){rows.push(renderRow(child,lbl+'.'+(ci+1),true,parent.id,false,false));});}
+        var rows=[renderRow(parent,lbl,false,null,hasChildren,isExpanded,childCount)];
+        if(hasChildren&&isExpanded){parent.children.forEach(function(child,ci){rows.push(renderRow(child,lbl+'.'+(ci+1),true,parent.id,false,false,0));});}
         return rows;
       })}
     </tbody>
@@ -412,8 +408,8 @@ function TableView({app}){
 </div>
     )}
   </div>
-  {colOpen&&(
-<div ref={colDropRef} className="col-vis-drop" style={{top:colPos.top,right:colPos.right,maxHeight:'60vh',overflowY:'auto'}}>
+  <FloatingPanel anchorRef={colRef} open={colOpen} onClose={function(){setColOpen(false);}} minWidth={200}>
+<div className="col-vis-drop" style={{position:'static',maxHeight:'60vh',overflowY:'auto'}}>
   <div style={{padding:'4px 8px 6px',fontSize:11,color:'var(--mid)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.06em'}}>Columns</div>
   {allAvailCols.filter(function(col){return col.id!=='title';}).map(function(col){var isVis=visCols.includes(col.id);return(
 <div key={col.id} className="col-vis-item" onClick={function(){toggleCol(col.id);}}>
@@ -424,7 +420,7 @@ function TableView({app}){
 </div>
   );})}
 </div>
-  )}
+  </FloatingPanel>
   <BindDrawer app={app} open={bindOpen} variant="overlay" topOffset={54} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
   <LooseThreadsSection threads={ltDrafts} app={app} view="table" filter={filter}/>
   {spoolView&&(

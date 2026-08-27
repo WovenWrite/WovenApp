@@ -13,7 +13,7 @@ import BindDrawer from './BindDrawer'
 import ProjectWizard from './ProjectWizard'
 import ProjectDrawer from './ProjectDrawer'
 import TableView from './TableView'
-import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor, Radio } from './SharedUI'
+import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor, Radio, FloatingPanel } from './SharedUI'
 import {
   STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
   supabase, genId, stripHtml, countWords, initials, todayStr,
@@ -1242,8 +1242,7 @@ function StrandCircle({strand,spoolColor,size}){
 function StrandTagPicker({draft,app,pid,tagged}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
   var sq=useState('');var q=sq[0];var setQ=sq[1];
-  var ref=useRef(null);
-  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
+  var btnRef=useRef(null);
 
   var projStrands=app.allStrands[pid]||{};
   var projTemplates=app.allTemplates[pid]||[];
@@ -1266,16 +1265,16 @@ function StrandTagPicker({draft,app,pid,tagged}){
   }
 
   return(
-<div ref={ref} style={{position:'relative',display:'inline-block'}}>
-  <button onClick={function(e){e.stopPropagation();setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:12,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',fontSize:11,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>
+<div style={{display:'inline-block'}}>
+  <button ref={btnRef} onClick={function(e){e.stopPropagation();setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:12,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',fontSize:11,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>
     <span className="material-symbols-outlined" style={{fontSize:14,color:'var(--teal)'}}>add</span>
     Tag spool
   </button>
-  {open&&available.length===0&&!q&&(
-<div style={{position:'absolute',bottom:'calc(100% + 6px)',left:0,zIndex:600,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--mid)',whiteSpace:'nowrap',boxShadow:'0 4px 16px rgba(42,31,16,.12)'}}>All strands are already tagged.</div>
-  )}
-  {open&&(available.length>0||q)&&(
-<div style={{position:'absolute',bottom:'calc(100% + 6px)',left:0,zIndex:600,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:10,boxShadow:'0 4px 16px rgba(42,31,16,.12)',minWidth:200,overflow:'hidden'}}>
+  <FloatingPanel anchorRef={btnRef} open={open} onClose={function(){setOpen(false);setQ('');}} minWidth={200}>
+    {available.length===0&&!q?(
+<div style={{background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--mid)',whiteSpace:'nowrap',boxShadow:'0 4px 16px rgba(42,31,16,.12)'}}>All strands are already tagged.</div>
+    ):(
+<div style={{background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:10,boxShadow:'0 4px 16px rgba(42,31,16,.12)',minWidth:200,overflow:'hidden'}} onClick={function(e){e.stopPropagation();}}>
   <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)'}}>
     <input autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search strands…" style={{width:'100%',padding:'4px 8px',fontSize:12,border:'1px solid var(--border)',borderRadius:6,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',boxSizing:'border-box'}}/>
   </div>
@@ -1294,7 +1293,8 @@ function StrandTagPicker({draft,app,pid,tagged}){
     {available.length===0&&q&&<div style={{padding:'10px 12px',fontSize:12,color:'var(--mid)'}}>No matches.</div>}
   </div>
 </div>
-  )}
+    )}
+  </FloatingPanel>
 </div>
   );
 }
