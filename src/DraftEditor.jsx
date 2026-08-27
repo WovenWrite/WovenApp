@@ -290,7 +290,8 @@ function DraftEditor({app}){
     }
     var rootId=(rootDraft&&rootDraft.id)||did;
     var children=all.filter(function(d){return d.parentId===rootId&&!d.archived;});
-    var main=[{id:rootId,name:rootId===did?'Main':(rootDraft.title||'Main'),isPrimary:true,draftTitle:rootDraft.title||'Untitled draft'}];
+    var rootTitle=(rootDraft&&rootDraft.title)||'Untitled draft';
+    var main=[{id:rootId,name:rootTitle,isPrimary:true,draftTitle:rootTitle}];
     var rest=children.map(function(d){return{id:d.id,name:d.title||'Strand',isPrimary:false,draftTitle:d.title||'Strand'};});
     return main.concat(rest);
   }
