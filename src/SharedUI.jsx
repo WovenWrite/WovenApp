@@ -104,7 +104,7 @@ var DRAWER_CSS = `
   padding:6px 10px;font-family:'DM Sans',sans-serif;font-size:14px;color:#6B4A26;outline:none;
   background:rgba(255,252,248,.6);}
 .wv-refpick-search input:focus{background:#FFFCF8;border-color:#C45E28;}
-.wv-refpick-list{overflow-y:auto;}
+.wv-refpick-list{overflow-y:auto;padding:0 6px;}
 
 /* Collapsible */
 .wv-collapse{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mid);
