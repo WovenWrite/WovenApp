@@ -78,6 +78,10 @@ const CANVAS_CSS = `
 .react-flow__node:hover .woven-card:not(.selected){
   box-shadow:0 0 0 2px rgba(196,94,40,.2),0 4px 16px rgba(42,31,16,.1);}
 
+/* Connect tool active — override React Flow's default grab cursor on
+   nodes so hovering shows the same crosshair as the empty pane. */
+.ex-connect-mode .react-flow__node{cursor:crosshair!important;}
+
 /* Right panel */
 .ex-right{display:flex;flex-direction:row-reverse;flex-shrink:0;}
 
@@ -1260,7 +1264,9 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
         nodeTypes={nodeTypes}
         panOnDrag={!isPlaceMode}
         selectionOnDrag={!isPlaceMode}
+        nodesDraggable={activeTool !== 'connect'}
         deleteKeyCode={['Delete', 'Backspace']}
+        className={activeTool === 'connect' ? 'ex-connect-mode' : ''}
         style={{ cursor: (isPlaceMode || activeTool === 'connect') ? 'crosshair' : 'default' }}
         proOptions={{ hideAttribution: true }}
       >
