@@ -391,13 +391,13 @@ function TableView({app}){
         {tblNumbered&&<th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>}
         {tblByDate&&<th style={{width:96,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>Date</th>}
         {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});var thEl=(
-<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600,cursor:'grab',userSelect:'none'}} className="resizable"
-  draggable={true}
-  onDragStart={function(e){if(resizing.current){e.preventDefault();return;}e.dataTransfer.setData('colId',col);}}
+<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600,userSelect:'none',position:'relative'}} className="resizable"
   onDragOver={function(e){e.preventDefault();}}
   onDrop={function(e){e.preventDefault();var fromId=e.dataTransfer.getData('colId');if(!fromId||fromId===col)return;var nc=colOrder.slice();var fromIdx=nc.indexOf(fromId);var toIdx=nc.indexOf(col);if(fromIdx<0||toIdx<0)return;var item=nc.splice(fromIdx,1)[0];nc.splice(toIdx,0,item);persistColOrder(nc);}} >
-  {col==='branches'?<span className="mi" style={{fontSize:18,color:'#6B4A26'}}>account_tree</span>:(av?av.label:col)}
-  <div className="col-resize-handle" draggable={false} onMouseDown={function(e){e.stopPropagation();startResize(col,e);}}/>
+  <span draggable={true} onDragStart={function(e){e.dataTransfer.setData('colId',col);}} style={{cursor:'grab',display:'inline-block'}}>
+    {col==='branches'?<span className="mi" style={{fontSize:18,color:'#6B4A26'}}>account_tree</span>:(av?av.label:col)}
+  </span>
+  <div className="col-resize-handle" onMouseDown={function(e){e.stopPropagation();startResize(col,e);}}/>
 </th>
         );if(col==='title')return [thEl,<th key="__arrowcol" style={{width:34,background:'#E2D0B8'}}/>];return thEl;})}
         <th style={{width:46,background:'#E2D0B8'}}>
