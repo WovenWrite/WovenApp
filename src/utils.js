@@ -224,3 +224,45 @@ export function doExport(format, drafts, project, isSingleDraft, authorName) {
 export function buildShareLink(shareId) {
   return window.location.origin + window.location.pathname + '?share=' + shareId;
 }
+
+// ══════════════════════════════════════════════
+// Draft filter — shared between App.jsx's Define Filter panel and BindDrawer
+// ══════════════════════════════════════════════
+// Shape: { status:[...statusKeys], strandTags:[...strandIds], customFields:{fieldId:[...strandIds]} }
+// AND across categories (status / strandTags / each custom field), OR within
+// a category's own selections. Kept here (not duplicated) so any consumer of
+// an active filter — the Storyboard/Outline views, Bind — matches drafts the
+// same way.
+
+export function emptyFilterState() {
+  return { status: [], strandTags: [], customFields: {} };
+}
+
+export function filterCriteriaCount(filterObj) {
+  if (!filterObj) return 0;
+  var n = (filterObj.status || []).length + (filterObj.strandTags || []).length;
+  Object.keys(filterObj.customFields || {}).forEach(function (k) { n += (filterObj.customFields[k] || []).length; });
+  return n;
+}
+
+export function draftMatchesFilter(draft, filterObj) {
+  if (!filterObj) return true;
+  var st = filterObj.status || [];
+  if (st.length > 0 && st.indexOf(draft.status) < 0) return false;
+  var sTags = filterObj.strandTags || [];
+  if (sTags.length > 0) {
+    var dTags = draft.strandTags || [];
+    if (!sTags.some(function (id) { return dTags.indexOf(id) >= 0; })) return false;
+  }
+  var cf = filterObj.customFields || {};
+  var keys = Object.keys(cf);
+  for (var i = 0; i < keys.length; i++) {
+    var fid = keys[i]; var wanted = cf[fid] || [];
+    if (wanted.length === 0) continue;
+    var raw = (draft.customFields && draft.customFields[fid]) || '';
+    var have = [];
+    try { var parsed = JSON.parse(raw); have = Array.isArray(parsed) ? parsed : (raw ? [raw] : []); } catch (e) { have = raw ? [raw] : []; }
+    if (!wanted.some(function (id) { return have.indexOf(id) >= 0; })) return false;
+  }
+  return true;
+}
