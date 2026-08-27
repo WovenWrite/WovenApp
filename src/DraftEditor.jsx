@@ -295,6 +295,12 @@ function DraftEditor({app}){
     return main.concat(rest);
   }
   var sb=useState(buildBranches);var branches=sb[0];var setBranches=sb[1];
+  // Keep the branch list in sync with the actual data whenever it changes
+  // (e.g. after promoting a strand to primary) without navigating away —
+  // you should stay on whatever strand you're currently drafting.
+  useEffect(function(){
+    setBranches(buildBranches());
+  },[app&&app.allDrafts&&app.allDrafts[pid]]);
   var sab=useState(did);var activeBranchId=sab[0];var setActiveBranchId=sab[1];
   var slink=useState(null);var shareLink=slink[0];var setShareLink=slink[1];
   var ssid=useState(null);var shareId=ssid[0];var setShareId=ssid[1];
@@ -491,7 +497,9 @@ function DraftEditor({app}){
     var rootId=(branches&&branches.length&&branches[0].id)||did;
     if(id===rootId)return; // already primary
     if(app&&app.promoteStrand)app.promoteStrand(pid,rootId,id);
-    if(app&&app.openDraft)app.openDraft(id);
+    // Don't navigate — you stay on whatever strand you're currently
+    // drafting; the branch list above refreshes itself in place once
+    // app.allDrafts updates.
   }
   async function handleGenerateLink(){
     if(!app||!app.currentUser)return;
