@@ -1,412 +1,484 @@
 // @ts-nocheck
-// ── PropertiesDrawer ──
-// Draft metadata, in order: Thumbnail, Title, Status + Sequence #, Synopsis,
-// Tagged Strands, custom fields, Add new field / Edit existing fields.
+// ── ProjectDrawer ──
+// The dashboard's project settings drawer. Replaces ProjectEditPanel.
 //
-// "Nested under" is gone — nesting/branching now lives in DraftEditor's top
-// nav (BranchDropdown), not here.
+// Layered like the other drawers: an overview layer with the cover image,
+// core fields and progress, then drill-ins for the things that need room.
 //
-//   <PropertiesDrawer app={app} draft={draft} variant="inline" onClose={...} />
+//   Layer 1 'main'       — cover, title, synopsis, type, progress, links out
+//   Layer 2 'structure'  — what a draft is called, ordering, cover images
+//   Layer 2 'statuses'   — rename and recolour (loose_thread is locked)
+//   Layer 2 'properties' — draft custom fields
+//   Layer 2 'goals'      — deadline and writing pace
+//
+//   <ProjectDrawer proj={proj} app={app} open={true} onClose={fn} />
+//
+// Everything below the progress block writes through app.updateProjectConfig.
+// Nothing outside the wizard READS most of this yet — cards still show
+// thumbnails regardless, statuses are still global, labels still say "Draft".
+// That wiring is the next phase.
 
 import { useState } from 'react';
-import { Drawer, Field, ArchiveConfirmModal, StrandRefPicker, StrandSearchDropdown, DraftThumbnailUpload, Avatar, PrimaryButton, SecondaryButton, TertiaryButton, HelpText, OptionsEditor, Radio } from './SharedUI';
-import { genId, STATUSES, FIELD_TYPES } from './utils';
-import { projSequence, projStatusMap, draftDateOf } from './projectConfig';
+import {
+  Drawer, Field, HelpText, CategoryLink, DraftThumbnailUpload,
+  Radio, CustomColorPicker, OptionsEditor
+} from './SharedUI';
+import {
+  PROJ_TYPES, SEQUENCE_MODES, GOAL_MODES, DEFAULT_STATUSES,
+  projConfig, projStatuses, projLabel, projGoal, daysUntilDue, isSystemStatus
+} from './projectConfig';
+import { FIELD_TYPES, genId } from './utils';
 
-export default function PropertiesDrawer({ app, draft, variant, open, onClose, onOpenStrand }) {
-  var pid = app.projId;
-  var s2 = useState(false); var addChipOpen = s2[0]; var setAddChipOpen = s2[1];
-  var sac = useState(false); var showArchiveConfirm = sac[0]; var setShowArchiveConfirm = sac[1];
-  var saf = useState(false); var showAddField = saf[0]; var setShowAddField = saf[1];
-  var sef = useState(false); var showEditFields = sef[0]; var setShowEditFields = sef[1];
+// ── Archive confirmation ──
+function ArchiveConfirm({ proj, onConfirm, onCancel }) {
+  return (
+    <div className="modal-overlay">
+      <div className="modal-backdrop" onClick={onCancel} />
+      <div className="modal-box" style={{ maxWidth: 420 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <span className="mi" style={{ fontSize: 28, color: 'var(--indigo)' }}>inventory_2</span>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, color: 'var(--text)' }}>Archive this project?</div>
+        </div>
+        <div style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 12 }}>
+          <strong style={{ color: 'var(--text)' }}>{proj.title || 'Untitled'}</strong> and all its content will be hidden from your dashboard.
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--mid)', marginBottom: 20 }}>
+          You can restore it any time from <strong>Your Archive</strong> on the dashboard.
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={onCancel}>Cancel</button>
+          <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={onConfirm}>
+            <span className="mi" style={{ fontSize: 16 }}>inventory_2</span>Archive project
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  if (!draft) return null;
+// ── A drill-in row that is not built yet ──
+function ComingSoonRow({ icon, title, note }) {
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px',
+        border: '1px solid var(--border)', borderRadius: 'var(--r)',
+        marginBottom: 6, opacity: .6, cursor: 'default'
+      }}
+    >
+      <span className="mi" style={{ fontSize: 18, color: 'var(--mid)', flexShrink: 0 }}>{icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{title}</div>
+        {note && <div style={{ fontSize: 12, color: 'var(--mid)' }}>{note}</div>}
+      </div>
+      <span
+        style={{
+          fontSize: 10, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase',
+          color: 'var(--indigo)', background: 'rgba(196,94,40,.08)',
+          border: '1px solid rgba(196,94,40,.2)', borderRadius: 20, padding: '3px 8px', flexShrink: 0
+        }}
+      >Coming soon</span>
+    </div>
+  );
+}
 
-  var projStrands = app.allStrands[pid] || {};
-  var allStrandsList = [];
-  Object.keys(projStrands).forEach(function (c) {
-    (projStrands[c] || []).forEach(function (st) {
-      allStrandsList.push(Object.assign({}, st, { collectionName: c }));
-    });
-  });
+// ── One number in the progress block ──
+function Stat({ value, label }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600, color: 'var(--text)', lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 11, color: 'var(--mid)', marginTop: 2 }}>{label}</div>
+    </div>
+  );
+}
 
-  var tagIds = draft.strandTags || [];
-  var taggedStrands = allStrandsList.filter(function (st) { return tagIds.includes(st.id); });
+// ── Toggle switch ──
+function Toggle({ on, onClick, label, help }) {
+  return (
+    <div>
+      <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 0' }}>
+        <span style={{ width: 36, height: 20, borderRadius: 10, flexShrink: 0, position: 'relative', background: on ? 'var(--indigo)' : 'var(--bg3)', transition: 'background .15s' }}>
+          <span style={{ position: 'absolute', top: 2, left: on ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .15s', boxShadow: '0 1px 3px rgba(42,31,16,.25)' }} />
+        </span>
+        <span style={{ fontSize: 13, color: 'var(--text)' }}>{label}</span>
+      </div>
+      {help && <HelpText style={{ marginTop: 0 }}>{help}</HelpText>}
+    </div>
+  );
+}
 
-  var project = app.currentProject || {};
-  var draftFieldDefs = project.draftFieldDefs || [];
-  var statusMap = projStatusMap(project);
-  var byDate = projSequence(project) === 'date';
+export default function ProjectDrawer({ proj, app, variant, open, onClose, topOffset }) {
+  var sv = useState('main'); var view = sv[0]; var setView = sv[1];
+  var sac = useState(false); var archiveConfirm = sac[0]; var setArchiveConfirm = sac[1];
 
-  var allDrafts = app.allDrafts[pid] || [];
-  var seqSiblings = allDrafts
-    .filter(function (d) { return d.status !== 'loose_thread' && !d.parentId && !d.archived; })
-    .sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
-  var myPosition = seqSiblings.findIndex(function (d) { return d.id === draft.id; }) + 1;
-  var isInSequence = draft.status !== 'loose_thread' && !draft.parentId && myPosition > 0;
+  if (!proj) return null;
 
-  function update(changes) { app.updateDraft(pid, draft.id, changes); }
-  function removeStrand(sid) { update({ strandTags: tagIds.filter(function (t) { return t !== sid; }) }); }
-  function addStrand(sid) { update({ strandTags: tagIds.concat([sid]) }); setAddChipOpen(false); }
+  var pid = proj.id;
+  var cfg = projConfig(proj);
+  var drafts = (app.allDrafts[pid] || []).filter(function (d) { return !d.archived; });
+  var fieldDefs = proj.draftFieldDefs || [];
+  var statuses = projStatuses(proj);
+  var one = projLabel(proj, 'draft');
+  var many = projLabel(proj, 'drafts');
 
-  function handleStatusChange(e) {
-    var v = e.target.value;
-    if (v === 'archive') { setShowArchiveConfirm(true); return; }
-    var changes = { status: v };
-    if (v === 'loose_thread') { changes.order = null; changes.parentId = null; }
-    else if (draft.status === 'loose_thread') { changes.order = seqSiblings.length + 1; }
-    update(changes);
+  function setConfig(patch) {
+    if (app.updateProjectConfig) app.updateProjectConfig(pid, patch);
   }
-  function doArchive() { update({ archived: true }); setShowArchiveConfirm(false); }
+  function back() { setView('main'); }
 
-  function handleSequenceChange(e) {
-    var targetOrder = parseInt(e.target.value, 10);
-    if (app.reorderDraft) app.reorderDraft(pid, draft.id, targetOrder);
+  // ── Layer 2: structure ──
+  if (view === 'structure') {
+    return (
+      <Drawer variant={variant || 'overlay'} open={open} title="Structure" onBack={back} onClose={onClose} topOffset={topOffset}>
+        <div>
+          <span className="wv-field-lbl">What is one piece of writing called?</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              key={pid + '-lo'}
+              defaultValue={one}
+              placeholder="Draft"
+              style={{ flex: 1 }}
+              onBlur={function (e) {
+                var v = e.target.value.trim() || 'Draft';
+                setConfig({ labels: Object.assign({}, cfg.labels, { draft: v }) });
+              }}
+            />
+            <input
+              key={pid + '-lm'}
+              defaultValue={many}
+              placeholder="Drafts"
+              style={{ flex: 1 }}
+              onBlur={function (e) {
+                var v = e.target.value.trim() || (one + 's');
+                setConfig({ labels: Object.assign({}, cfg.labels, { drafts: v }) });
+              }}
+            />
+          </div>
+          <HelpText style={{ marginTop: 6 }}>Singular, then plural.</HelpText>
+        </div>
+
+        <div>
+          <span className="wv-field-lbl">How are they ordered?</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {SEQUENCE_MODES.map(function (m) {
+              return (
+                <div key={m.id}>
+                  <Radio on={cfg.sequenceMode === m.id} onClick={function () { setConfig({ sequenceMode: m.id }); }} label={m.label} />
+                  <div style={{ fontSize: 12, color: 'var(--mid)', marginLeft: 28, marginTop: -2 }}>{m.desc}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <span className="wv-field-lbl">Cover images</span>
+          <Toggle
+            on={cfg.draftThumbnails}
+            onClick={function () { setConfig({ draftThumbnails: !cfg.draftThumbnails }); }}
+            label={'Show a cover image on each storyboard card'}
+            help="Off makes the cards more compact."
+          />
+        </div>
+      </Drawer>
+    );
   }
+
+  // ── Layer 2: statuses ──
+  if (view === 'statuses') {
+    function updateStatus(id, changes) {
+      var next = statuses.map(function (s) {
+        return s.id !== id ? s : Object.assign({}, s, changes);
+      });
+      setConfig({ statuses: next });
+    }
+    return (
+      <Drawer variant={variant || 'overlay'} open={open} title="Statuses" onBack={back} onClose={onClose} topOffset={topOffset}>
+        <HelpText>Rename and recolour these to match how you work. The set itself is fixed for now.</HelpText>
+        {statuses.map(function (s) {
+          var isSys = isSystemStatus(s.id);
+          var base = DEFAULT_STATUSES.find(function (d) { return d.id === s.id; });
+          return (
+            <div key={s.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: 10 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ width: 12, height: 12, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
+                <input
+                  key={pid + '-' + s.id}
+                  defaultValue={s.label}
+                  placeholder={base ? base.label : ''}
+                  style={{ flex: 1, fontSize: 13 }}
+                  onBlur={function (e) {
+                    var v = e.target.value.trim();
+                    updateStatus(s.id, { label: v || (base ? base.label : s.label) });
+                  }}
+                />
+                {isSys && (
+                  <span className="mi" style={{ fontSize: 16, color: 'var(--placeholder)' }} title="This status cannot be removed">lock</span>
+                )}
+              </div>
+              <CustomColorPicker color={s.color} onSelect={function (c) { updateStatus(s.id, { color: c }); }} />
+            </div>
+          );
+        })}
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ width: '100%', justifyContent: 'center' }}
+          onClick={function () { setConfig({ statuses: null }); }}
+        >
+          <span className="mi" style={{ fontSize: 14 }}>restart_alt</span> Reset to defaults
+        </button>
+      </Drawer>
+    );
+  }
+
+  // ── Layer 2: draft properties ──
+  if (view === 'properties') {
+    function addField() {
+      app.addDraftFieldDef(pid, { id: genId(), label: 'New property', type: 'short_text' });
+    }
+    function editField(fieldId, changes) {
+      app.updateDraftFieldDef(pid, fieldId, changes);
+    }
+    var collections = Object.keys(app.allStrands[pid] || {});
+    return (
+      <Drawer variant={variant || 'overlay'} open={open} title={one + ' properties'} onBack={back} onClose={onClose} topOffset={topOffset}>
+        {fieldDefs.length === 0 && <HelpText>No properties yet. Add one below.</HelpText>}
+        {fieldDefs.map(function (f) {
+          return (
+            <div key={f.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: 8 }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  key={pid + '-f-' + f.id}
+                  defaultValue={f.label}
+                  placeholder="Property name"
+                  style={{ flex: 1, fontSize: 13 }}
+                  onBlur={function (e) { if (e.target.value.trim()) editField(f.id, { label: e.target.value.trim() }); }}
+                />
+                <select
+                  value={f.type}
+                  onChange={function (e) { editField(f.id, { type: e.target.value }); }}
+                  style={{ fontSize: 12, width: 110 }}
+                >
+                  {FIELD_TYPES.map(function (ft) { return <option key={ft.id} value={ft.id}>{ft.label}</option>; })}
+                </select>
+                <button className="btn-icon" onClick={function () { app.removeDraftFieldDef(pid, f.id); }} aria-label="Remove property">
+                  <span className="mi" style={{ fontSize: 16, color: 'var(--danger)' }}>delete</span>
+                </button>
+              </div>
+              {f.type === 'select' && (
+                <div style={{ marginTop: 8 }}>
+                  <span className="wv-field-lbl">Options</span>
+                  <OptionsEditor options={f.options || []} onChange={function (opts) { editField(f.id, { options: opts }); }} />
+                </div>
+              )}
+              {f.type === 'strand_ref' && (
+                <div style={{ marginTop: 8 }}>
+                  <span className="wv-field-lbl">Spool collection</span>
+                  <select
+                    value={f.refSpool || ''}
+                    onChange={function (e) { editField(f.id, { refSpool: e.target.value }); }}
+                    style={{ fontSize: 12, width: '100%' }}
+                  >
+                    <option value="">Choose a collection...</option>
+                    {collections.map(function (c) { return <option key={c} value={c}>{c}</option>; })}
+                  </select>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <button className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }} onClick={addField}>
+          <span className="mi" style={{ fontSize: 14 }}>add</span> Add property
+        </button>
+      </Drawer>
+    );
+  }
+
+  // ── Layer 2: goals ──
+  if (view === 'goals') {
+    return (
+      <Drawer variant={variant || 'overlay'} open={open} title="Deadline and pace" onBack={back} onClose={onClose} topOffset={topOffset}>
+        <div>
+          <span className="wv-field-lbl">Deadline</span>
+          <input
+            type="date"
+            value={cfg.dueDate || ''}
+            onChange={function (e) { setConfig({ dueDate: e.target.value || null }); }}
+            style={{ width: '100%' }}
+          />
+          <HelpText style={{ marginTop: 6 }}>Nothing happens at the deadline — it is yours to aim at.</HelpText>
+        </div>
+
+        <div>
+          <span className="wv-field-lbl">Writing pace</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {GOAL_MODES.map(function (m) {
+              return (
+                <div key={m.id}>
+                  <Radio
+                    on={cfg.goalMode === m.id}
+                    onClick={function () { setConfig(m.id === 'none' ? { goalMode: 'none', goalWords: 0 } : { goalMode: m.id }); }}
+                    label={m.label}
+                  />
+                  <div style={{ fontSize: 12, color: 'var(--mid)', marginLeft: 28, marginTop: -2 }}>{m.desc}</div>
+                </div>
+              );
+            })}
+          </div>
+          {cfg.goalMode !== 'none' && (
+            <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                key={pid + '-gw'}
+                type="number"
+                min="0"
+                defaultValue={cfg.goalWords || ''}
+                placeholder={cfg.goalMode === 'daily' ? '500' : '3500'}
+                style={{ width: 120 }}
+                onBlur={function (e) {
+                  var n = parseInt(e.target.value, 10);
+                  setConfig({ goalWords: n > 0 ? n : 0 });
+                }}
+              />
+              <span style={{ fontSize: 13, color: 'var(--mid)' }}>
+                words per {cfg.goalMode === 'daily' ? 'day' : 'week'}
+              </span>
+            </div>
+          )}
+          <HelpText style={{ marginTop: 8 }}>
+            This is separate from your overall daily goal on the dashboard.
+          </HelpText>
+        </div>
+      </Drawer>
+    );
+  }
+
+  // ── Layer 1: overview ──
+  var totalWords = drafts.reduce(function (s, d) { return s + (d.wordCount || 0); }, 0);
+  var sequenced = drafts.filter(function (d) { return d.status !== 'loose_thread'; });
+  var looseCount = drafts.length - sequenced.length;
+  var byStatus = statuses.map(function (s) {
+    return { status: s, count: drafts.filter(function (d) { return d.status === s.id; }).length };
+  }).filter(function (r) { return r.count > 0; });
+
+  var days = daysUntilDue(proj);
+  var goal = projGoal(proj);
+
+  var footer = (
+    <button
+      className="btn btn-ghost"
+      style={{ color: 'var(--danger)', width: '100%', justifyContent: 'center' }}
+      onClick={function () { setArchiveConfirm(true); }}
+    >
+      <span className="mi" style={{ fontSize: 16 }}>inventory_2</span>Archive this project
+    </button>
+  );
 
   return (
-    <Drawer variant={variant || 'inline'} open={open} title="Properties" onClose={onClose}>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-        <DraftThumbnailUpload image={draft.thumbnail} onUpload={function (url) { update({ thumbnail: url }); }} />
+    <Drawer variant={variant || 'overlay'} open={open} title="Project" onClose={onClose} footer={footer} topOffset={topOffset}>
+      <div>
+        <DraftThumbnailUpload image={proj.image || null} onUpload={function (url) { app.updateProjectImage(pid, url); }} />
+        {proj.image && (
+          <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={function () { app.updateProjectImage(pid, null); }}>
+            <span className="mi" style={{ fontSize: 14 }}>close</span>Remove cover
+          </button>
+        )}
       </div>
 
       <Field
         label="Title"
-        key={draft.id + '-pt'}
-        defaultValue={draft.title || ''}
-        placeholder="Untitled draft"
-        onBlur={function (e) { update({ title: e.target.value, updatedAt: new Date().toISOString() }); }}
+        key={pid + '-t'}
+        defaultValue={proj.title || ''}
+        placeholder="Untitled project"
+        onBlur={function (e) { if (e.target.value.trim()) app.updateProjectTitle(pid, e.target.value.trim()); }}
       />
-
-      <div style={{ display: 'flex', gap: 12 }}>
-        <div style={{ flex: 2 }}>
-          <span className="wv-field-lbl">Status</span>
-          <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)', width: 9, height: 9, borderRadius: '50%', background: (statusMap[draft.status] && statusMap[draft.status].color) || '#999', pointerEvents: 'none' }} />
-            <select className="wv-field-box" style={{ paddingLeft: 32 }} value={draft.status} onChange={handleStatusChange}>
-              {Object.keys(statusMap).map(function (k) { return <option key={k} value={k}>{statusMap[k].label}</option>; })}
-              <option value="archive">Archive...</option>
-            </select>
-          </div>
-        </div>
-        {byDate ? (
-          <div style={{ flex: 1 }}>
-            <span className="wv-field-lbl">Date</span>
-            <input
-              className="wv-field-box"
-              type="date"
-              value={draftDateOf(draft)}
-              onChange={function (e) { update({ draftDate: e.target.value || null }); }}
-            />
-          </div>
-        ) : isInSequence && (
-          <div style={{ flex: 1 }}>
-            <span className="wv-field-lbl">Sequence</span>
-            <select className="wv-field-box" value={myPosition} onChange={handleSequenceChange}>
-              {seqSiblings.map(function (d, i) { return <option key={d.id} value={i + 1}>{i + 1}</option>; })}
-            </select>
-          </div>
-        )}
-      </div>
 
       <Field
         label="Synopsis"
-        key={draft.id + '-ps'}
-        defaultValue={draft.synopsis}
-        placeholder="Brief synopsis..."
-        resizeMode="manual"
-        rows={3}
-        onBlur={function (e) { update({ synopsis: e.target.value }); }}
+        key={pid + '-s'}
+        defaultValue={proj.synopsis || ''}
+        placeholder="What is this about?"
+        onBlur={function (e) { app.updateProjectSynopsis(pid, e.target.value); }}
       />
 
-      <div style={{ position: 'relative' }}>
-        <span className="wv-field-lbl">Spools</span>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          {taggedStrands.slice(0, 6).map(function (st, i) {
-            return (
-              <div key={st.id} onClick={function () { onOpenStrand && onOpenStrand(st.id); }}
-                style={{ cursor: 'pointer', marginLeft: i > 0 ? -7 : 0, position: 'relative', zIndex: 6 - i }}
-                title={st.name}>
-                <Avatar strand={st} size={28} />
-              </div>
-            );
-          })}
-          {taggedStrands.length > 6 && (
-            <span style={{ fontSize: 11, color: 'var(--mid)', marginLeft: 6 }}>+{taggedStrands.length - 6}</span>
+      <div>
+        <span className="wv-field-lbl">Type</span>
+        <select value={proj.type || 'Other'} onChange={function (e) { app.updateProjectType(pid, e.target.value); }} style={{ width: '100%' }}>
+          {PROJ_TYPES.map(function (t) { return <option key={t.id} value={t.label}>{t.label}</option>; })}
+        </select>
+      </div>
+
+      {/* ── Progress ── */}
+      <div>
+        <span className="wv-field-lbl">Progress</span>
+        <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: 12 }}>
+          <div style={{ display: 'flex', gap: 10, marginBottom: byStatus.length ? 12 : 0 }}>
+            <Stat value={totalWords.toLocaleString()} label={totalWords === 1 ? 'word' : 'words'} />
+            <Stat value={sequenced.length} label={sequenced.length === 1 ? one.toLowerCase() : many.toLowerCase()} />
+            <Stat value={looseCount} label={looseCount === 1 ? 'loose thread' : 'loose threads'} />
+          </div>
+
+          {byStatus.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {byStatus.map(function (r) {
+                var pct = drafts.length ? Math.round(r.count / drafts.length * 100) : 0;
+                return (
+                  <div key={r.status.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: r.status.color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: 'var(--body-text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.status.label}</span>
+                    <span style={{ fontSize: 12, color: 'var(--mid)', flexShrink: 0 }}>{r.count}</span>
+                    <div style={{ width: 54, height: 4, borderRadius: 2, background: 'var(--bg3)', flexShrink: 0, overflow: 'hidden' }}>
+                      <div style={{ width: pct + '%', height: '100%', background: r.status.color }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
-          <span
-            className="chip"
-            onClick={function () { setAddChipOpen(!addChipOpen); }}
-            style={{ background: 'var(--bg3)', color: 'var(--mid)', border: '1px solid var(--border)', marginLeft: taggedStrands.length > 0 ? 8 : 0 }}>
-            <span className="mi" style={{ fontSize: 14 }}>add</span>
-          </span>
-        </div>
-        {addChipOpen && (
-          <StrandSearchDropdown
-            app={app}
-            pid={pid}
-            excludeIds={tagIds}
-            onPick={function (st) { addStrand(st.id); }}
-            onClose={function () { setAddChipOpen(false); }}
-            style={{ left: 15, right: 15 }}
-          />
-        )}
-        {allStrandsList.length === 0 && (
-          <HelpText style={{ marginTop: 6 }}>No strands yet. Go to the Strands view.</HelpText>
-        )}
-      </div>
 
-      {draftFieldDefs.map(function (f) {
-        var val = (draft.customFields && draft.customFields[f.id]) || '';
-        if (f.type === 'strand_ref') {
-          var refIds = [];
-          try { var parsed = JSON.parse(val); if (Array.isArray(parsed)) refIds = parsed; } catch (e) {}
-          return (
-            <div key={f.id}>
-              <span className="wv-field-lbl">{f.label}</span>
-              <StrandRefPicker
-                app={app}
-                pid={pid}
-                collection={f.refSpool}
-                value={refIds}
-                placeholder={f.refSpool ? 'Select ' + f.refSpool.toLowerCase() + '...' : 'No collection set — edit this field'}
-                onChange={function (ids) {
-                  var cf = Object.assign({}, draft.customFields || {});
-                  cf[f.id] = ids.length ? JSON.stringify(ids) : '';
-                  var newlyAdded = ids.filter(function (id) { return !tagIds.includes(id); });
-                  var changes = { customFields: cf };
-                  if (newlyAdded.length) changes.strandTags = tagIds.concat(newlyAdded);
-                  update(changes);
-                }}
-              />
-            </div>
-          );
-        }
-        if (f.type === 'boolean') {
-          return (
-            <div key={f.id}>
-              <span className="wv-field-lbl">{f.label}</span>
-              <div style={{ display: 'flex', gap: 16 }}>
-                {['Yes', 'No'].map(function (opt) {
-                  return (
-                    <Radio key={opt} on={val === opt} label={opt} onClick={function () {
-                      var cf = Object.assign({}, draft.customFields || {});
-                      cf[f.id] = opt;
-                      update({ customFields: cf });
-                    }} />
-                  );
-                })}
-              </div>
-            </div>
-          );
-        }
-        if (f.type === 'select') {
-          return (
-            <div key={f.id}>
-              <span className="wv-field-lbl">{f.label}</span>
-              <select className="wv-field-box" value={val} onChange={function (e) {
-                var cf = Object.assign({}, draft.customFields || {});
-                cf[f.id] = e.target.value;
-                update({ customFields: cf });
-              }}>
-                <option value="">Select...</option>
-                {(f.options || []).map(function (o) { return <option key={o} value={o}>{o}</option>; })}
-              </select>
-              {(f.options || []).length === 0 && <HelpText style={{ marginTop: 4 }}>No options set yet — add some via "Edit existing fields."</HelpText>}
-            </div>
-          );
-        }
-        if (f.type === 'date') {
-          return (
-            <div key={f.id}>
-              <span className="wv-field-lbl">{f.label}</span>
-              <input className="wv-field-box" type="date" defaultValue={val} onChange={function (e) {
-                var cf = Object.assign({}, draft.customFields || {});
-                cf[f.id] = e.target.value;
-                update({ customFields: cf });
-              }} />
-            </div>
-          );
-        }
-        return (
-          <Field
-            key={f.id}
-            label={f.label}
-            defaultValue={val}
-            placeholder={'Enter ' + f.label.toLowerCase() + '...'}
-            resizeMode={f.type === 'long_text' ? 'manual' : 'auto'}
-            rows={f.type === 'long_text' ? 3 : undefined}
-            onBlur={function (e) {
-              var cf = Object.assign({}, draft.customFields || {});
-              cf[f.id] = e.target.value;
-              update({ customFields: cf });
-            }}
-          />
-        );
-      })}
-
-      <SecondaryButton icon="add" onClick={function () { setShowAddField(true); }}>Add new field</SecondaryButton>
-      {draftFieldDefs.length > 0 && (
-        <TertiaryButton onClick={function () { setShowEditFields(true); }}>Edit existing fields</TertiaryButton>
-      )}
-
-      {showArchiveConfirm && (
-        <ArchiveConfirmModal draft={draft} allDrafts={allDrafts} onConfirm={doArchive} onCancel={function () { setShowArchiveConfirm(false); }} />
-      )}
-
-      {showAddField && (
-        <AddFieldModal app={app} pid={pid} onClose={function () { setShowAddField(false); }} />
-      )}
-
-      {showEditFields && (
-        <ManageFieldsModal app={app} pid={pid} fields={draftFieldDefs} onClose={function () { setShowEditFields(false); }} />
-      )}
-
-    </Drawer>
-  );
-}
-
-// ── Add new field ──
-function AddFieldModal({ app, pid, onClose }) {
-  var sl = useState(''); var label = sl[0]; var setLabel = sl[1];
-  var st = useState('short_text'); var type = st[0]; var setType = st[1];
-  var sc = useState(''); var refSpool = sc[0]; var setRefSpool = sc[1];
-  var so = useState([]); var options = so[0]; var setOptions = so[1];
-
-  var collections = Object.keys(app.allStrands[pid] || {});
-  var canSubmit = label.trim() && (type !== 'strand_ref' || refSpool);
-
-  function submit() {
-    if (!canSubmit) return;
-    var fieldDef = { id: genId(), label: label.trim(), type: type };
-    if (type === 'strand_ref') fieldDef.refSpool = refSpool;
-    if (type === 'select') fieldDef.options = options;
-    app.addDraftFieldDef(pid, fieldDef);
-    onClose();
-  }
-
-  return (
-    <div className="modal-overlay">
-      <div className="modal-backdrop" onClick={onClose} />
-      <div className="modal-box" style={{ width: 360 }}>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Add field</div>
-
-        <div style={{ marginBottom: 12 }}>
-          <span className="wv-field-lbl">Label</span>
-          <input className="wv-field-box" autoFocus value={label} onChange={function (e) { setLabel(e.target.value); }} placeholder="Field name" onKeyDown={function (e) { if (e.key === 'Enter') submit(); }} />
-        </div>
-
-        <div style={{ marginBottom: 12 }}>
-          <span className="wv-field-lbl">Type</span>
-          <select className="wv-field-box" value={type} onChange={function (e) { setType(e.target.value); setRefSpool(''); setOptions([]); }}>
-            {FIELD_TYPES.map(function (t) { return <option key={t.id} value={t.id}>{t.label}</option>; })}
-          </select>
-        </div>
-
-        {type === 'strand_ref' && (
-          <div style={{ marginBottom: 4 }}>
-            <span className="wv-field-lbl">Spool collection</span>
-            <select className="wv-field-box" value={refSpool} onChange={function (e) { setRefSpool(e.target.value); }}>
-              <option value="">Choose a collection...</option>
-              {collections.map(function (c) { return <option key={c} value={c}>{c}</option>; })}
-            </select>
-            {collections.length === 0 && <HelpText style={{ marginTop: 4 }}>No spool collections in this project yet.</HelpText>}
-          </div>
-        )}
-
-        {type === 'select' && (
-          <div style={{ marginBottom: 4 }}>
-            <span className="wv-field-lbl">Options</span>
-            <OptionsEditor options={options} onChange={setOptions} />
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-          <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={onClose}>Cancel</button>
-          <div style={{ flex: 1 }}><PrimaryButton onClick={submit} disabled={!canSubmit}>Add field</PrimaryButton></div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Edit existing fields — reorder, rename, retype, rescope, delete ──
-function ManageFieldsModal({ app, pid, fields, onClose }) {
-  var se = useState(fields.slice()); var editing = se[0]; var setEditing = se[1];
-  var collections = Object.keys(app.allStrands[pid] || {});
-
-  function updateLocal(i, changes) {
-    var nf = editing.slice();
-    nf[i] = Object.assign({}, nf[i], changes);
-    setEditing(nf);
-  }
-  function removeLocal(i) {
-    var nf = editing.slice();
-    nf.splice(i, 1);
-    setEditing(nf);
-  }
-  function save() {
-    if (app.reorderDraftFieldDefs) app.reorderDraftFieldDefs(pid, editing);
-    onClose();
-  }
-
-  return (
-    <div className="modal-overlay">
-      <div className="modal-backdrop" onClick={onClose} />
-      <div className="modal-box" style={{ width: 440, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 600, marginBottom: 14 }}>Edit fields</div>
-
-        <div style={{ overflowY: 'auto', flex: 1 }}>
-          {editing.length === 0 && <HelpText>No custom fields yet.</HelpText>}
-          {editing.map(function (f, i) {
-            return (
-              <div key={f.id} draggable={true}
-                onDragStart={function (e) { e.dataTransfer.setData('fieldIdx', '' + i); }}
-                onDragOver={function (e) { e.preventDefault(); }}
-                onDrop={function (e) {
-                  e.preventDefault();
-                  var from = parseInt(e.dataTransfer.getData('fieldIdx'), 10);
-                  if (isNaN(from) || from === i) return;
-                  var nf = editing.slice();
-                  var item = nf.splice(from, 1)[0];
-                  nf.splice(i, 0, item);
-                  setEditing(nf);
-                }}
-                style={{ borderBottom: '1px solid var(--bg2)', padding: '8px 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <span className="mi" style={{ fontSize: 18, color: 'var(--border)', cursor: 'grab', flexShrink: 0 }}>drag_indicator</span>
-                  <input defaultValue={f.label} style={{ maxWidth: 120, fontSize: 13 }} onBlur={function (e) { updateLocal(i, { label: e.target.value }); }} />
-                  <select value={f.type} style={{ width: 100, fontSize: 13 }} onChange={function (e) { updateLocal(i, { type: e.target.value, refSpool: null, options: null }); }}>
-                    {FIELD_TYPES.map(function (t) { return <option key={t.id} value={t.id}>{t.label}</option>; })}
-                  </select>
-                  <button className="btn-icon" onClick={function () { removeLocal(i); }} aria-label={'Delete ' + f.label}>
-                    <span className="mi" style={{ fontSize: 16, color: 'var(--danger)' }}>delete</span>
-                  </button>
+          {(days !== null || goal) && (
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {days !== null && (
+                <div style={{ fontSize: 12, color: days < 0 ? 'var(--danger)' : 'var(--body-text)' }}>
+                  <span className="mi" style={{ fontSize: 13, verticalAlign: '-2px', marginRight: 5 }}>event</span>
+                  {days < 0
+                    ? Math.abs(days) + ' day' + (Math.abs(days) === 1 ? '' : 's') + ' past deadline'
+                    : days === 0 ? 'Deadline is today' : days + ' day' + (days === 1 ? '' : 's') + ' to deadline'}
                 </div>
-                {f.type === 'strand_ref' && (
-                  <div style={{ marginTop: 6, marginLeft: 26 }}>
-                    <select value={f.refSpool || ''} style={{ fontSize: 11, width: '100%' }} onChange={function (e) { updateLocal(i, { refSpool: e.target.value }); }}>
-                      <option value="">Pick spool...</option>
-                      {collections.map(function (c) { return <option key={c} value={c}>{c}</option>; })}
-                    </select>
-                  </div>
-                )}
-                {f.type === 'select' && (
-                  <div style={{ marginTop: 2, marginLeft: 26 }}>
-                    <OptionsEditor options={f.options} onChange={function (opts) { updateLocal(i, { options: opts }); }} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexShrink: 0 }}>
-          <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={onClose}>Cancel</button>
-          <div style={{ flex: 1 }}><PrimaryButton onClick={save}>Save</PrimaryButton></div>
+              )}
+              {goal && (
+                <div style={{ fontSize: 12, color: 'var(--body-text)' }}>
+                  <span className="mi" style={{ fontSize: 13, verticalAlign: '-2px', marginRight: 5 }}>flag</span>
+                  {goal.label}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
-    </div>
+
+      {/* ── Settings drill-ins ── */}
+      <div>
+        <span className="wv-field-lbl">Settings</span>
+        <CategoryLink title="Structure" onClick={function () { setView('structure'); }} />
+        <CategoryLink title="Statuses" onClick={function () { setView('statuses'); }} />
+        <CategoryLink title={one + ' properties'} onClick={function () { setView('properties'); }} />
+        <CategoryLink title="Deadline and pace" onClick={function () { setView('goals'); }} />
+      </div>
+
+      {/* ── Not built yet ── */}
+      <div>
+        <span className="wv-field-lbl">Sharing</span>
+        <ComingSoonRow icon="link" title="Public links" note="Read-only links you have shared from this project." />
+        <ComingSoonRow icon="group" title="Contributors" note="Co-writers, editors and readers." />
+      </div>
+
+      {archiveConfirm && (
+        <ArchiveConfirm
+          proj={proj}
+          onCancel={function () { setArchiveConfirm(false); }}
+          onConfirm={function () { app.archiveProject(pid); setArchiveConfirm(false); onClose(); }}
+        />
+      )}
+    </Drawer>
   );
 }
