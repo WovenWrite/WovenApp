@@ -100,6 +100,8 @@ function SpoolRefEmptyPicker({app,pid,draft,fieldDef}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
   var sp=useState({top:0,left:0});var pos=sp[0];var setPos=sp[1];
   var triggerRef=useRef(null);
+  var wrapRef=useRef(null);
+  var EDGE=15;
   function toggle(e){
     e.stopPropagation();
     if(!open&&triggerRef.current){
@@ -108,6 +110,20 @@ function SpoolRefEmptyPicker({app,pid,draft,fieldDef}){
     }
     setOpen(!open);
   }
+  // First pass positions it just below the trigger; once it's actually
+  // rendered we know its real size, so nudge it back inside the viewport
+  // with a consistent 15px margin from the left/right/bottom edges.
+  useEffect(function(){
+    if(!open||!wrapRef.current)return;
+    var el=wrapRef.current;
+    var rect=el.getBoundingClientRect();
+    var vw=window.innerWidth;var vh=window.innerHeight;
+    var newLeft=pos.left;var newTop=pos.top;
+    if(rect.right>vw-EDGE)newLeft=Math.max(EDGE,vw-EDGE-rect.width);
+    if(rect.left<EDGE)newLeft=EDGE;
+    if(rect.bottom>vh-EDGE)newTop=Math.max(EDGE,vh-EDGE-rect.height);
+    if(newLeft!==pos.left||newTop!==pos.top)setPos({top:newTop,left:newLeft});
+  },[open]);
   function pick(st){
     var cf=Object.assign({},draft.customFields||{});
     cf[fieldDef.id]=JSON.stringify([st.id]);
@@ -121,15 +137,17 @@ function SpoolRefEmptyPicker({app,pid,draft,fieldDef}){
 <div style={{display:'inline-block'}}>
   <span ref={triggerRef} onClick={toggle} style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'var(--placeholder)',fontStyle:'italic',cursor:'pointer'}}>Click to select…</span>
   {open&&(
-<StrandSearchDropdown
-  app={app}
-  pid={pid}
-  collection={fieldDef.refSpool}
-  excludeIds={[]}
-  onPick={pick}
-  onClose={function(){setOpen(false);}}
-  style={{position:'fixed',top:pos.top,left:pos.left,right:'auto',width:220}}
-/>
+<div ref={wrapRef} style={{position:'fixed',top:pos.top,left:pos.left,zIndex:600}}>
+  <StrandSearchDropdown
+    app={app}
+    pid={pid}
+    collection={fieldDef.refSpool}
+    excludeIds={[]}
+    onPick={pick}
+    onClose={function(){setOpen(false);}}
+    style={{position:'static',width:220}}
+  />
+</div>
   )}
 </div>
   );
@@ -235,6 +253,18 @@ function TableView({app}){
     if(colDropRef.current&&colDropRef.current.contains(e.target))return;
     setColOpen(false);
   }document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[colOpen]);
+  // Keep the columns dropdown at least 15px inside the viewport on every
+  // edge — it's initially positioned off the settings button, which can
+  // push it past the left or bottom edge on a narrow/short viewport.
+  useEffect(function(){
+    if(!colOpen||!colDropRef.current)return;
+    var rect=colDropRef.current.getBoundingClientRect();
+    var vw=window.innerWidth;var vh=window.innerHeight;
+    var next=Object.assign({},colPos);var changed=false;
+    if(rect.left<15){next.right=Math.max(0,vw-15-rect.width);changed=true;}
+    if(rect.bottom>vh-15){next.top=Math.max(15,vh-15-rect.height);changed=true;}
+    if(changed)setColPos(next);
+  },[colOpen]);
   var allDrafts=app.allDrafts[app.projId]||[];
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
   var ltDrafts=allDrafts.filter(function(d){return d.status==='loose_thread'&&!d.archived;});
@@ -310,28 +340,29 @@ function TableView({app}){
   }
   function renderRow(draft,label,isNested,parentId,hasChildren,isExpanded){
     var rowExp=expandedRowId===draft.id;
+    var vAlign=rowExp?'top':'middle';
     return(
 <tr key={draft.id} ref={function(el){rowRefs.current[draft.id]=el;}} className={isNested?'nest-row':''} style={dragOver===draft.id?{boxShadow:'inset 0 2px 0 0 var(--indigo)'}:undefined}
   onClick={function(){setExpandedRowId(draft.id);}}
   onDragOver={function(e){e.preventDefault();setDragOver(draft.id);}}
   onDragLeave={function(){setDragOver(null);}}
   onDrop={function(e){e.preventDefault();setDragOver(null);var fromId=e.dataTransfer.getData('draftId');if(fromId&&fromId!==draft.id){var fromDraft=(app.allDrafts[app.projId]||[]).find(function(d){return d.id===fromId;});if(fromDraft&&fromDraft.status==='loose_thread'){app.updateDraft(app.projId,fromId,{status:'first_draft',order:draft.order||0,parentId:null});}else{app.reorderDraft(app.projId,fromId,draft.order||0);}}}}>
-  <td><div style={{display:'flex',alignItems:'center',gap:2}}>
+  <td style={{verticalAlign:vAlign}}><div style={{display:'flex',alignItems:'center',gap:2}}>
     <span draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}} style={{cursor:'grab',color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:18}}>drag_indicator</span></span>
     {hasChildren&&<span className="mi" style={{fontSize:16,cursor:'pointer',color:isExpanded?'#C45E28':'var(--mid)',flexShrink:0}} title={isExpanded?'Collapse branches':'Expand branches'} onClick={function(e){e.stopPropagation();app.updateDraft(app.projId,draft.id,{nestExpanded:!isExpanded});}}>account_tree</span>}
   </div></td>
   {(tblNumbered||tblByDate)&&(
-  <td style={{color:'var(--mid)',fontSize:11,whiteSpace:'nowrap',paddingLeft:isNested?28:12}}>
+  <td style={{color:'var(--mid)',fontSize:11,whiteSpace:'nowrap',paddingLeft:isNested?28:12,verticalAlign:vAlign}}>
     <div style={{display:'flex',alignItems:'center',gap:2}}>
       {isNested&&<span className="mi" style={{fontSize:12,color:'var(--border)',flexShrink:0}}>subdirectory_arrow_right</span>}
       {tblNumbered?label:formatDraftDate(draftDateOf(draft))}
     </div>
   </td>
   )}
-  {visCols.map(function(col){var td=<td key={col}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId,rowExpanded:rowExp})}</td>;if(col==='title')return [td,<td key="__arrowcol" onClick={function(e){e.stopPropagation();}}><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
+  {visCols.map(function(col){var td=<td key={col} style={{verticalAlign:vAlign}}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId,rowExpanded:rowExp})}</td>;if(col==='title')return [td,<td key="__arrowcol" style={{verticalAlign:vAlign}} onClick={function(e){e.stopPropagation();}}><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
     <span className="material-symbols-outlined" style={{fontSize:18}}>arrow_forward</span>
   </button></td>];return td;})}
-  <td/>
+  <td style={{verticalAlign:vAlign}}/>
 </tr>
     );
   }
