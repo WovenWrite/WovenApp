@@ -469,7 +469,12 @@ function DraftEditor({app}){
     // Navigate to the new strand
     if(app.openDraft)app.openDraft(newId);
   }
-  function handleSetPrimary(id){setBranches(function(p){return p.map(function(b){return Object.assign({},b,{isPrimary:b.id===id});});});}
+  function handleSetPrimary(id){
+    if(id===did)return; // already primary
+    if(app&&app.promoteStrand)app.promoteStrand(pid,did,id);
+    // did is now the demoted child; navigate to the newly-primary strand
+    if(app&&app.openDraft)app.openDraft(id);
+  }
   async function handleGenerateLink(){
     if(!app||!app.currentUser)return;
     var shareId=genId();
