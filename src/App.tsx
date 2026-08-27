@@ -3158,6 +3158,39 @@ function App(){
       next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;
     });
   }
+  // Promote a strand to be the primary/top-level draft, demoting the current
+  // main into a child strand of it. We swap parentId+order between the two
+  // records rather than swapping ids, so every existing reference to either
+  // draft (share links, strand tags, appears-in lists, dashboard stats)
+  // keeps pointing at the right content with no further changes needed.
+  // Any other sibling strands (children of the old main) move along with
+  // the promotion, staying grouped under whichever draft is primary now.
+  function promoteStrand(pid,currentMainId,newPrimaryId){
+    if(!pid||!currentMainId||!newPrimaryId||currentMainId===newPrimaryId)return;
+    setAllDrafts(function(prev){
+      var next=Object.assign({},prev);
+      var ds=(next[pid]||[]).slice();
+      var mainDraft=ds.find(function(d){return d.id===currentMainId;});
+      var newDraft=ds.find(function(d){return d.id===newPrimaryId;});
+      if(!mainDraft||!newDraft)return prev;
+      var mainParentId=mainDraft.parentId;
+      var mainOrder=mainDraft.order;
+      var now=new Date().toISOString();
+      ds=ds.map(function(d){
+        if(d.id===currentMainId){
+          return Object.assign({},d,{parentId:newPrimaryId,order:Date.now(),updatedAt:now});
+        }
+        if(d.id===newPrimaryId){
+          return Object.assign({},d,{parentId:mainParentId,order:mainOrder,updatedAt:now});
+        }
+        if(d.parentId===currentMainId){
+          return Object.assign({},d,{parentId:newPrimaryId});
+        }
+        return d;
+      });
+      next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;
+    });
+  }
   // Resolves the project a collection's strands actually live in — the
   // caller's own pid unless that collection was merged in from elsewhere.
   function ownerOfCollection(pid,coll){
@@ -3317,7 +3350,7 @@ function App(){
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,promoteStrand:promoteStrand,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
 
   function signOut(){
     supabase.auth.signOut().then(function(){
@@ -3346,7 +3379,7 @@ function App(){
 
   var inner=null;
   if(view==='dashboard'){inner=<Dashboard app={app} onOpenProfile={openProfile} onNewProject={function(){setShowNewProject(true);}}/>;
-  }else if(view==='editor'){inner=<DraftEditor app={app}/>;
+  }else if(view==='editor'){inner=<DraftEditor app={app} key={draftId}/>;
   }else{
     var vc=null;
    if(view==='canvas')vc=<ExploreCanvas app={app}/>;

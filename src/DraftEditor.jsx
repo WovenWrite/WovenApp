@@ -275,14 +275,33 @@ function DraftEditor({app}){
   var st=useState(draft.title||'Untitled draft');var title=st[0];var setTitle=st[1];
   var sw=useState(draft.wordCount||0);var wordCount=sw[0];var setWordCount=sw[1];
   var ss=useState('saved');var saveState=ss[0];var setSaveState=ss[1];
-  // Build branch list from actual nested drafts (children of this draft)
+  // Build branch list from the strand family this draft belongs to.
+  // Walk up to the true root first (rather than only looking at this
+  // draft's own children) so the dropdown shows the full sibling set no
+  // matter which strand in the family you're currently viewing.
   function buildBranches(){
-    var children=(app&&app.allDrafts&&app.allDrafts[pid]||[]).filter(function(d){return d.parentId===did&&!d.archived;});
-    var main=[{id:did,name:'Main',isPrimary:true,draftTitle:draft.title||'Untitled draft'}];
+    var all=(app&&app.allDrafts&&app.allDrafts[pid])||[];
+    var rootDraft=draft;
+    var guard=0;
+    while(rootDraft&&rootDraft.parentId&&guard<10){
+      var p=all.find(function(d){return d.id===rootDraft.parentId;});
+      if(!p)break;
+      rootDraft=p;guard++;
+    }
+    var rootId=(rootDraft&&rootDraft.id)||did;
+    var children=all.filter(function(d){return d.parentId===rootId&&!d.archived;});
+    var rootTitle=(rootDraft&&rootDraft.title)||'Untitled draft';
+    var main=[{id:rootId,name:rootTitle,isPrimary:true,draftTitle:rootTitle}];
     var rest=children.map(function(d){return{id:d.id,name:d.title||'Strand',isPrimary:false,draftTitle:d.title||'Strand'};});
     return main.concat(rest);
   }
   var sb=useState(buildBranches);var branches=sb[0];var setBranches=sb[1];
+  // Keep the branch list in sync with the actual data whenever it changes
+  // (e.g. after promoting a strand to primary) without navigating away —
+  // you should stay on whatever strand you're currently drafting.
+  useEffect(function(){
+    setBranches(buildBranches());
+  },[app&&app.allDrafts&&app.allDrafts[pid]]);
   var sab=useState(did);var activeBranchId=sab[0];var setActiveBranchId=sab[1];
   var slink=useState(null);var shareLink=slink[0];var setShareLink=slink[1];
   var ssid=useState(null);var shareId=ssid[0];var setShareId=ssid[1];
@@ -450,15 +469,18 @@ function DraftEditor({app}){
     if(app&&app.openDraft)app.openDraft(branchDraftId);
   }
   function handleCreateBranch(name){
-    // Create a real nested draft as a strand of the current draft
+    // Create a real nested draft as a strand of the family root — always
+    // the root, even if you're currently viewing a non-root strand, so
+    // the sibling group stays flat rather than nesting a level deeper.
     if(!app||!pid||!did)return;
+    var rootId=(branches&&branches.length&&branches[0].id)||did;
     var body=quillRef.current?quillRef.current.root.innerHTML:(draft.body||'');
     var now=new Date().toISOString();
     var newId=genId();
     var nb={
       id:newId,projectId:pid,title:name||title+'_Strand_2',
       synopsis:draft.synopsis||'',status:draft.status||'first_draft',
-      order:draft.order,parentId:did,
+      order:draft.order,parentId:rootId,
       nestExpanded:true,body:body,wordCount:draft.wordCount||0,
       strandTags:draft.strandTags||[],
       customFields:draft.customFields||{},createdAt:now,updatedAt:now
@@ -469,7 +491,17 @@ function DraftEditor({app}){
     // Navigate to the new strand
     if(app.openDraft)app.openDraft(newId);
   }
-  function handleSetPrimary(id){setBranches(function(p){return p.map(function(b){return Object.assign({},b,{isPrimary:b.id===id});});});}
+  function handleSetPrimary(id){
+    // Always promote against the true root, not whichever strand happens
+    // to be open — otherwise starring a sibling while viewing a non-root
+    // strand would swap against the wrong reference point.
+    var rootId=(branches&&branches.length&&branches[0].id)||did;
+    if(id===rootId)return; // already primary
+    if(app&&app.promoteStrand)app.promoteStrand(pid,rootId,id);
+    // Don't navigate — you stay on whatever strand you're currently
+    // drafting; the branch list above refreshes itself in place once
+    // app.allDrafts updates.
+  }
   async function handleGenerateLink(){
     if(!app||!app.currentUser)return;
     var shareId=genId();
