@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { STATUSES, FIELD_TYPES, SYSTEM_COLORS, PRESET_COLORS, initials, uploadImage } from './utils';
+import { projStatusMap } from './projectConfig';
 
 // ══════════════════════════════════════════════
 // Styles — injected once, idempotent
@@ -103,7 +104,7 @@ var DRAWER_CSS = `
   padding:6px 10px;font-family:'DM Sans',sans-serif;font-size:14px;color:#6B4A26;outline:none;
   background:rgba(255,252,248,.6);}
 .wv-refpick-search input:focus{background:#FFFCF8;border-color:#C45E28;}
-.wv-refpick-list{overflow-y:auto;}
+.wv-refpick-list{overflow-y:auto;padding:0 6px;}
 
 /* Collapsible */
 .wv-collapse{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mid);
@@ -548,6 +549,63 @@ export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
 // StrandRefPicker's own expand, and Properties' "tag a strand" trigger.
 // Click-outside closes it. Looks up each strand's real collection icon
 // rather than defaulting, so results match what the app shows elsewhere.
+// ══════════════════════════════════════════════
+// FloatingPanel
+// A shared positioning primitive for any anchored popover/dropdown:
+// fixed-position (immune to being clipped by a scrollable ancestor),
+// placed just below (or above, if there isn't room below) the anchor
+// element, then measured once rendered and nudged to keep a 15px margin
+// from the viewport's left/right/bottom edges. Also handles
+// click-outside-to-close. Callers own all visual styling of their
+// content — this only handles placement.
+// ══════════════════════════════════════════════
+
+export function FloatingPanel({ anchorRef, open, onClose, children, minWidth, gap }) {
+  var actualGap = gap == null ? 6 : gap;
+  var wrapRef = useRef(null);
+  var sp = useState(null); var pos = sp[0]; var setPos = sp[1];
+  var EDGE = 15;
+
+  useEffect(function () {
+    if (!open) { setPos(null); return; }
+    if (!anchorRef.current) return;
+    var r = anchorRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + actualGap, left: r.left, anchorTop: r.top });
+  }, [open]);
+
+  useEffect(function () {
+    if (!open || !pos || !wrapRef.current) return;
+    var rect = wrapRef.current.getBoundingClientRect();
+    var vw = window.innerWidth; var vh = window.innerHeight;
+    var newLeft = pos.left; var newTop = pos.top;
+    if (rect.right > vw - EDGE) newLeft = Math.max(EDGE, vw - EDGE - rect.width);
+    if (rect.left < EDGE) newLeft = EDGE;
+    if (rect.bottom > vh - EDGE) {
+      var aboveTop = pos.anchorTop - actualGap - rect.height;
+      newTop = aboveTop >= EDGE ? aboveTop : Math.max(EDGE, vh - EDGE - rect.height);
+    }
+    if (newLeft !== pos.left || newTop !== pos.top) setPos(Object.assign({}, pos, { top: newTop, left: newLeft }));
+  }, [open, pos && pos.top, pos && pos.left]);
+
+  useEffect(function () {
+    if (!open) return;
+    function onDown(e) {
+      if (wrapRef.current && wrapRef.current.contains(e.target)) return;
+      if (anchorRef.current && anchorRef.current.contains(e.target)) return;
+      onClose && onClose();
+    }
+    document.addEventListener('mousedown', onDown);
+    return function () { document.removeEventListener('mousedown', onDown); };
+  }, [open]);
+
+  if (!open || !pos) return null;
+  return (
+    <div ref={wrapRef} style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 600, minWidth: minWidth }}>
+      {children}
+    </div>
+  );
+}
+
 export function StrandSearchDropdown({ app, pid, collection, excludeIds, onPick, onClose, style }) {
   var sq = useState(''); var query = sq[0]; var setQuery = sq[1];
   var ref = useRef(null);
@@ -597,6 +655,7 @@ export function StrandSearchDropdown({ app, pid, collection, excludeIds, onPick,
 
 export function StrandRefPicker({ app, pid, collection, value, onChange, placeholder }) {
   var so = useState(false); var open = so[0]; var setOpen = so[1];
+  var triggerRef = useRef(null);
 
   var selectedIds = value || [];
   var projStrands = (app.allStrands[pid] || {});
@@ -618,7 +677,7 @@ export function StrandRefPicker({ app, pid, collection, value, onChange, placeho
   function remove(id) { onChange(selectedIds.filter(function (i) { return i !== id; })); }
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div>
       {selected.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
           {selected.map(function (st) {
@@ -632,11 +691,11 @@ export function StrandRefPicker({ app, pid, collection, value, onChange, placeho
           })}
         </div>
       )}
-      <div className="wv-refpick-empty" onClick={function () { setOpen(!open); }}>
+      <div ref={triggerRef} className="wv-refpick-empty" onClick={function () { setOpen(!open); }}>
         <span>{selected.length > 0 ? 'Add another...' : (placeholder || 'Select spools...')}</span>
         <span className="mi" style={{ fontSize: 18 }}>{open ? 'expand_less' : 'expand_more'}</span>
       </div>
-      {open && (
+      <FloatingPanel anchorRef={triggerRef} open={open} onClose={function () { setOpen(false); }} minWidth={240}>
         <StrandSearchDropdown
           app={app}
           pid={pid}
@@ -644,8 +703,9 @@ export function StrandRefPicker({ app, pid, collection, value, onChange, placeho
           excludeIds={selectedIds}
           onPick={add}
           onClose={function () { setOpen(false); }}
+          style={{ position: 'static', width: 280 }}
         />
-      )}
+      </FloatingPanel>
     </div>
   );
 }
@@ -895,6 +955,48 @@ export function StatusDotWithArchive({ draft, app, showLabel, dotSize }) {
       <StatusDot status={draft.status} onChange={handleChange} size={dotSize} />
       {showLabel && <span style={{ fontSize: 13, color: info.color }}>{info.label}</span>}
       {showConfirm && <ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[app.projId] || []} onConfirm={doArchive} onCancel={function () { setShowConfirm(false); }} />}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// StatusSelect
+// A uniform-background dropdown with just the status dot colored — the
+// "field" style status control (as opposed to StatusDot's colored-pill
+// popover above). Used by PropertiesDrawer and TableView so both share
+// one implementation instead of each rebuilding it.
+// ══════════════════════════════════════════════
+
+export function StatusSelect({ app, draft, project, style, selectStyle }) {
+  var sac = useState(false); var showArchiveConfirm = sac[0]; var setShowArchiveConfirm = sac[1];
+  var pid = app.projId;
+  var statusMap = projStatusMap(project);
+  var allDrafts = app.allDrafts[pid] || [];
+  var seqSiblings = allDrafts.filter(function (d) { return d.status !== 'loose_thread' && !d.parentId && !d.archived; });
+
+  function handleStatusChange(e) {
+    var v = e.target.value;
+    if (v === 'archive') { setShowArchiveConfirm(true); return; }
+    var changes = { status: v };
+    if (v === 'loose_thread') { changes.order = null; changes.parentId = null; }
+    else if (draft.status === 'loose_thread') { changes.order = seqSiblings.length + 1; }
+    app.updateDraft(pid, draft.id, changes);
+  }
+  function doArchive() {
+    var children = allDrafts.filter(function (d) { return d.parentId === draft.id && !d.archived; });
+    app.updateDraft(pid, draft.id, { archived: true });
+    children.forEach(function (c) { app.updateDraft(pid, c.id, { archived: true }); });
+    setShowArchiveConfirm(false);
+  }
+
+  return (
+    <div style={Object.assign({ position: 'relative' }, style)}>
+      <span style={{ position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)', width: 9, height: 9, borderRadius: '50%', background: (statusMap[draft.status] && statusMap[draft.status].color) || '#999', pointerEvents: 'none' }} />
+      <select className="wv-field-box" style={Object.assign({ paddingLeft: 32 }, selectStyle)} value={draft.status} onClick={function (e) { e.stopPropagation(); }} onChange={handleStatusChange}>
+        {Object.keys(statusMap).map(function (k) { return <option key={k} value={k}>{statusMap[k].label}</option>; })}
+        <option value="archive">Archive...</option>
+      </select>
+      {showArchiveConfirm && <ArchiveConfirmModal draft={draft} allDrafts={allDrafts} onConfirm={doArchive} onCancel={function () { setShowArchiveConfirm(false); }} />}
     </div>
   );
 }

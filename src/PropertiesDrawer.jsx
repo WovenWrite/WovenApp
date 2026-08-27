@@ -9,14 +9,13 @@
 //   <PropertiesDrawer app={app} draft={draft} variant="inline" onClose={...} />
 
 import { useState } from 'react';
-import { Drawer, Field, ArchiveConfirmModal, StrandRefPicker, StrandSearchDropdown, DraftThumbnailUpload, Avatar, PrimaryButton, SecondaryButton, TertiaryButton, HelpText, OptionsEditor, Radio } from './SharedUI';
+import { Drawer, Field, StatusSelect, StrandRefPicker, StrandSearchDropdown, DraftThumbnailUpload, Avatar, PrimaryButton, SecondaryButton, TertiaryButton, HelpText, OptionsEditor, Radio } from './SharedUI';
 import { genId, STATUSES, FIELD_TYPES } from './utils';
 import { projSequence, projStatusMap, draftDateOf } from './projectConfig';
 
 export default function PropertiesDrawer({ app, draft, variant, open, onClose, onOpenStrand }) {
   var pid = app.projId;
   var s2 = useState(false); var addChipOpen = s2[0]; var setAddChipOpen = s2[1];
-  var sac = useState(false); var showArchiveConfirm = sac[0]; var setShowArchiveConfirm = sac[1];
   var saf = useState(false); var showAddField = saf[0]; var setShowAddField = saf[1];
   var sef = useState(false); var showEditFields = sef[0]; var setShowEditFields = sef[1];
 
@@ -49,16 +48,6 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
   function removeStrand(sid) { update({ strandTags: tagIds.filter(function (t) { return t !== sid; }) }); }
   function addStrand(sid) { update({ strandTags: tagIds.concat([sid]) }); setAddChipOpen(false); }
 
-  function handleStatusChange(e) {
-    var v = e.target.value;
-    if (v === 'archive') { setShowArchiveConfirm(true); return; }
-    var changes = { status: v };
-    if (v === 'loose_thread') { changes.order = null; changes.parentId = null; }
-    else if (draft.status === 'loose_thread') { changes.order = seqSiblings.length + 1; }
-    update(changes);
-  }
-  function doArchive() { update({ archived: true }); setShowArchiveConfirm(false); }
-
   function handleSequenceChange(e) {
     var targetOrder = parseInt(e.target.value, 10);
     if (app.reorderDraft) app.reorderDraft(pid, draft.id, targetOrder);
@@ -82,13 +71,7 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
       <div style={{ display: 'flex', gap: 12 }}>
         <div style={{ flex: 2 }}>
           <span className="wv-field-lbl">Status</span>
-          <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)', width: 9, height: 9, borderRadius: '50%', background: (statusMap[draft.status] && statusMap[draft.status].color) || '#999', pointerEvents: 'none' }} />
-            <select className="wv-field-box" style={{ paddingLeft: 32 }} value={draft.status} onChange={handleStatusChange}>
-              {Object.keys(statusMap).map(function (k) { return <option key={k} value={k}>{statusMap[k].label}</option>; })}
-              <option value="archive">Archive...</option>
-            </select>
-          </div>
+          <StatusSelect app={app} draft={draft} project={project} />
         </div>
         {byDate ? (
           <div style={{ flex: 1 }}>
@@ -250,10 +233,6 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
       <SecondaryButton icon="add" onClick={function () { setShowAddField(true); }}>Add new field</SecondaryButton>
       {draftFieldDefs.length > 0 && (
         <TertiaryButton onClick={function () { setShowEditFields(true); }}>Edit existing fields</TertiaryButton>
-      )}
-
-      {showArchiveConfirm && (
-        <ArchiveConfirmModal draft={draft} allDrafts={allDrafts} onConfirm={doArchive} onCancel={function () { setShowArchiveConfirm(false); }} />
       )}
 
       {showAddField && (

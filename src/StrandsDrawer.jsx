@@ -24,8 +24,8 @@
 //
 //   <StrandsDrawer app={app} draft={draft} variant="inline" onClose={...} />
 
-import { useState } from 'react';
-import { Drawer, Field, AvatarEditModal, StrandResultRow, CategoryLink, HelpText, PrimaryButton, SecondaryButton, TertiaryButton, SpoolThumbnailUpload } from './SharedUI';
+import { useState, useRef } from 'react';
+import { Drawer, Field, AvatarEditModal, StrandResultRow, CategoryLink, HelpText, PrimaryButton, SecondaryButton, TertiaryButton, SpoolThumbnailUpload, FloatingPanel } from './SharedUI';
 import { defaultFields, genId, PRESET_COLORS } from './utils';
 
 var SPOOL_COLOR_BY_COLLECTION = {
@@ -35,12 +35,13 @@ var SPOOL_COLOR_BY_COLLECTION = {
   'Reports': '#b83220', 'Audience Notes': '#f0c050'
 };
 
-export default function StrandsDrawer({ app, draft, variant, open, onClose, strandId, onOpenStrand }) {
+export default function StrandsDrawer({ app, draft, variant, open, onClose, strandId, onOpenStrand, hideDisconnect }) {
   var sv = useState('list'); var view = sv[0]; var setView = sv[1]; // 'list' | 'category'
   var sc = useState(null); var activeCategory = sc[0]; var setActiveCategory = sc[1];
   var si = useState(null); var localDetailId = si[0]; var setLocalDetailId = si[1];
   var sa = useState(false); var showAvatarEdit = sa[0]; var setShowAvatarEdit = sa[1];
   var scm = useState(false); var showCreateMenu = scm[0]; var setShowCreateMenu = scm[1];
+  var createBtnRef = useRef(null);
 
   if (!draft) return null;
 
@@ -140,12 +141,14 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
         <SecondaryButton icon="tune" onClick={function () { editTemplate(collName); }}>
           Edit Spool Template
         </SecondaryButton>
-        <TertiaryButton
-          style={{ color: 'var(--danger)' }}
-          onClick={function () { untagStrand(detailId); backToList(); }}
-        >
-          Disconnect from draft
-        </TertiaryButton>
+        {!hideDisconnect && (
+          <TertiaryButton
+            style={{ color: 'var(--danger)' }}
+            onClick={function () { untagStrand(detailId); backToList(); }}
+          >
+            Disconnect from draft
+          </TertiaryButton>
+        )}
       </div>
     );
 
@@ -272,11 +275,13 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
       )}
 
       <div style={{ position: 'relative' }}>
-        <PrimaryButton icon="add" onClick={function () { setShowCreateMenu(!showCreateMenu); }} disabled={collections.length === 0}>
-          Create New Spool
-        </PrimaryButton>
-        {showCreateMenu && (
-          <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 50, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', boxShadow: '0 4px 16px rgba(42,31,16,.18)', maxHeight: 220, overflowY: 'auto' }}>
+        <div ref={createBtnRef} style={{ display: 'inline-block' }}>
+          <PrimaryButton icon="add" onClick={function () { setShowCreateMenu(!showCreateMenu); }} disabled={collections.length === 0}>
+            Create New Spool
+          </PrimaryButton>
+        </div>
+        <FloatingPanel anchorRef={createBtnRef} open={showCreateMenu} onClose={function () { setShowCreateMenu(false); }} minWidth={200}>
+          <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', boxShadow: '0 4px 16px rgba(42,31,16,.18)', maxHeight: 220, overflowY: 'auto' }}>
             {collections.map(function (c) {
               return (
                 <div key={c} style={{ padding: '10px 14px', cursor: 'pointer', fontSize: 14 }}
@@ -288,7 +293,7 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
               );
             })}
           </div>
-        )}
+        </FloatingPanel>
       </div>
 
     </Drawer>

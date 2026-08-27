@@ -13,7 +13,7 @@ import BindDrawer from './BindDrawer'
 import ProjectWizard from './ProjectWizard'
 import ProjectDrawer from './ProjectDrawer'
 import TableView from './TableView'
-import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor, Radio } from './SharedUI'
+import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor, Radio, FloatingPanel } from './SharedUI'
 import {
   STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
   supabase, genId, stripHtml, countWords, initials, todayStr,
@@ -26,13 +26,13 @@ import { PROJ_TYPES, projIsNumbered, projIsManualOrder, projSequence, sortDrafts
 // ── Storage ──
 function saveLS(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
 function loadLS(key,def){return Promise.resolve().then(function(){try{var v=localStorage.getItem(key);return v?JSON.parse(v):def;}catch(e){return def;}});}
-function saveDB(key,val){
+export function saveDB(key,val){
   var uid=window.__wovenUserId;
   if(!uid)return saveLS(key,val);
   saveLS(key,val); // keep local copy too
   supabase.from('wf_data').upsert({key:key,user_id:uid,value:val,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(r){if(r.error)console.error('saveDB error:',r.error);});
 }
-function loadDB(key,def){
+export function loadDB(key,def){
   var uid=window.__wovenUserId;
   if(!uid)return loadLS(key,def);
   return supabase.from('wf_data').select('value').eq('key',key).eq('user_id',uid).maybeSingle().then(function(r){
@@ -253,8 +253,8 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .wt{border-collapse:collapse;width:100%;table-layout:fixed;}
 .wt td{background:#FDF8F0;font-family:'DM Sans',sans-serif;font-size:16px;color:#7A5A38;}
 .wt th{background:#E2D0B8;font-family:'DM Sans',sans-serif;font-size:16px;color:#6B4A26;font-weight:600;border-bottom:2px solid var(--border);padding:9px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;position:sticky;top:0;z-index:2;white-space:nowrap;user-select:none;overflow:hidden;position:relative;}
-.wt th.resizable{resize:horizontal;overflow:hidden;min-width:60px;}
-.col-resize-handle{position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;background:transparent;z-index:3;}
+.wt th.resizable{overflow:hidden;min-width:60px;}
+.col-resize-handle{position:absolute;right:0;top:0;bottom:0;width:9px;cursor:col-resize;background:transparent;z-index:5;}
 .col-resize-handle:hover{background:var(--indigo);opacity:.3;}
 .wt td{padding:9px 12px;border-bottom:1px solid var(--bg2);font-size:13px;vertical-align:middle;color:var(--body-text);}
 .wt tr:hover td{background:rgba(196,94,40,.03);}
@@ -1239,62 +1239,77 @@ function StrandCircle({strand,spoolColor,size}){
 
 
 // ── StrandTagPicker ──
-function StrandTagPicker({draft,app,pid,tagged}){
+function StrandTagPicker({draft,app,pid}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
-  var sq=useState('');var q=sq[0];var setQ=sq[1];
-  var ref=useRef(null);
-  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
+  var btnRef=useRef(null);
+  return(
+<div style={{display:'inline-block'}}>
+  <button ref={btnRef} onClick={function(e){e.stopPropagation();setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:12,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',fontSize:11,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>
+    <span className="material-symbols-outlined" style={{fontSize:14,color:'var(--teal)'}}>add</span>
+    Add...
+  </button>
+  <FloatingPanel anchorRef={btnRef} open={open} onClose={function(){setOpen(false);}}>
+    <div onClick={function(e){e.stopPropagation();}} style={{borderRadius:12,overflow:'hidden',boxShadow:'0 8px 28px rgba(42,31,16,.16)'}}>
+      <StrandsDrawer app={app} draft={draft} variant="inline" open={true} onClose={function(){setOpen(false);}}/>
+    </div>
+  </FloatingPanel>
+</div>
+  );
+}
 
+
+// ── TaggedSpoolsEditor ──
+// Full add/remove strand-tag editor: chips with an "×" to remove (with
+// confirmation) plus the "Tag spool" add button. Computes its own tagged
+// list from draft.strandTags — callers just pass draft/app/pid. Used
+// anywhere a draft's tagged spools need to be fully editable (DraftCard's
+// structure mode, TableView's Strands column).
+export function TaggedSpoolsEditor({draft,app,pid}){
+  var ssc=useState(false);var strandConfirm=ssc[0];var setStrandConfirm=ssc[1];
+  var ssi=useState(null);var strandConfirmId=ssi[0];var setStrandConfirmId=ssi[1];
   var projStrands=app.allStrands[pid]||{};
   var projTemplates=app.allTemplates[pid]||[];
-  var taggedIds=(draft.strandTags||[]);
-
-  // All strands not yet tagged, optionally filtered by q
-  var available=[];
+  var tagged=[];
   Object.keys(projStrands).forEach(function(coll){
     (projStrands[coll]||[]).forEach(function(st){
-      if(taggedIds.includes(st.id))return;
-      if(q&&!(st.name||'').toLowerCase().includes(q.toLowerCase()))return;
-      var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
-      available.push(Object.assign({},st,{collName:coll,spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));
+      if((draft.strandTags||[]).includes(st.id)){
+        var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
+        tagged.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28',collName:coll}));
+      }
     });
   });
-
-  function tag(strandId){
-    app.updateDraft(pid,draft.id,{strandTags:taggedIds.concat([strandId])});
-    setQ('');setOpen(false);
-  }
-
+  function removeStrand(strandId){app.updateDraft(pid,draft.id,{strandTags:(draft.strandTags||[]).filter(function(id){return id!==strandId;})});setStrandConfirm(false);setStrandConfirmId(null);}
   return(
-<div ref={ref} style={{position:'relative',display:'inline-block'}}>
-  <button onClick={function(e){e.stopPropagation();setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:12,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',fontSize:11,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>
-    <span className="material-symbols-outlined" style={{fontSize:14,color:'var(--teal)'}}>add</span>
-    Tag spool
+<div onClick={function(e){e.stopPropagation();}}>
+  <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:tagged.length>0?6:0}}>
+    {tagged.map(function(st){return(
+<div key={st.id} style={{display:'flex',alignItems:'center',gap:5,padding:'3px 8px',borderRadius:12,background:st.spoolColor+'22',border:'1px solid '+st.spoolColor}}>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:11,color:st.spoolColor,fontWeight:600}}>{st.name}</span>
+  <button onClick={function(e){e.stopPropagation();setStrandConfirmId(st.id);setStrandConfirm(true);}} style={{background:'none',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',color:st.spoolColor,opacity:.7}}>
+    <span className="material-symbols-outlined" style={{fontSize:14}}>close</span>
   </button>
-  {open&&available.length===0&&!q&&(
-<div style={{position:'absolute',bottom:'calc(100% + 6px)',left:0,zIndex:600,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--mid)',whiteSpace:'nowrap',boxShadow:'0 4px 16px rgba(42,31,16,.12)'}}>All strands are already tagged.</div>
-  )}
-  {open&&(available.length>0||q)&&(
-<div style={{position:'absolute',bottom:'calc(100% + 6px)',left:0,zIndex:600,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:10,boxShadow:'0 4px 16px rgba(42,31,16,.12)',minWidth:200,overflow:'hidden'}}>
-  <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)'}}>
-    <input autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search strands…" style={{width:'100%',padding:'4px 8px',fontSize:12,border:'1px solid var(--border)',borderRadius:6,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',boxSizing:'border-box'}}/>
-  </div>
-  <div style={{maxHeight:180,overflowY:'auto'}}>
-    {available.map(function(st){return(
-<div key={st.id} onClick={function(e){e.stopPropagation();tag(st.id);}} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid var(--bg2)'}}
-  onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
-  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
-  <div style={{width:16,height:16,borderRadius:'50%',background:st.spoolColor,flexShrink:0}}/>
-  <div>
-    <div style={{fontSize:12,fontWeight:600,color:'var(--text)',fontFamily:'DM Sans, sans-serif'}}>{st.name}</div>
-    <div style={{fontSize:10,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>{st.collName}</div>
-  </div>
 </div>
     );})}
-    {available.length===0&&q&&<div style={{padding:'10px 12px',fontSize:12,color:'var(--mid)'}}>No matches.</div>}
+  </div>
+  <StrandTagPicker draft={draft} app={app} pid={pid} tagged={tagged}/>
+  {strandConfirm&&(function(){
+    var confirmSt=tagged.find(function(t){return t.id===strandConfirmId;});
+    var spoolName=confirmSt?confirmSt.collName:'Spool';
+    var strandName=confirmSt?confirmSt.name:'this item';
+    return(
+<div style={{position:'fixed',inset:0,zIndex:600,display:'flex',alignItems:'center',justifyContent:'center'}}>
+  <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={function(){setStrandConfirm(false);}}/>
+  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:12,padding:24,width:300,boxShadow:'0 12px 40px rgba(42,31,16,.15)'}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:8,color:'var(--text)'}}>Remove {strandName} from {spoolName}?</div>
+    <div style={{fontSize:13,color:'var(--mid)',marginBottom:16}}>This removes the tag from this draft. The {strandName} entry in your {spoolName} spool won't be deleted.</div>
+    <div style={{display:'flex',gap:8}}>
+      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={function(){setStrandConfirm(false);}}>Cancel</button>
+      <button className="btn btn-primary" style={{flex:1,justifyContent:'center',background:'var(--danger)'}} onClick={function(){removeStrand(strandConfirmId);}}>Remove</button>
+    </div>
   </div>
 </div>
-  )}
+    );
+  })()}
 </div>
   );
 }
@@ -1308,8 +1323,6 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   var stv=useState(draft.title||'');var titleVal=stv[0];var setTitleVal=stv[1];
   var ssv=useState(draft.synopsis||'');var synVal=ssv[0];var setSynVal=ssv[1];
   var sth=useState(false);var thumbHover=sth[0];var setThumbHover=sth[1];
-  var ssc=useState(false);var strandConfirm=ssc[0];var setStrandConfirm=ssc[1];
-  var ssi=useState(null);var strandConfirmId=ssi[0];var setStrandConfirmId=ssi[1];
   var sdrag=useRef(false);var smouse=useRef({x:0,y:0});
   var fileRef=useRef(null);
   var pid=app.projId;
@@ -1336,7 +1349,6 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
     app.updateDraft(pid,draft.id,ch);
   }
   function doArchive(){var allDr=app.allDrafts[pid]||[];var children=allDr.filter(function(d){return d.parentId===draft.id&&!d.archived;});app.updateDraft(pid,draft.id,{archived:true});children.forEach(function(c){app.updateDraft(pid,c.id,{archived:true});});setArchiveConfirm(false);}
-  function removeStrand(strandId){app.updateDraft(pid,draft.id,{strandTags:(draft.strandTags||[]).filter(function(id){return id!==strandId;})});setStrandConfirm(false);setStrandConfirmId(null);}
 
   function handleMouseDown(e){smouse.current={x:e.clientX,y:e.clientY};sdrag.current=false;}
   function handleMouseMove(e){var dx=e.clientX-smouse.current.x;var dy=e.clientY-smouse.current.y;if(Math.sqrt(dx*dx+dy*dy)>4)sdrag.current=true;}
@@ -1449,22 +1461,8 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
     )}
 
     {/* Strand chips + tag button — expanded in structure mode */}
-    {structureMode&&(
-<div>
-  <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:tagged.length>0?6:0}}>
-    {tagged.map(function(st){return(
-<div key={st.id} style={{display:'flex',alignItems:'center',gap:5,padding:'3px 8px',borderRadius:12,background:st.spoolColor+'22',border:'1px solid '+st.spoolColor}}>
-  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:11,color:st.spoolColor,fontWeight:600}}>{st.name}</span>
-  <button onClick={function(e){e.stopPropagation();setStrandConfirmId(st.id);setStrandConfirm(true);}} style={{background:'none',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',color:st.spoolColor,opacity:.7}}>
-    <span className="material-symbols-outlined" style={{fontSize:14}}>close</span>
-  </button>
-</div>
-    );})}
-  </div>
-  {/* Tag new strand */}
-  <StrandTagPicker draft={draft} app={app} pid={pid} tagged={tagged}/>
-</div>
-    )}
+    {structureMode&&<TaggedSpoolsEditor draft={draft} app={app} pid={pid}/>}
+
 
     {/* Bottom row */}
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,marginTop:'auto'}}>
@@ -1507,24 +1505,6 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   </div>
 
   {archiveConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[pid]||[]} onConfirm={doArchive} onCancel={function(){setArchiveConfirm(false);}}/>}
-  {strandConfirm&&(function(){
-    var confirmSt=tagged.find(function(t){return t.id===strandConfirmId;});
-    var spoolName=confirmSt?confirmSt.collName:'Spool';
-    var strandName=confirmSt?confirmSt.name:'this item';
-    return(
-<div style={{position:'fixed',inset:0,zIndex:600,display:'flex',alignItems:'center',justifyContent:'center'}}>
-  <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={function(){setStrandConfirm(false);}}/>
-  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:12,padding:24,width:300,boxShadow:'0 12px 40px rgba(42,31,16,.15)'}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:8,color:'var(--text)'}}>Remove {strandName} from {spoolName}?</div>
-    <div style={{fontSize:13,color:'var(--mid)',marginBottom:16}}>This removes the tag from this draft. The {strandName} entry in your {spoolName} spool won't be deleted.</div>
-    <div style={{display:'flex',gap:8}}>
-      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={function(){setStrandConfirm(false);}}>Cancel</button>
-      <button className="btn btn-primary" style={{flex:1,justifyContent:'center',background:'var(--danger)'}} onClick={function(){removeStrand(strandConfirmId);}}>Remove</button>
-    </div>
-  </div>
-</div>
-    );
-  })()}
 </div>
   );
 }
