@@ -17,7 +17,7 @@ import {
   Controls, MiniMap, addEdge, useNodesState, useEdgesState, useReactFlow,
   Handle, Position, NodeResizer, MarkerType,
 } from '@xyflow/react'
-import { Drawer, DeleteConfirmModal } from './SharedUI'
+import { Drawer, DeleteConfirmModal, StrandResultRow } from './SharedUI'
 import { STATUSES, genId, initials, getSupabase } from './utils'
 
 // ─────────────────────────────────────────────────────────────
@@ -820,9 +820,14 @@ function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
 // ─────────────────────────────────────────────────────────────
 // SPOOL COLLECTION LIST — the drawer body for one specific Spool,
 // selected directly from its own toolbar button (see Toolbar).
+// Uses the same StrandResultRow the rest of the app uses for browsing
+// strands: click through to view/edit in the Strands page, or tap the
+// add icon to drop it onto the current canvas board. Still draggable
+// too, for the existing drag-to-place workflow.
 // ─────────────────────────────────────────────────────────────
-function SpoolCollectionList({ collectionName, strandsObj, templates, onDragStart }) {
+function SpoolCollectionList({ collectionName, strandsObj, templates, onDragStart, onAddToCanvas, onViewStrand }) {
   const items = strandsObj[collectionName] || []
+  const tpl = (templates || []).find(t => t.name === collectionName)
   return (
     <div className="ex-edrawer-body">
       {items.length === 0
@@ -830,15 +835,14 @@ function SpoolCollectionList({ collectionName, strandsObj, templates, onDragStar
             No {collectionName.toLowerCase()} yet.
           </div>
         : items.map(s => (
-            <div key={s.id} className="ex-edrawer-row" draggable
+            <div key={s.id} draggable
               onDragStart={e => onDragStart(e, buildPayload(s, 'strand', templates))}>
-              <div className="ex-edrawer-av" style={{ background: s.color }}>
-                {s.image ? <img src={s.image} alt={s.name} /> : initials(s.name)}
-              </div>
-              <div className="ex-edrawer-info">
-                <div className="ex-edrawer-name">{s.name}</div>
-              </div>
-              <span className="ex-edrawer-hint">drag</span>
+              <StrandResultRow
+                strand={s}
+                spoolIcon={tpl?.icon}
+                onClick={() => onViewStrand(collectionName, s.id)}
+                onAdd={() => onAddToCanvas(s)}
+              />
             </div>
           ))
       }
@@ -849,7 +853,7 @@ function SpoolCollectionList({ collectionName, strandsObj, templates, onDragStar
 // ─────────────────────────────────────────────────────────────
 // DRAWER CONTENT
 // ─────────────────────────────────────────────────────────────
-function DrawerContent({ panel, templates, strandsObj, drafts, looseThreads, onDragStart }) {
+function DrawerContent({ panel, templates, strandsObj, drafts, looseThreads, onDragStart, onAddToCanvas, onViewStrand }) {
   if (panel?.startsWith(SPOOL_DRAWER_PREFIX)) {
     const collectionName = panel.slice(SPOOL_DRAWER_PREFIX.length)
     return (
@@ -858,6 +862,8 @@ function DrawerContent({ panel, templates, strandsObj, drafts, looseThreads, onD
         strandsObj={strandsObj}
         templates={templates}
         onDragStart={onDragStart}
+        onAddToCanvas={onAddToCanvas}
+        onViewStrand={onViewStrand}
       />
     )
   }
@@ -1051,7 +1057,7 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, colle
 // ─────────────────────────────────────────────────────────────
 // FLOW CANVAS
 // ─────────────────────────────────────────────────────────────
-function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, strandsObj, drafts, looseThreads }) {
+function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, strandsObj, drafts, looseThreads, pendingAdd, onPendingAddConsumed }) {
   const { screenToFlowPosition } = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -1190,6 +1196,27 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     }])
   }, [screenToFlowPosition, setNodes])
 
+  // "Add to canvas" from the Spool drawer (StrandResultRow's add icon) —
+  // same node shape as a drag-drop, just placed at the current viewport
+  // centre instead of a drop point.
+  useEffect(() => {
+    if (!pendingAdd || !canvasRef.current) return
+    const item = buildPayload(pendingAdd, 'strand', templates)
+    const position = screenToFlowPosition({
+      x: canvasRef.current.clientWidth / 2,
+      y: canvasRef.current.clientHeight / 2,
+    })
+    setNodes(nds => [...nds, {
+      id: genId(), type: 'wovenCard', position,
+      data: {
+        itemId: item.id, itemType: item.itemType,
+        name: item.name, color: accentColor(item),
+        visibleFields: [], showStatus: false,
+      },
+    }])
+    onPendingAddConsumed?.()
+  }, [pendingAdd, templates, screenToFlowPosition, setNodes, onPendingAddConsumed])
+
   const onPaneClick = useCallback((e) => {
     if (activeTool === 'connect') { clearConnectPick(); return }
     if (!isPlaceModeTool(activeTool)) return
@@ -1301,6 +1328,12 @@ export default function ExploreCanvas({ app }) {
   const [activeTool, setActiveTool]   = useState('select')
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [boardsLoaded, setBoardsLoaded] = useState(false)
+  const [pendingAdd, setPendingAdd]   = useState(null)
+
+  function viewStrand(collectionName, strandId) {
+    app.setFocusStrand?.({ collection: collectionName, strandId })
+    app.setView?.('strands')
+  }
 
   // Resizable Strands/Drafts/Threads drawer width — remembered across sessions.
   const [drawerWidth, setDrawerWidth] = useState(() => {
@@ -1398,6 +1431,7 @@ export default function ExploreCanvas({ app }) {
                   activeTool={activeTool} onToolReset={() => setActiveTool('select')}
                   templates={templates} strandsObj={strandsObj}
                   drafts={drafts} looseThreads={looseThreads}
+                  pendingAdd={pendingAdd} onPendingAddConsumed={() => setPendingAdd(null)}
                 />
               </ReactFlowProvider>
             </div>
@@ -1421,6 +1455,8 @@ export default function ExploreCanvas({ app }) {
                       templates={templates} strandsObj={strandsObj}
                       drafts={drafts} looseThreads={looseThreads}
                       onDragStart={handleDragStart}
+                      onAddToCanvas={setPendingAdd}
+                      onViewStrand={viewStrand}
                     />
                   </Drawer>
                 </div>

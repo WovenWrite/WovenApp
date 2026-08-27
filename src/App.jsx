@@ -2262,8 +2262,11 @@ function StrandsPage({app,allProjects}){
   var rawColl=Object.keys(projStrands);
   var collNames=savedOrder?savedOrder.filter(function(c){return rawColl.includes(c);}).concat(rawColl.filter(function(c){return !savedOrder.includes(c);})):rawColl;
   if(collNames.length===0)collNames=['Characters'];
-  var sac=useState(function(){ return app.strandsFocusColl && collNames.includes(app.strandsFocusColl) ? app.strandsFocusColl : collNames[0]; });var activeColl=sac[0];var setActiveColl=sac[1];
-  var sasi=useState(null);var activeStrandId=sasi[0];var setActiveStrandId=sasi[1];
+  var sac=useState(function(){
+    if(app.focusStrand&&collNames.includes(app.focusStrand.collection))return app.focusStrand.collection;
+    return app.strandsFocusColl && collNames.includes(app.strandsFocusColl) ? app.strandsFocusColl : collNames[0];
+  });var activeColl=sac[0];var setActiveColl=sac[1];
+  var sasi=useState(function(){ return (app.focusStrand&&app.focusStrand.strandId)||null; });var activeStrandId=sasi[0];var setActiveStrandId=sasi[1];
   var ssc=useState('');var search=ssc[0];var setSearch=ssc[1];
   var sss=useState('name');var strandSort=sss[0];var setStrandSort=sss[1];
   var ssf=useState(null);var strandFilter=ssf[0];var setStrandFilter=ssf[1];
@@ -2317,6 +2320,10 @@ function StrandsPage({app,allProjects}){
     if(app.strandsFocusColl){
       openCollSettings();
       if(app.setStrandsFocusColl)app.setStrandsFocusColl(null);
+    }
+    if(app.focusStrand){
+      if(isMobile)setMobileDetailOpen(true);
+      if(app.setFocusStrand)app.setFocusStrand(null);
     }
   },[]);
   var sdc=useState(false);var deleteCollConfirm=sdc[0];var setDeleteCollConfirm=sdc[1];
@@ -2720,6 +2727,7 @@ function App(){
   // actually owned by a DIFFERENT project (shared in via template.sharedWith).
   var ssc3=useState({});var sharedCollectionSources=ssc3[0];var setSharedCollectionSources=ssc3[1];
   var ssfc=useState(null);var strandsFocusColl=ssfc[0];var setStrandsFocusColl=ssfc[1];
+  var sfs=useState(null);var focusStrand=sfs[0];var setFocusStrand=sfs[1];
   var snp=useState(false);var showNewProject=snp[0];var setShowNewProject=snp[1];
 
   // Templates are small (field defs + metadata, no strand content), so it's
@@ -3143,7 +3151,7 @@ function App(){
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,promoteStrand:promoteStrand,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,promoteStrand:promoteStrand,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,focusStrand:focusStrand,setFocusStrand:setFocusStrand,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
 
   function signOut(){
     supabase.auth.signOut().then(function(){
