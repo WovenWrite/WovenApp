@@ -5,13 +5,11 @@ import StrandsDrawer from './StrandsDrawer'
 import { StatusSelect } from './SharedUI'
 import { genId, stripHtml, initials } from './utils'
 import { projIsNumbered, projSequence, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
-import { buildTree, applyFS, loadFilterState, persistFilterState, ViewHeader, DraftLoadingSpinner, EmptyDrafts, LooseThreadsSection } from './App'
+import { buildTree, applyFS, loadFilterState, persistFilterState, ViewHeader, DraftLoadingSpinner, EmptyDrafts, LooseThreadsSection, TaggedSpoolsEditor } from './App'
 
 // ── ExpandingCell ──
-// A single-line input that grows into a multi-line textarea (and the row
-// grows with it) while focused, and collapses back to a single line on
-// blur — i.e. clicking anywhere else reverts it, since only one cell can
-// be focused at a time.
+// Shows up to 2 lines with ellipsis when idle; clicking switches to an
+// auto-growing textarea (the row grows with it) until you click away.
 function ExpandingCell({value,placeholder,style,onCommit}){
   var sv=useState(value||'');var val=sv[0];var setVal=sv[1];
   var sf=useState(false);var focused=sf[0];var setFocused=sf[1];
@@ -28,9 +26,11 @@ function ExpandingCell({value,placeholder,style,onCommit}){
   },[focused]);
   function commit(){setFocused(false);if(val!==(value||''))onCommit(val);}
   if(!focused){
-    return <input className="tbl-inp" style={style} value={val} placeholder={placeholder}
-      onChange={function(e){setVal(e.target.value);}}
-      onFocus={function(){setFocused(true);}}/>;
+    var hasVal=!!(value&&value.length);
+    return <div className="tbl-inp" style={Object.assign({cursor:'text',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',wordBreak:'break-word',whiteSpace:'normal'},style,!hasVal?{fontStyle:'italic',opacity:.75,color:'var(--placeholder)'}:null)}
+      onClick={function(){setFocused(true);}}>
+      {hasVal?value:placeholder}
+    </div>;
   }
   return <textarea ref={ref} className="tbl-inp" style={Object.assign({},style,{whiteSpace:'pre-wrap',resize:'none',overflow:'hidden',width:'100%',display:'block'})}
     value={val} placeholder={placeholder}
@@ -123,20 +123,41 @@ function TableView({app}){
   function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
   var tblProjStrands=app.allStrands[app.projId]||{};
   var tblProjTemplates=app.allTemplates[app.projId]||[];
+  function renderSpoolThumbs(strandIds,draftId){
+    var list=[];
+    Object.keys(tblProjStrands).forEach(function(c){(tblProjStrands[c]||[]).forEach(function(st){if((strandIds||[]).includes(st.id)){var tpl=tblProjTemplates.find(function(t){return t.name===c||t.id===st.templateId;});list.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));}});});
+    if(list.length===0)return <span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'var(--placeholder)',fontStyle:'italic'}}>—</span>;
+    return(
+<div style={{display:'flex',alignItems:'center',gap:-4,overflow:'hidden'}}>
+  {list.slice(0,4).map(function(st,i){return(
+<div key={st.id} title={st.name} style={{width:24,height:24,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-6:0,boxSizing:'border-box',cursor:'pointer'}}
+  onClick={function(){setSpoolView({draftId:draftId,strandId:st.id});}}
+  onMouseEnter={function(e){var tt=document.getElementById('woven-tt');if(tt){var r=e.currentTarget.getBoundingClientRect();tt.textContent=st.name;tt.style.display='block';tt.style.left=(r.left+r.width/2)+'px';tt.style.top=(r.bottom+6)+'px';}}}
+  onMouseLeave={function(){var tt=document.getElementById('woven-tt');if(tt)tt.style.display='none';}}>
+  {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:8,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
+</div>
+  );})}
+  {list.length>4&&<span style={{marginLeft:2,fontSize:11,color:'#7A5A38'}}>+{list.length-4}</span>}
+</div>
+    );
+  }
   function renderCell(col,draft,rowCtx){
     if(col==='title'){
       var canPromote=rowCtx&&(rowCtx.hasChildren||rowCtx.isNested);
       return(
-<div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>
-  <div style={{flex:1,minWidth:0}}>
+<div style={{display:'flex',alignItems:'flex-start',gap:2}}>
+  <div style={{flex:'0 1 auto',minWidth:0,maxWidth:canPromote?'calc(100% - 50px)':'calc(100% - 26px)'}}>
     <ExpandingCell value={draft.title} placeholder="Untitled" style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2a1f10'}} onCommit={function(v){app.updateDraft(app.projId,draft.id,{title:v});}}/>
   </div>
+  <button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:2,display:'flex',alignItems:'center',color:'var(--mid)',flexShrink:0,marginTop:1,transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
+    <span className="material-symbols-outlined" style={{fontSize:18}}>arrow_forward</span>
+  </button>
   {canPromote&&(rowCtx.isNested?(
-<button className="btn-icon" style={{padding:2,flexShrink:0}} title="Make this the primary strand" onClick={function(){app.promoteStrand(app.projId,rowCtx.parentId,draft.id);}}>
+<button className="btn-icon" style={{padding:2,flexShrink:0,marginTop:1}} title="Make this the primary strand" onClick={function(){app.promoteStrand(app.projId,rowCtx.parentId,draft.id);}}>
   <span className="mi" style={{fontSize:16,color:'var(--mid)'}}>star_outline</span>
 </button>
   ):(
-<span title="Primary strand" style={{display:'flex',flexShrink:0,padding:2}}>
+<span title="Primary strand" style={{display:'flex',flexShrink:0,padding:2,marginTop:1}}>
   <span className="mi" style={{fontSize:16,color:'#C45E28'}}>star</span>
 </span>
   ))}
@@ -144,33 +165,25 @@ function TableView({app}){
       );
     }
     if(col==='status')return <StatusSelect app={app} draft={draft} project={project} selectStyle={{height:34,fontSize:14,padding:'8px 10px 8px 32px'}}/>;
-    if(col==='wordCount')return <span style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38'}}>{draft.wordCount||0}</span>;
-    if(col==='synopsis')return <ExpandingCell value={draft.synopsis} placeholder="No synopsis…" onCommit={function(v){app.updateDraft(app.projId,draft.id,{synopsis:v});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',fontStyle:draft.synopsis?'normal':'italic',opacity:draft.synopsis?1:.75}}/>;
-    if(col==='strandTags'){var ts2=[];Object.keys(tblProjStrands).forEach(function(c){(tblProjStrands[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id)){var tpl=tblProjTemplates.find(function(t){return t.name===c||t.id===st.templateId;});ts2.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));}});});return(
-<div style={{display:'flex',alignItems:'center',gap:-4,overflow:'hidden'}}>
-  {ts2.slice(0,4).map(function(st,i){return(
-<div key={st.id} title={st.name} style={{width:24,height:24,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-6:0,boxSizing:'border-box',cursor:'pointer'}}
-  onClick={function(){setSpoolView({draftId:draft.id,strandId:st.id});}}
-  onMouseEnter={function(e){var tt=document.getElementById('woven-tt');if(tt){var r=e.currentTarget.getBoundingClientRect();tt.textContent=st.name;tt.style.display='block';tt.style.left=(r.left+r.width/2)+'px';tt.style.top=(r.bottom+6)+'px';}}}
-  onMouseLeave={function(){var tt=document.getElementById('woven-tt');if(tt)tt.style.display='none';}}>
-  {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:8,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
-</div>
-  );})}
-  {ts2.length>4&&<span style={{marginLeft:2,fontSize:11,color:'#7A5A38'}}>+{ts2.length-4}</span>}
-</div>
-    );}
+    if(col==='wordCount')return <span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}>{draft.wordCount||0}</span>;
+    if(col==='synopsis')return <ExpandingCell value={draft.synopsis} placeholder="No synopsis…" onCommit={function(v){app.updateDraft(app.projId,draft.id,{synopsis:v});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}/>;
+    if(col==='strandTags')return <TaggedSpoolsEditor draft={draft} app={app} pid={app.projId}/>;
     if(col.startsWith('cf_')){
       var fid=col.slice(3);
       var cfVal=draft.customFields&&draft.customFields[fid]?draft.customFields[fid]:'';
       var fieldDef=draftFieldDefs.find(function(f){return f.id===fid;});
       if(fieldDef&&fieldDef.type==='strand_ref'){
         var refIds=[];try{var parsed=JSON.parse(cfVal);if(Array.isArray(parsed))refIds=parsed;}catch(e){}
-        var projStrandsAll=app.allStrands[app.projId]||{};
-        var flatStrands=[];Object.keys(projStrandsAll).forEach(function(c){(projStrandsAll[c]||[]).forEach(function(st){flatStrands.push(st);});});
-        var refNames=refIds.map(function(id){var st=flatStrands.find(function(s){return s.id===id;});return st?st.name:null;}).filter(Boolean);
-        return <span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:refNames.length?'#7A5A38':'var(--placeholder)',fontStyle:refNames.length?'normal':'italic'}}>{refNames.length?refNames.join(', '):'—'}</span>;
+        return renderSpoolThumbs(refIds,draft.id);
       }
-      return <ExpandingCell value={cfVal} placeholder="—" onCommit={function(v){var cf=Object.assign({},draft.customFields||{});cf[fid]=v;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',fontStyle:cfVal?'normal':'italic',opacity:cfVal?1:.75}}/>;
+      if(fieldDef&&fieldDef.type==='boolean'){
+        return <select value={cfVal||''} onChange={function(e){var cf=Object.assign({},draft.customFields||{});cf[fid]=e.target.value;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:cfVal?'#7A5A38':'var(--placeholder)',background:'transparent',border:'1px solid var(--border)',borderRadius:6,padding:'5px 8px',cursor:'pointer'}}>
+          <option value="">—</option>
+          <option value="Yes">Yes</option>
+          <option value="No">No</option>
+        </select>;
+      }
+      return <ExpandingCell value={cfVal} placeholder="—" onCommit={function(v){var cf=Object.assign({},draft.customFields||{});cf[fid]=v;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}/>;
     }
     return null;
   }
@@ -192,9 +205,7 @@ function TableView({app}){
   </td>
   )}
   {visCols.map(function(col){return <td key={col}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId})}</td>;})}
-  <td><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
-    <span className="material-symbols-outlined" style={{fontSize:20}}>arrow_forward</span>
-  </button></td>
+  <td/>
 </tr>
   );}
   return(
