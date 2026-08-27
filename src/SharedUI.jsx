@@ -655,6 +655,7 @@ export function StrandSearchDropdown({ app, pid, collection, excludeIds, onPick,
 
 export function StrandRefPicker({ app, pid, collection, value, onChange, placeholder }) {
   var so = useState(false); var open = so[0]; var setOpen = so[1];
+  var triggerRef = useRef(null);
 
   var selectedIds = value || [];
   var projStrands = (app.allStrands[pid] || {});
@@ -676,7 +677,7 @@ export function StrandRefPicker({ app, pid, collection, value, onChange, placeho
   function remove(id) { onChange(selectedIds.filter(function (i) { return i !== id; })); }
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div>
       {selected.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
           {selected.map(function (st) {
@@ -690,11 +691,11 @@ export function StrandRefPicker({ app, pid, collection, value, onChange, placeho
           })}
         </div>
       )}
-      <div className="wv-refpick-empty" onClick={function () { setOpen(!open); }}>
+      <div ref={triggerRef} className="wv-refpick-empty" onClick={function () { setOpen(!open); }}>
         <span>{selected.length > 0 ? 'Add another...' : (placeholder || 'Select spools...')}</span>
         <span className="mi" style={{ fontSize: 18 }}>{open ? 'expand_less' : 'expand_more'}</span>
       </div>
-      {open && (
+      <FloatingPanel anchorRef={triggerRef} open={open} onClose={function () { setOpen(false); }} minWidth={240}>
         <StrandSearchDropdown
           app={app}
           pid={pid}
@@ -702,8 +703,9 @@ export function StrandRefPicker({ app, pid, collection, value, onChange, placeho
           excludeIds={selectedIds}
           onPick={add}
           onClose={function () { setOpen(false); }}
+          style={{ position: 'static', width: 280 }}
         />
-      )}
+      </FloatingPanel>
     </div>
   );
 }
