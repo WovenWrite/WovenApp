@@ -107,7 +107,10 @@ function SpoolRefEmptyPicker({app,pid,draft,fieldDef}){
   }
   return(
 <div style={{display:'inline-block'}}>
-  <span ref={triggerRef} onClick={function(e){e.stopPropagation();setOpen(!open);}} style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'var(--placeholder)',fontStyle:'italic',cursor:'pointer'}}>Click to select…</span>
+  <button ref={triggerRef} onClick={function(e){e.stopPropagation();setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:12,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',fontSize:11,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>
+    <span className="material-symbols-outlined" style={{fontSize:14,color:'var(--teal)'}}>add</span>
+    Add...
+  </button>
   <FloatingPanel anchorRef={triggerRef} open={open} onClose={function(){setOpen(false);}} minWidth={220}>
     <StrandSearchDropdown
       app={app}
@@ -144,9 +147,9 @@ function BranchCell({app,draft,hasChildren,childCount,isExpanded}){
   }
   if(hasChildren){
     return(
-<div onClick={function(e){e.stopPropagation();app.updateDraft(app.projId,draft.id,{nestExpanded:!isExpanded});}} style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer',color:isExpanded?'#C45E28':'var(--mid)'}}>
-  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,fontWeight:500,whiteSpace:'nowrap'}}>{childCount} Strand{childCount===1?'':'s'}</span>
-  <span className="mi" style={{fontSize:16}}>{isExpanded?'expand_less':'expand_more'}</span>
+<div onClick={function(e){e.stopPropagation();app.updateDraft(app.projId,draft.id,{nestExpanded:!isExpanded});}} style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer',color:isExpanded?'#C45E28':'var(--mid)',width:'100%'}}>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,fontWeight:500,whiteSpace:'nowrap',flex:1}}>{childCount} Strand{childCount===1?'':'s'}</span>
+  <span className="mi" style={{fontSize:16,flexShrink:0}}>{isExpanded?'expand_less':'expand_more'}</span>
 </div>
     );
   }
@@ -196,6 +199,7 @@ function TableView({app}){
   var draftFieldDefs=project.draftFieldDefs||[];
   var allAvailCols=[
     {id:'title',label:'Title'},
+    {id:'branches',label:'Branches'},
     {id:'status',label:'Status'},
     {id:'wordCount',label:'Words'},
     {id:'synopsis',label:'Synopsis'}
@@ -239,7 +243,7 @@ function TableView({app}){
 
   var widthsKey='colwidths:'+app.projId;
   var scw=useState(function(){
-    var defaults={title:160,synopsis:260,status:160,strandTags:160,wordCount:64};
+    var defaults={title:160,branches:110,synopsis:260,status:160,strandTags:160,wordCount:64};
     try{var v=localStorage.getItem(widthsKey);if(v){var p=JSON.parse(v);if(p&&typeof p==='object')return Object.assign({},defaults,p);}}catch(e){}
     return defaults;
   });
@@ -290,7 +294,7 @@ function TableView({app}){
       return(
 <div style={{display:'flex',alignItems:'flex-start',gap:4}}>
   <div style={{flex:1,minWidth:0}}>
-    <ExpandingCell value={draft.title} placeholder="Untitled" rowExpanded={rowCtx&&rowCtx.rowExpanded} style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2a1f10'}} onCommit={function(v){app.updateDraft(app.projId,draft.id,{title:v});}}/>
+    <ExpandingCell value={draft.title} placeholder="Add..." rowExpanded={rowCtx&&rowCtx.rowExpanded} style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2a1f10'}} onCommit={function(v){app.updateDraft(app.projId,draft.id,{title:v});}}/>
   </div>
   {showStar&&(rowCtx.isNested?(
 <button className="btn-icon" style={{padding:2,flexShrink:0,marginTop:1}} title="Make this the primary strand" onClick={function(e){e.stopPropagation();app.promoteStrand(app.projId,rowCtx.parentId,draft.id);}}>
@@ -304,9 +308,13 @@ function TableView({app}){
 </div>
       );
     }
+    if(col==='branches'){
+      if(rowCtx&&rowCtx.isNested)return null;
+      return <BranchCell app={app} draft={draft} hasChildren={rowCtx&&rowCtx.hasChildren} childCount={rowCtx&&rowCtx.childCount} isExpanded={rowCtx&&rowCtx.branchesOpen}/>;
+    }
     if(col==='status')return <StatusSelect app={app} draft={draft} project={project} selectStyle={{height:34,fontSize:14,padding:'8px 10px 8px 32px',minWidth:150}}/>;
     if(col==='wordCount')return <span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}>{draft.wordCount||0}</span>;
-    if(col==='synopsis')return <ExpandingCell value={draft.synopsis} placeholder="No synopsis…" rowExpanded={rowCtx&&rowCtx.rowExpanded} onCommit={function(v){app.updateDraft(app.projId,draft.id,{synopsis:v});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}/>;
+    if(col==='synopsis')return <ExpandingCell value={draft.synopsis} placeholder="Add..." rowExpanded={rowCtx&&rowCtx.rowExpanded} onCommit={function(v){app.updateDraft(app.projId,draft.id,{synopsis:v});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}/>;
     if(col==='strandTags')return <SpoolsCell draft={draft} app={app} pid={app.projId} expanded={!!(rowCtx&&rowCtx.rowExpanded)}/>;
     if(col.startsWith('cf_')){
       var fid=col.slice(3);
@@ -324,7 +332,7 @@ function TableView({app}){
           <option value="No">No</option>
         </select>;
       }
-      return <ExpandingCell value={cfVal} placeholder="—" rowExpanded={rowCtx&&rowCtx.rowExpanded} onCommit={function(v){var cf=Object.assign({},draft.customFields||{});cf[fid]=v;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}/>;
+      return <ExpandingCell value={cfVal} placeholder="Add..." rowExpanded={rowCtx&&rowCtx.rowExpanded} onCommit={function(v){var cf=Object.assign({},draft.customFields||{});cf[fid]=v;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}/>;
     }
     return null;
   }
@@ -340,9 +348,6 @@ function TableView({app}){
   <td style={{verticalAlign:vAlign}}>
     <span draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}} style={{cursor:'grab',color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:18}}>drag_indicator</span></span>
   </td>
-  <td style={{verticalAlign:vAlign,paddingLeft:12}} onClick={function(e){e.stopPropagation();}}>
-    {!isNested&&<BranchCell app={app} draft={draft} hasChildren={hasChildren} childCount={childCount} isExpanded={isExpanded}/>}
-  </td>
   {(tblNumbered||tblByDate)&&(
   <td style={{color:'var(--mid)',fontSize:11,whiteSpace:'nowrap',paddingLeft:isNested?28:12,verticalAlign:vAlign}}>
     <div style={{display:'flex',alignItems:'center',gap:2}}>
@@ -351,7 +356,7 @@ function TableView({app}){
     </div>
   </td>
   )}
-  {visCols.map(function(col){var td=<td key={col} style={{verticalAlign:vAlign}}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId,rowExpanded:rowExp,branchesOpen:isExpanded})}</td>;if(col==='title')return [td,<td key="__arrowcol" style={{verticalAlign:vAlign}} onClick={function(e){e.stopPropagation();}}><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
+  {visCols.map(function(col){var td=<td key={col} style={{verticalAlign:vAlign}} onClick={col==='branches'?function(e){e.stopPropagation();}:undefined}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId,rowExpanded:rowExp,branchesOpen:isExpanded,childCount:childCount})}</td>;if(col==='title')return [td,<td key="__arrowcol" style={{verticalAlign:vAlign}} onClick={function(e){e.stopPropagation();}}><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
     <span className="material-symbols-outlined" style={{fontSize:18}}>arrow_forward</span>
   </button></td>];return td;})}
   <td style={{verticalAlign:vAlign}}/>
@@ -364,13 +369,10 @@ function TableView({app}){
   <div className="table-wrap" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto',padding:20}}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>
-  <table className="wt">
+  <table className="wt" style={{width:'max-content',minWidth:'100%'}}>
     <thead>
       <tr style={{background:'#E2D0B8'}}>
         <th style={{width:28,background:'#E2D0B8'}}/>
-        <th style={{width:110,background:'#E2D0B8',textAlign:'left',paddingLeft:12}}>
-          <span className="mi" style={{fontSize:18,color:'#6B4A26'}}>account_tree</span>
-        </th>
         {tblNumbered&&<th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>}
         {tblByDate&&<th style={{width:96,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>Date</th>}
         {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});var thEl=(
@@ -379,7 +381,7 @@ function TableView({app}){
   onDragStart={function(e){e.dataTransfer.setData('colId',col);}}
   onDragOver={function(e){e.preventDefault();}}
   onDrop={function(e){e.preventDefault();var fromId=e.dataTransfer.getData('colId');if(!fromId||fromId===col)return;var nc=colOrder.slice();var fromIdx=nc.indexOf(fromId);var toIdx=nc.indexOf(col);if(fromIdx<0||toIdx<0)return;var item=nc.splice(fromIdx,1)[0];nc.splice(toIdx,0,item);persistColOrder(nc);}} >
-  {av?av.label:col}
+  {col==='branches'?<span className="mi" style={{fontSize:18,color:'#6B4A26'}}>account_tree</span>:(av?av.label:col)}
   <div className="col-resize-handle" onMouseDown={function(e){e.stopPropagation();startResize(col,e);}}/>
 </th>
         );if(col==='title')return [thEl,<th key="__arrowcol" style={{width:34,background:'#E2D0B8'}}/>];return thEl;})}

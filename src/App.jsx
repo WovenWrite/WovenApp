@@ -1239,61 +1239,19 @@ function StrandCircle({strand,spoolColor,size}){
 
 
 // ── StrandTagPicker ──
-function StrandTagPicker({draft,app,pid,tagged}){
+function StrandTagPicker({draft,app,pid}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
-  var sq=useState('');var q=sq[0];var setQ=sq[1];
   var btnRef=useRef(null);
-
-  var projStrands=app.allStrands[pid]||{};
-  var projTemplates=app.allTemplates[pid]||[];
-  var taggedIds=(draft.strandTags||[]);
-
-  // All strands not yet tagged, optionally filtered by q
-  var available=[];
-  Object.keys(projStrands).forEach(function(coll){
-    (projStrands[coll]||[]).forEach(function(st){
-      if(taggedIds.includes(st.id))return;
-      if(q&&!(st.name||'').toLowerCase().includes(q.toLowerCase()))return;
-      var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
-      available.push(Object.assign({},st,{collName:coll,spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));
-    });
-  });
-
-  function tag(strandId){
-    app.updateDraft(pid,draft.id,{strandTags:taggedIds.concat([strandId])});
-    setQ('');setOpen(false);
-  }
-
   return(
 <div style={{display:'inline-block'}}>
   <button ref={btnRef} onClick={function(e){e.stopPropagation();setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:12,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',fontSize:11,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>
     <span className="material-symbols-outlined" style={{fontSize:14,color:'var(--teal)'}}>add</span>
-    Tag spool
+    Add...
   </button>
-  <FloatingPanel anchorRef={btnRef} open={open} onClose={function(){setOpen(false);setQ('');}} minWidth={200}>
-    {available.length===0&&!q?(
-<div style={{background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--mid)',whiteSpace:'nowrap',boxShadow:'0 4px 16px rgba(42,31,16,.12)'}}>All strands are already tagged.</div>
-    ):(
-<div style={{background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:10,boxShadow:'0 4px 16px rgba(42,31,16,.12)',minWidth:200,overflow:'hidden'}} onClick={function(e){e.stopPropagation();}}>
-  <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)'}}>
-    <input autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search strands…" style={{width:'100%',padding:'4px 8px',fontSize:12,border:'1px solid var(--border)',borderRadius:6,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',boxSizing:'border-box'}}/>
-  </div>
-  <div style={{maxHeight:180,overflowY:'auto'}}>
-    {available.map(function(st){return(
-<div key={st.id} onClick={function(e){e.stopPropagation();tag(st.id);}} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid var(--bg2)'}}
-  onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
-  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
-  <div style={{width:16,height:16,borderRadius:'50%',background:st.spoolColor,flexShrink:0}}/>
-  <div>
-    <div style={{fontSize:12,fontWeight:600,color:'var(--text)',fontFamily:'DM Sans, sans-serif'}}>{st.name}</div>
-    <div style={{fontSize:10,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>{st.collName}</div>
-  </div>
-</div>
-    );})}
-    {available.length===0&&q&&<div style={{padding:'10px 12px',fontSize:12,color:'var(--mid)'}}>No matches.</div>}
-  </div>
-</div>
-    )}
+  <FloatingPanel anchorRef={btnRef} open={open} onClose={function(){setOpen(false);}}>
+    <div onClick={function(e){e.stopPropagation();}} style={{borderRadius:12,overflow:'hidden',boxShadow:'0 8px 28px rgba(42,31,16,.16)'}}>
+      <StrandsDrawer app={app} draft={draft} variant="inline" open={true} onClose={function(){setOpen(false);}}/>
+    </div>
   </FloatingPanel>
 </div>
   );
