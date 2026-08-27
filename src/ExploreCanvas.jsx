@@ -87,15 +87,24 @@ const CANVAS_CSS = `
 
 /* Toolbar */
 .ex-toolbar{width:60px;background:var(--bg1);display:flex;flex-direction:column;
-  align-items:center;padding:10px 0;gap:1px;flex-shrink:0;border-left:1px solid var(--border);}
+  align-items:center;padding:10px 0;gap:1px;flex-shrink:0;border-left:1px solid var(--border);
+  min-height:0;overflow:hidden;}
 .ex-tool{width:52px;min-height:46px;border-radius:8px;display:flex;flex-direction:column;
   align-items:center;justify-content:center;cursor:pointer;color:var(--mid);
-  transition:all .12s;gap:2px;padding:4px 2px;}
+  transition:all .12s;gap:2px;padding:4px 2px;flex-shrink:0;}
 .ex-tool:hover{background:var(--bg2);color:var(--text);}
 .ex-tool.active{background:rgba(196,94,40,.12);color:var(--indigo);}
 .ex-tool .mi{font-size:18px;line-height:1;}
-.ex-tool-lbl{font-size:9px;font-weight:500;text-align:center;line-height:1;}
+.ex-tool-lbl{font-size:9px;font-weight:500;text-align:center;line-height:1;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:52px;}
 .ex-tool-sep{width:32px;height:1px;background:var(--border);margin:4px 0;flex-shrink:0;}
+/* Per-Spool collection buttons — one per Spool, dynamic per project.
+   Scrolls independently so a project with many Spools doesn't push
+   the fixed placement tools or Drafts/Threads off screen. */
+.ex-toolbar-colls{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;
+  align-items:center;gap:1px;width:100%;scrollbar-width:thin;}
+.ex-toolbar-colls::-webkit-scrollbar{width:4px;}
+.ex-toolbar-colls::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
 
 /* Drawer */
 .ex-drawer{width:0;overflow:hidden;transition:width .2s ease;background:var(--bg1);
@@ -110,20 +119,6 @@ const CANVAS_CSS = `
 .ex-drawer-resize-handle:hover::after,.ex-drawer.resizing .ex-drawer-resize-handle::after{
   background:var(--indigo);}
 .ex-edrawer-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
-
-/* Strand collection tabs — scrollable with overflow arrows */
-.ex-coll-tabs-wrap{display:flex;align-items:center;border-bottom:1px solid var(--border);
-  flex-shrink:0;background:var(--bg1);}
-.ex-coll-tabs-scroll{display:flex;overflow-x:auto;flex:1;scrollbar-width:none;}
-.ex-coll-tabs-scroll::-webkit-scrollbar{display:none;}
-.ex-coll-tab{padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;
-  color:var(--mid);border-bottom:2px solid transparent;white-space:nowrap;
-  transition:color .12s;flex-shrink:0;}
-.ex-coll-tab:hover{color:var(--text);}
-.ex-coll-tab.active{color:var(--indigo);border-bottom-color:var(--indigo);}
-.ex-coll-arrow{width:24px;height:32px;display:flex;align-items:center;justify-content:center;
-  cursor:pointer;color:var(--mid);flex-shrink:0;font-size:14px;}
-.ex-coll-arrow:hover{color:var(--text);}
 
 .ex-edrawer-section{padding:10px 14px;}
 .ex-edrawer-lbl{font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;
@@ -291,11 +286,13 @@ const SHAPE_VARIANTS = [
   { id: 'diamond',   icon: 'diamond',         label: 'Diamond'   },
   { id: 'triangle',  icon: 'change_history',  label: 'Triangle'  },
 ]
+// Static drawer buttons — Spool collections are added dynamically per
+// project (see the `collections` prop built in the root component).
 const DRAWER_ITEMS = [
-  { id: 'strands',       icon: 'share',        label: 'Strands' },
   { id: 'drafts',        icon: 'edit_note',    label: 'Drafts'  },
   { id: 'loose_threads', icon: 'scatter_plot', label: 'Threads' },
 ]
+const SPOOL_DRAWER_PREFIX = 'strands:'
 const DRAWER_MIN_W = 220
 const DRAWER_MAX_W = 520
 
@@ -821,75 +818,31 @@ function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// STRANDS DRAWER — tabs from live strandsObj keys only
+// SPOOL COLLECTION LIST — the drawer body for one specific Spool,
+// selected directly from its own toolbar button (see Toolbar).
 // ─────────────────────────────────────────────────────────────
-function ExploreStrandsPalette({ strandsObj, templates, onDragStart }) {
-  // Derive collection names from live data — not hardcoded, not from templates
-  const collections = Object.keys(strandsObj)
-  const [activeIdx, setActiveIdx] = useState(0)
-  const scrollRef = useRef(null)
-
-  // Reset active tab if collections change and current idx is out of bounds
-  useEffect(() => {
-    if (activeIdx >= collections.length && collections.length > 0) {
-      setActiveIdx(0)
-    }
-  }, [collections.length])
-
-  const activeColl = collections[activeIdx] || ''
-  const items = strandsObj[activeColl] || []
-
-  function scrollTabs(dir) {
-    if (scrollRef.current) scrollRef.current.scrollLeft += dir * 80
-  }
-
-  if (collections.length === 0) {
-    return (
-      <div style={{ padding: '16px 14px', fontSize: 13, color: 'var(--mid)' }}>
-        No strand collections yet. Create one in the Strands view.
-      </div>
-    )
-  }
-
+function SpoolCollectionList({ collectionName, strandsObj, templates, onDragStart }) {
+  const items = strandsObj[collectionName] || []
   return (
-    <>
-      <div className="ex-coll-tabs-wrap">
-        <div className="ex-coll-arrow" onClick={() => scrollTabs(-1)}>
-          <span className="mi" style={{ fontSize: 16 }}>chevron_left</span>
-        </div>
-        <div className="ex-coll-tabs-scroll" ref={scrollRef}>
-          {collections.map((coll, i) => (
-            <div key={coll}
-              className={`ex-coll-tab ${i === activeIdx ? 'active' : ''}`}
-              onClick={() => setActiveIdx(i)}>
-              {coll}
-            </div>
-          ))}
-        </div>
-        <div className="ex-coll-arrow" onClick={() => scrollTabs(1)}>
-          <span className="mi" style={{ fontSize: 16 }}>chevron_right</span>
-        </div>
-      </div>
-      <div className="ex-edrawer-body">
-        {items.length === 0
-          ? <div style={{ padding: '12px 14px', fontSize: 13, color: 'var(--mid)' }}>
-              No {activeColl.toLowerCase()} yet.
-            </div>
-          : items.map(s => (
-              <div key={s.id} className="ex-edrawer-row" draggable
-                onDragStart={e => onDragStart(e, buildPayload(s, 'strand', templates))}>
-                <div className="ex-edrawer-av" style={{ background: s.color }}>
-                  {s.image ? <img src={s.image} alt={s.name} /> : initials(s.name)}
-                </div>
-                <div className="ex-edrawer-info">
-                  <div className="ex-edrawer-name">{s.name}</div>
-                </div>
-                <span className="ex-edrawer-hint">drag</span>
+    <div className="ex-edrawer-body">
+      {items.length === 0
+        ? <div style={{ padding: '12px 14px', fontSize: 13, color: 'var(--mid)' }}>
+            No {collectionName.toLowerCase()} yet.
+          </div>
+        : items.map(s => (
+            <div key={s.id} className="ex-edrawer-row" draggable
+              onDragStart={e => onDragStart(e, buildPayload(s, 'strand', templates))}>
+              <div className="ex-edrawer-av" style={{ background: s.color }}>
+                {s.image ? <img src={s.image} alt={s.name} /> : initials(s.name)}
               </div>
-            ))
-        }
-      </div>
-    </>
+              <div className="ex-edrawer-info">
+                <div className="ex-edrawer-name">{s.name}</div>
+              </div>
+              <span className="ex-edrawer-hint">drag</span>
+            </div>
+          ))
+      }
+    </div>
   )
 }
 
@@ -897,9 +850,11 @@ function ExploreStrandsPalette({ strandsObj, templates, onDragStart }) {
 // DRAWER CONTENT
 // ─────────────────────────────────────────────────────────────
 function DrawerContent({ panel, templates, strandsObj, drafts, looseThreads, onDragStart }) {
-  if (panel === 'strands') {
+  if (panel?.startsWith(SPOOL_DRAWER_PREFIX)) {
+    const collectionName = panel.slice(SPOOL_DRAWER_PREFIX.length)
     return (
-      <ExploreStrandsPalette
+      <SpoolCollectionList
+        collectionName={collectionName}
         strandsObj={strandsObj}
         templates={templates}
         onDragStart={onDragStart}
@@ -1015,7 +970,7 @@ function CanvasTabs({ tabs, activeTab, onSelect, onAdd, onRename, onDeleteReques
 // ─────────────────────────────────────────────────────────────
 // TOOLBAR
 // ─────────────────────────────────────────────────────────────
-function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle }) {
+function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, collections }) {
   const [shapePickerOpen, setShapePickerOpen] = useState(false)
   const shapeWrapRef = useRef(null)
   const shapeActive = activeTool.startsWith('shape:')
@@ -1059,6 +1014,25 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle }) {
           )}
         </div>
       ))}
+
+      {collections.length > 0 && (
+        <>
+          <div className="ex-tool-sep" />
+          <div className="ex-toolbar-colls">
+            {collections.map(c => {
+              const drawerId = `${SPOOL_DRAWER_PREFIX}${c.name}`
+              return (
+                <div key={c.name} className={`ex-tool ${activeDrawer === drawerId ? 'active' : ''}`}
+                  onClick={() => onDrawerToggle(drawerId)} title={c.name}>
+                  <span className="mi" style={{ color: c.color }}>{c.icon}</span>
+                  <span className="ex-tool-lbl">{c.name}</span>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+
       <div className="ex-tool-sep" />
       {DRAWER_ITEMS.map(p => (
         <div key={p.id} className={`ex-tool ${activeDrawer === p.id ? 'active' : ''}`}
@@ -1304,6 +1278,23 @@ export default function ExploreCanvas({ app }) {
   const drafts       = allDrafts.filter(d => d.status !== 'loose_thread')
   const looseThreads = allDrafts.filter(d => d.status === 'loose_thread')
 
+  // One toolbar button per Spool collection, using the icon/colour/name set
+  // on that collection in the Strands page. Order mirrors the Strands page's
+  // own saved tab order (same localStorage key) so the two stay consistent.
+  const collections = useMemo(() => {
+    let names = Object.keys(strandsObj)
+    try {
+      const saved = JSON.parse(localStorage.getItem(`woven:collOrder:${projId}`) || 'null')
+      if (Array.isArray(saved)) {
+        names = saved.filter(n => names.includes(n)).concat(names.filter(n => !saved.includes(n)))
+      }
+    } catch {}
+    return names.map(name => {
+      const tpl = templates.find(t => t.name === name)
+      return { name, icon: tpl?.icon || 'auto_stories', color: tpl?.color || '#7A5A38' }
+    })
+  }, [strandsObj, templates, projId])
+
   const [boards, setBoards]           = useState(INIT_BOARDS)
   const [activeBoard, setActiveBoard] = useState(INIT_ID)
   const [activeDrawer, setActiveDrawer] = useState(null)
@@ -1382,7 +1373,9 @@ export default function ExploreCanvas({ app }) {
     e.dataTransfer.effectAllowed = 'copy'
   }
 
-  const drawerLabel = DRAWER_ITEMS.find(p => p.id === activeDrawer)?.label || ''
+  const drawerLabel = activeDrawer?.startsWith(SPOOL_DRAWER_PREFIX)
+    ? activeDrawer.slice(SPOOL_DRAWER_PREFIX.length)
+    : (DRAWER_ITEMS.find(p => p.id === activeDrawer)?.label || '')
   if (!projId) return null
 
   return (
@@ -1412,6 +1405,7 @@ export default function ExploreCanvas({ app }) {
               <Toolbar
                 activeTool={activeTool} onToolSelect={handleToolSelect}
                 activeDrawer={activeDrawer} onDrawerToggle={toggleDrawer}
+                collections={collections}
               />
               <div className={`ex-drawer ${activeDrawer ? 'open' : ''} ${isResizingDrawer ? 'resizing' : ''}`}
                 style={{ width: activeDrawer ? drawerWidth : 0 }}>
