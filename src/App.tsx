@@ -3379,7 +3379,7 @@ function App(){
 
   var inner=null;
   if(view==='dashboard'){inner=<Dashboard app={app} onOpenProfile={openProfile} onNewProject={function(){setShowNewProject(true);}}/>;
-  }else if(view==='editor'){inner=<DraftEditor app={app} key={did}/>;
+  }else if(view==='editor'){inner=<DraftEditor app={app} key={draftId}/>;
   }else{
     var vc=null;
    if(view==='canvas')vc=<ExploreCanvas app={app}/>;
