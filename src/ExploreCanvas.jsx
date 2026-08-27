@@ -28,28 +28,29 @@ const CANVAS_CSS = `
 .ex-body{display:flex;flex:1;overflow:hidden;min-height:0;}
 .ex-canvas-col{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0;}
 
-/* Board tabs */
-.ex-tabs{display:flex;align-items:flex-end;height:36px;background:var(--bg1);
-  border-bottom:1px solid var(--border);padding:0 8px;gap:2px;flex-shrink:0;overflow:hidden;}
-.ex-tab{display:flex;align-items:center;gap:5px;height:28px;padding:0 10px;
-  border-radius:6px 6px 0 0;font-size:12px;font-weight:500;cursor:pointer;
-  color:var(--mid);border:1px solid transparent;border-bottom:none;
-  transition:all .12s;white-space:nowrap;max-width:160px;flex-shrink:0;}
-.ex-tab:hover{color:var(--text);background:var(--bg2);}
-.ex-tab.active{background:var(--bg0);color:var(--text);border-color:var(--border);
-  border-bottom-color:var(--bg0);position:relative;top:1px;}
-.ex-tab-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.ex-tab-name-input{background:none;border:none;outline:none;font-family:var(--ui);
-  font-size:12px;font-weight:500;color:var(--text);width:80px;padding:0;border-radius:0;}
-.ex-tab-close{font-size:13px;color:var(--placeholder);border-radius:3px;padding:1px 2px;
+/* Board tabs — styled to match the Strands page subnav/tab treatment */
+.ex-tabs{display:flex;align-items:flex-end;height:55px;background:#EDE0CC;
+  border-bottom:1px solid #A88060;padding:0 16px;gap:0;flex-shrink:0;overflow:hidden;}
+.ex-tab{display:flex;align-items:center;gap:6px;height:44px;padding:0 18px;
+  border-radius:10px 10px 0 0;font-size:16px;font-family:'DM Sans',sans-serif;font-weight:600;
+  cursor:pointer;color:rgba(122,90,56,.75);border:1px solid transparent;border-bottom:none;
+  transition:all .15s;white-space:nowrap;max-width:240px;flex-shrink:0;margin-right:2px;
+  position:relative;bottom:0;}
+.ex-tab:hover:not(.active){color:#7A5A38;background:rgba(253,248,240,.4);}
+.ex-tab.active{background:#FDF8F0;color:#6B4A26;border-color:#A88060;
+  border-bottom:2px solid #FDF8F0;margin-bottom:-1px;}
+.ex-tab-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
+.ex-tab-name-input{background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;
+  font-size:16px;font-weight:600;color:inherit;width:100px;padding:0;border-radius:0;}
+.ex-tab-close{font-size:15px;color:rgba(122,90,56,.5);border-radius:3px;padding:1px 2px;
   display:flex;align-items:center;justify-content:center;font-family:'Material Icons';
   line-height:1;flex-shrink:0;}
-.ex-tab-close:hover{background:var(--bg3);color:var(--text);}
-.ex-tab-add{width:26px;height:26px;border-radius:6px;border:1px dashed var(--border);
+.ex-tab-close:hover{background:rgba(168,128,96,.25);color:#6B4A26;}
+.ex-tab-add{width:32px;height:32px;border-radius:8px;border:1px dashed #A88060;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
-  color:var(--placeholder);font-size:18px;flex-shrink:0;margin-left:2px;
+  color:rgba(122,90,56,.6);font-size:20px;flex-shrink:0;margin:0 0 6px 6px;
   transition:all .12s;line-height:1;user-select:none;}
-.ex-tab-add:hover{border-color:var(--indigo);color:var(--indigo);background:rgba(196,94,40,.05);}
+.ex-tab-add:hover{border-color:var(--indigo);color:var(--indigo);background:rgba(196,94,40,.08);}
 
 /* Canvas row */
 .ex-canvas-row{flex:1;display:flex;overflow:hidden;min-height:0;}
