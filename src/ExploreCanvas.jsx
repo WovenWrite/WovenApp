@@ -135,7 +135,7 @@ const CANVAS_CSS = `
 
 /* Woven cards */
 .woven-card{background:var(--bg1);border:1.5px solid var(--border);border-radius:10px;
-  display:flex;flex-direction:column;font-family:var(--ui);overflow:hidden;
+  display:flex;flex-direction:column;font-family:var(--ui);overflow:hidden;position:relative;
   box-shadow:0 2px 8px rgba(42,31,16,.08);min-width:180px;max-width:260px;}
 .woven-card.selected{border-color:var(--indigo);box-shadow:0 0 0 2px rgba(196,94,40,.15);}
 .woven-card-hdr{display:flex;align-items:center;gap:7px;padding:8px 10px;
@@ -157,7 +157,7 @@ const CANVAS_CSS = `
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
 
 /* Sticky note */
-.ex-sticky{border-radius:8px;display:flex;flex-direction:column;overflow:hidden;
+.ex-sticky{border-radius:8px;display:flex;flex-direction:column;overflow:hidden;position:relative;
   min-width:160px;min-height:60px;box-shadow:2px 3px 10px rgba(0,0,0,.08);}
 .ex-sticky-drag{height:18px;cursor:grab;display:flex;align-items:center;
   padding:0 6px;flex-shrink:0;opacity:.4;}
@@ -169,7 +169,7 @@ const CANVAS_CSS = `
 .ex-sticky-input.is-body{font-family:var(--ui);font-size:13px;}
 .ex-sticky-input::placeholder{opacity:.4;}
 
-/* Image node — no header bar */
+/* Image node — no header bar, corner grip only */
 .ex-image-node{border:1.5px solid var(--border);border-radius:8px;overflow:hidden;
   box-shadow:0 2px 8px rgba(42,31,16,.08);background:var(--bg1);
   display:flex;align-items:center;justify-content:center;position:relative;}
@@ -184,6 +184,41 @@ const CANVAS_CSS = `
   justify-content:center;flex-direction:column;gap:6px;cursor:pointer;color:var(--placeholder);}
 .ex-image-empty .mi{font-size:32px;}
 .ex-image-empty span{font-size:12px;}
+
+/* Always-tappable node menu button — touch parity for right-click-only
+   secondary actions (colour, shape, style). Subtle on desktop, but never
+   hover-gated, so it works on touch devices with no hover state. */
+.ex-node-menu-btn{position:absolute;top:4px;right:4px;width:26px;height:26px;
+  border-radius:6px;background:rgba(255,255,255,.6);border:none;display:flex;
+  align-items:center;justify-content:center;cursor:pointer;z-index:3;
+  opacity:.6;transition:opacity .15s,background .15s;padding:0;}
+.ex-node-menu-btn:hover,.ex-node-menu-btn:focus-visible{opacity:1;background:rgba(255,255,255,.9);}
+.ex-node-menu-btn .mi{font-size:16px;color:var(--mid);}
+.ex-node-menu-btn--inline{position:static;flex-shrink:0;background:transparent;}
+.ex-node-menu-btn--inline:hover,.ex-node-menu-btn--inline:focus-visible{background:var(--bg2);}
+
+/* Shape node */
+.ex-shape-node{position:relative;box-shadow:0 2px 8px rgba(42,31,16,.08);}
+
+/* Text node — no chrome, just editable text on the canvas */
+.ex-text-node{position:relative;display:flex;flex-direction:column;min-width:60px;min-height:30px;}
+.ex-text-drag{height:14px;cursor:grab;display:flex;align-items:center;
+  padding:0 4px;flex-shrink:0;opacity:0;transition:opacity .15s;}
+.ex-text-node:hover .ex-text-drag{opacity:.4;}
+.ex-text-drag:active{cursor:grabbing;}
+.ex-text-drag .mi{font-size:12px;}
+.ex-text-input{background:none;border:none;outline:none;width:100%;flex:1;resize:none;
+  font-family:var(--serif);line-height:1.3;}
+.ex-text-input::placeholder{opacity:.35;}
+
+/* Shape tool popover — hangs off the Shape toolbar button */
+.ex-shape-popover{position:absolute;right:64px;top:0;background:var(--bg1);
+  border:1px solid var(--border);border-radius:var(--r);box-shadow:0 8px 28px rgba(42,31,16,.16);
+  padding:6px;display:flex;flex-direction:column;gap:2px;z-index:20;}
+.ex-shape-popover-item{width:38px;height:38px;border-radius:6px;display:flex;
+  align-items:center;justify-content:center;cursor:pointer;color:var(--mid);transition:all .12s;}
+.ex-shape-popover-item:hover{background:var(--bg2);color:var(--indigo);}
+.ex-shape-popover-item .mi{font-size:20px;}
 
 /* Context menu */
 .ex-ctx{position:fixed;z-index:9999;background:var(--bg1);border:1px solid var(--border);
@@ -232,14 +267,28 @@ const STICKY_COLORS = [
 
 const TOOL_ITEMS = [
   { id: 'select', icon: 'near_me',            label: 'Select' },
+  { id: 'text',   icon: 'text_fields',        label: 'Text'   },
+  { id: 'shape',  icon: 'category',           label: 'Shape'  },
   { id: 'sticky', icon: 'sticky_note_2',       label: 'Sticky' },
   { id: 'image',  icon: 'add_photo_alternate', label: 'Image'  },
+]
+const SHAPE_VARIANTS = [
+  { id: 'rectangle', icon: 'rectangle',       label: 'Rectangle' },
+  { id: 'ellipse',   icon: 'circle',          label: 'Ellipse'   },
+  { id: 'diamond',   icon: 'diamond',         label: 'Diamond'   },
+  { id: 'triangle',  icon: 'change_history',  label: 'Triangle'  },
 ]
 const DRAWER_ITEMS = [
   { id: 'strands',       icon: 'share',        label: 'Strands' },
   { id: 'drafts',        icon: 'edit_note',    label: 'Drafts'  },
   { id: 'loose_threads', icon: 'scatter_plot', label: 'Threads' },
 ]
+
+// A tool id is "place mode" if choosing it means the next canvas click/tap
+// drops a new node — sticky, image, text, or any shape:<variant>.
+function isPlaceModeTool(tool) {
+  return tool === 'sticky' || tool === 'image' || tool === 'text' || tool.startsWith('shape:')
+}
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -373,6 +422,10 @@ function WovenCardNode({ id, data, selected }) {
             {statusInfo.label}
           </div>
         )}
+        <button className="ex-node-menu-btn ex-node-menu-btn--inline nodrag" title="Options"
+          onClick={e => { e.stopPropagation(); onCtx?.(e, id, data) }}>
+          <span className="mi">more_vert</span>
+        </button>
       </div>
       {shownFields.length > 0 && (
         <div className="woven-card-body has-content">
@@ -419,6 +472,16 @@ function StickyNoteNode({ id, data, selected }) {
         lineStyle={{ border: '1px dashed var(--indigo)' }}
         handleStyle={{ width: 8, height: 8, background: 'var(--indigo)', border: 'none', borderRadius: 2 }} />
       <Handles />
+      <button className="ex-node-menu-btn nodrag" title="Options"
+        onClick={e => {
+          e.stopPropagation()
+          e.currentTarget.dispatchEvent(new CustomEvent('woven:ctx', {
+            bubbles: true,
+            detail: { nodeId: id, nodeType: 'stickyNote', x: e.clientX, y: e.clientY, data }
+          }))
+        }}>
+        <span className="mi">more_vert</span>
+      </button>
       <div className="ex-sticky-drag drag-handle__custom">
         <span className="mi">drag_indicator</span>
       </div>
@@ -472,6 +535,16 @@ function ImageNode({ id, data, selected }) {
         lineStyle={{ border: '1px dashed var(--indigo)' }}
         handleStyle={{ width: 8, height: 8, background: 'var(--indigo)', border: 'none', borderRadius: 2 }} />
       <Handles />
+      <button className="ex-node-menu-btn nodrag" title="Options"
+        onClick={e => {
+          e.stopPropagation()
+          e.currentTarget.dispatchEvent(new CustomEvent('woven:ctx', {
+            bubbles: true,
+            detail: { nodeId: id, nodeType: 'imageNode', x: e.clientX, y: e.clientY, data }
+          }))
+        }}>
+        <span className="mi">more_vert</span>
+      </button>
       {/* Corner grip — drag handle */}
       <div className="ex-image-grip drag-handle__custom">
         <span className="mi">drag_indicator</span>
@@ -487,6 +560,109 @@ function ImageNode({ id, data, selected }) {
       }
       <input ref={inputRef} type="file" accept="image/*"
         style={{ display: 'none' }} onChange={handleFile} />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// SHAPE NODE — rectangle / ellipse / diamond / triangle, connectable,
+// colourable, resizable. No built-in text (use the Text tool to label).
+// ─────────────────────────────────────────────────────────────
+function ShapeNode({ id, data, selected }) {
+  const scheme = STICKY_COLORS.find(c => c.id === (data.colorId ?? 'sky')) || STICKY_COLORS[4]
+  const variant = data.variant || 'rectangle'
+  const clipPath = variant === 'diamond'
+    ? 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)'
+    : variant === 'triangle'
+    ? 'polygon(50% 0%, 100% 100%, 0% 100%)'
+    : 'none'
+  const borderRadius = variant === 'ellipse' ? '50%' : variant === 'rectangle' ? 8 : 0
+
+  function openMenu(e) {
+    e.stopPropagation()
+    e.currentTarget.dispatchEvent(new CustomEvent('woven:ctx', {
+      bubbles: true,
+      detail: { nodeId: id, nodeType: 'shapeNode', x: e.clientX, y: e.clientY, data }
+    }))
+  }
+
+  return (
+    <div
+      className="ex-shape-node"
+      style={{
+        background: scheme.bg, border: `2px solid ${scheme.border}`, clipPath, borderRadius,
+        outline: selected ? '2px solid var(--indigo)' : 'none', outlineOffset: 2,
+        width: '100%', height: '100%', minWidth: 60, minHeight: 60,
+      }}
+      onContextMenu={e => {
+        e.preventDefault(); e.stopPropagation()
+        e.target.dispatchEvent(new CustomEvent('woven:ctx', {
+          bubbles: true,
+          detail: { nodeId: id, nodeType: 'shapeNode', x: e.clientX, y: e.clientY, data }
+        }))
+      }}
+    >
+      <NodeResizer isVisible={selected} minWidth={40} minHeight={40}
+        lineStyle={{ border: '1px dashed var(--indigo)' }}
+        handleStyle={{ width: 8, height: 8, background: 'var(--indigo)', border: 'none', borderRadius: 2 }} />
+      <Handles />
+      <button className="ex-node-menu-btn nodrag" title="Options" onClick={openMenu}>
+        <span className="mi">more_vert</span>
+      </button>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// TEXT NODE — chromeless editable text, for labelling shapes,
+// connectors, or freestanding notes on the canvas.
+// ─────────────────────────────────────────────────────────────
+function TextNode({ id, data, selected }) {
+  const { setNodes } = useReactFlow()
+
+  function patch(p) {
+    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...p } } : n))
+  }
+
+  return (
+    <div
+      className="ex-text-node"
+      style={{
+        outline: selected ? '2px solid var(--indigo)' : 'none', outlineOffset: 4,
+        width: '100%', height: '100%',
+      }}
+      onContextMenu={e => {
+        e.preventDefault(); e.stopPropagation()
+        e.target.dispatchEvent(new CustomEvent('woven:ctx', {
+          bubbles: true,
+          detail: { nodeId: id, nodeType: 'textNode', x: e.clientX, y: e.clientY, data }
+        }))
+      }}
+    >
+      <NodeResizer isVisible={selected} minWidth={60} minHeight={30}
+        lineStyle={{ border: '1px dashed var(--indigo)' }}
+        handleStyle={{ width: 8, height: 8, background: 'var(--indigo)', border: 'none', borderRadius: 2 }} />
+      <Handles />
+      <button className="ex-node-menu-btn nodrag" title="Options"
+        onClick={e => {
+          e.stopPropagation()
+          e.currentTarget.dispatchEvent(new CustomEvent('woven:ctx', {
+            bubbles: true,
+            detail: { nodeId: id, nodeType: 'textNode', x: e.clientX, y: e.clientY, data }
+          }))
+        }}>
+        <span className="mi">more_vert</span>
+      </button>
+      <div className="ex-text-drag drag-handle__custom">
+        <span className="mi">drag_indicator</span>
+      </div>
+      <textarea
+        className="ex-text-input nodrag"
+        value={data.text || ''}
+        placeholder="Text..."
+        onChange={e => patch({ text: e.target.value })}
+        style={{ color: data.color || '#2a1f10', fontSize: data.size || 18, fontWeight: 600 }}
+      />
     </div>
   )
 }
@@ -567,6 +743,53 @@ function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
                 className={`ex-ctx-swatch ${data.colorId === c.id ? 'active' : ''}`}
                 style={{ background: c.bg, border: `2px solid ${c.border}` }}
                 onClick={() => onUpdateNode(nodeId, { colorId: c.id })}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Shape options */}
+      {nodeType === 'shapeNode' && (
+        <>
+          <div className="ex-ctx-lbl">Shape</div>
+          {SHAPE_VARIANTS.map(v => (
+            <div key={v.id} className="ex-ctx-row"
+              onClick={() => onUpdateNode(nodeId, { variant: v.id })}>
+              <Checkbox checked={(data.variant || 'rectangle') === v.id} />
+              <span className="mi" style={{ fontSize: 15 }}>{v.icon}</span>
+              <span>{v.label}</span>
+            </div>
+          ))}
+          <div className="ex-ctx-lbl">Colour</div>
+          <div className="ex-ctx-swatches">
+            {STICKY_COLORS.map(c => (
+              <div key={c.id}
+                className={`ex-ctx-swatch ${(data.colorId ?? 'sky') === c.id ? 'active' : ''}`}
+                style={{ background: c.bg, border: `2px solid ${c.border}` }}
+                onClick={() => onUpdateNode(nodeId, { colorId: c.id })}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Text options */}
+      {nodeType === 'textNode' && (
+        <>
+          <div className="ex-ctx-lbl">Size</div>
+          {[['14', 'Small'], ['18', 'Medium'], ['28', 'Large']].map(([sz, lbl]) => (
+            <div key={sz} className="ex-ctx-row" onClick={() => onUpdateNode(nodeId, { size: Number(sz) })}>
+              <Checkbox checked={(data.size || 18) === Number(sz)} /><span>{lbl}</span>
+            </div>
+          ))}
+          <div className="ex-ctx-lbl">Colour</div>
+          <div className="ex-ctx-swatches">
+            {STICKY_COLORS.map(c => (
+              <div key={c.id}
+                className={`ex-ctx-swatch ${(data.color === c.text) ? 'active' : ''}`}
+                style={{ background: c.text, border: '2px solid rgba(0,0,0,.15)' }}
+                onClick={() => onUpdateNode(nodeId, { color: c.text })}
               />
             ))}
           </div>
@@ -778,13 +1001,47 @@ function CanvasTabs({ tabs, activeTab, onSelect, onAdd, onRename, onDeleteReques
 // TOOLBAR
 // ─────────────────────────────────────────────────────────────
 function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle }) {
+  const [shapePickerOpen, setShapePickerOpen] = useState(false)
+  const shapeWrapRef = useRef(null)
+  const shapeActive = activeTool.startsWith('shape:')
+
+  useEffect(() => {
+    if (!shapePickerOpen) return
+    function onAny(e) {
+      if (shapeWrapRef.current && !shapeWrapRef.current.contains(e.target)) setShapePickerOpen(false)
+    }
+    document.addEventListener('mousedown', onAny, true)
+    return () => document.removeEventListener('mousedown', onAny, true)
+  }, [shapePickerOpen])
+
+  function handleClick(t) {
+    if (t.id === 'shape') { setShapePickerOpen(o => !o); return }
+    onToolSelect(t.id)
+  }
+  function pickShape(variant) {
+    onToolSelect(`shape:${variant}`)
+    setShapePickerOpen(false)
+  }
+
   return (
     <div className="ex-toolbar">
       {TOOL_ITEMS.map(t => (
-        <div key={t.id} className={`ex-tool ${activeTool === t.id ? 'active' : ''}`}
-          onClick={() => onToolSelect(t.id)} title={t.label}>
-          <span className="mi">{t.icon}</span>
-          <span className="ex-tool-lbl">{t.label}</span>
+        <div key={t.id} style={{ position: 'relative' }} ref={t.id === 'shape' ? shapeWrapRef : null}>
+          <div className={`ex-tool ${(t.id === 'shape' ? shapeActive : activeTool === t.id) ? 'active' : ''}`}
+            onClick={() => handleClick(t)} title={t.label}>
+            <span className="mi">{t.icon}</span>
+            <span className="ex-tool-lbl">{t.label}</span>
+          </div>
+          {t.id === 'shape' && shapePickerOpen && (
+            <div className="ex-shape-popover">
+              {SHAPE_VARIANTS.map(v => (
+                <div key={v.id} className="ex-shape-popover-item"
+                  onClick={() => pickShape(v.id)} title={v.label}>
+                  <span className="mi">{v.icon}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
       <div className="ex-tool-sep" />
@@ -867,6 +1124,8 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     ),
     stickyNote: StickyNoteNode,
     imageNode:  ImageNode,
+    shapeNode:  ShapeNode,
+    textNode:   TextNode,
   }), [findItem])
 
   function updateNode(nodeId, patch) {
@@ -908,7 +1167,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
   }, [screenToFlowPosition, setNodes])
 
   const onPaneClick = useCallback((e) => {
-    if (activeTool !== 'sticky' && activeTool !== 'image') return
+    if (!isPlaceModeTool(activeTool)) return
     const rect = canvasRef.current.getBoundingClientRect()
     const position = screenToFlowPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top })
     if (activeTool === 'sticky') {
@@ -925,10 +1184,24 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
         data: { src: null },
       }])
     }
+    if (activeTool === 'text') {
+      setNodes(nds => [...nds, {
+        id: genId(), type: 'textNode', position,
+        dragHandle: '.drag-handle__custom',
+        data: { text: '', color: '#2a1f10', size: 18 },
+      }])
+    }
+    if (activeTool.startsWith('shape:')) {
+      const variant = activeTool.split(':')[1]
+      setNodes(nds => [...nds, {
+        id: genId(), type: 'shapeNode', position,
+        data: { variant, colorId: 'sky' },
+      }])
+    }
     onToolReset()
   }, [activeTool, screenToFlowPosition, setNodes, onToolReset])
 
-  const isPlaceMode = activeTool === 'sticky' || activeTool === 'image'
+  const isPlaceMode = isPlaceModeTool(activeTool)
 
   return (
     <div ref={canvasRef} style={{ width: '100%', height: '100%' }}>
@@ -1043,7 +1316,7 @@ export default function ExploreCanvas({ app }) {
           />
           <div className="ex-canvas-row">
             <div className="ex-canvas-area"
-              style={{ cursor: isPlaceMode(activeTool) ? 'crosshair' : undefined }}>
+              style={{ cursor: isPlaceModeTool(activeTool) ? 'crosshair' : undefined }}>
               <ReactFlowProvider>
                 <FlowCanvas
                   key={`${projId}:${activeBoard}`}
@@ -1089,4 +1362,3 @@ export default function ExploreCanvas({ app }) {
   )
 }
 
-function isPlaceMode(tool) { return tool === 'sticky' || tool === 'image' }
