@@ -15,7 +15,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   ReactFlow, ReactFlowProvider, Background, BackgroundVariant,
   Controls, MiniMap, addEdge, useNodesState, useEdgesState, useReactFlow,
-  Handle, Position, NodeResizer,
+  Handle, Position, NodeResizer, MarkerType,
 } from '@xyflow/react'
 import { Drawer, DeleteConfirmModal } from './SharedUI'
 import { STATUSES, genId, initials, getSupabase } from './utils'
@@ -95,9 +95,16 @@ const CANVAS_CSS = `
 
 /* Drawer */
 .ex-drawer{width:0;overflow:hidden;transition:width .2s ease;background:var(--bg1);
-  border-left:1px solid var(--border);display:flex;flex-direction:column;}
-.ex-drawer.open{width:280px;margin:5px 5px 5px 0;border:1px solid var(--border);border-radius:var(--r);}
-.ex-drawer-inner{width:280px;display:flex;flex-direction:column;height:100%;overflow:hidden;}
+  border-left:1px solid var(--border);display:flex;flex-direction:column;position:relative;}
+.ex-drawer.open{margin:5px 5px 5px 0;border:1px solid var(--border);border-radius:var(--r);}
+.ex-drawer.resizing{transition:none;}
+.ex-drawer-inner{display:flex;flex-direction:column;height:100%;overflow:hidden;}
+.ex-drawer-resize-handle{position:absolute;top:0;left:-4px;width:8px;height:100%;
+  cursor:col-resize;z-index:5;touch-action:none;}
+.ex-drawer-resize-handle::after{content:'';position:absolute;top:0;left:3px;width:2px;height:100%;
+  background:transparent;transition:background .15s;}
+.ex-drawer-resize-handle:hover::after,.ex-drawer.resizing .ex-drawer-resize-handle::after{
+  background:var(--indigo);}
 .ex-edrawer-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
 
 /* Strand collection tabs — scrollable with overflow arrows */
@@ -163,8 +170,9 @@ const CANVAS_CSS = `
   padding:0 6px;flex-shrink:0;opacity:.4;}
 .ex-sticky-drag:active{cursor:grabbing;}
 .ex-sticky-drag .mi{font-size:13px;}
-.ex-sticky-content{padding:4px 12px 10px;flex:1;}
-.ex-sticky-input{background:none;border:none;outline:none;width:100%;resize:none;line-height:1.45;}
+.ex-sticky-content{padding:4px 12px 10px;flex:1;display:flex;min-height:0;}
+.ex-sticky-input{background:none;border:none;outline:none;width:100%;resize:none;line-height:1.45;
+  flex:1;min-height:0;height:100%;box-sizing:border-box;}
 .ex-sticky-input.is-title{font-family:var(--serif);font-size:16px;font-weight:600;}
 .ex-sticky-input.is-body{font-family:var(--ui);font-size:13px;}
 .ex-sticky-input::placeholder{opacity:.4;}
@@ -266,11 +274,12 @@ const STICKY_COLORS = [
 ]
 
 const TOOL_ITEMS = [
-  { id: 'select', icon: 'near_me',            label: 'Select' },
-  { id: 'text',   icon: 'text_fields',        label: 'Text'   },
-  { id: 'shape',  icon: 'category',           label: 'Shape'  },
-  { id: 'sticky', icon: 'sticky_note_2',       label: 'Sticky' },
-  { id: 'image',  icon: 'add_photo_alternate', label: 'Image'  },
+  { id: 'select',  icon: 'near_me',            label: 'Select'  },
+  { id: 'connect', icon: 'account_tree',       label: 'Connect' },
+  { id: 'text',    icon: 'text_fields',        label: 'Text'    },
+  { id: 'shape',   icon: 'category',           label: 'Shape'   },
+  { id: 'sticky',  icon: 'sticky_note_2',       label: 'Sticky'  },
+  { id: 'image',   icon: 'add_photo_alternate', label: 'Image'   },
 ]
 const SHAPE_VARIANTS = [
   { id: 'rectangle', icon: 'rectangle',       label: 'Rectangle' },
@@ -283,6 +292,8 @@ const DRAWER_ITEMS = [
   { id: 'drafts',        icon: 'edit_note',    label: 'Drafts'  },
   { id: 'loose_threads', icon: 'scatter_plot', label: 'Threads' },
 ]
+const DRAWER_MIN_W = 220
+const DRAWER_MAX_W = 520
 
 // A tool id is "place mode" if choosing it means the next canvas click/tap
 // drops a new node — sticky, image, text, or any shape:<variant>.
@@ -470,7 +481,7 @@ function StickyNoteNode({ id, data, selected }) {
     >
       <NodeResizer isVisible={selected} minWidth={140} minHeight={60}
         lineStyle={{ border: '1px dashed var(--indigo)' }}
-        handleStyle={{ width: 8, height: 8, background: 'var(--indigo)', border: 'none', borderRadius: 2 }} />
+        handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
       <Handles />
       <button className="ex-node-menu-btn nodrag" title="Options"
         onClick={e => {
@@ -533,7 +544,7 @@ function ImageNode({ id, data, selected }) {
     >
       <NodeResizer isVisible={selected} minWidth={100} minHeight={80}
         lineStyle={{ border: '1px dashed var(--indigo)' }}
-        handleStyle={{ width: 8, height: 8, background: 'var(--indigo)', border: 'none', borderRadius: 2 }} />
+        handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
       <Handles />
       <button className="ex-node-menu-btn nodrag" title="Options"
         onClick={e => {
@@ -604,7 +615,7 @@ function ShapeNode({ id, data, selected }) {
     >
       <NodeResizer isVisible={selected} minWidth={40} minHeight={40}
         lineStyle={{ border: '1px dashed var(--indigo)' }}
-        handleStyle={{ width: 8, height: 8, background: 'var(--indigo)', border: 'none', borderRadius: 2 }} />
+        handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
       <Handles />
       <button className="ex-node-menu-btn nodrag" title="Options" onClick={openMenu}>
         <span className="mi">more_vert</span>
@@ -641,7 +652,7 @@ function TextNode({ id, data, selected }) {
     >
       <NodeResizer isVisible={selected} minWidth={60} minHeight={30}
         lineStyle={{ border: '1px dashed var(--indigo)' }}
-        handleStyle={{ width: 8, height: 8, background: 'var(--indigo)', border: 'none', borderRadius: 2 }} />
+        handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
       <Handles />
       <button className="ex-node-menu-btn nodrag" title="Options"
         onClick={e => {
@@ -1067,6 +1078,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [ctx, setCtx] = useState(null)
+  const [connectFrom, setConnectFrom] = useState(null)
   const canvasRef = useRef(null)
   const saveTimer = useRef(null)
   const boardIdRef = useRef(boardId)
@@ -1142,8 +1154,42 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
   }
 
   const onConnect = useCallback((params) => {
-    setEdges(eds => addEdge({ ...params, style: { stroke: 'var(--bg4)', strokeWidth: 2 } }, eds))
+    setEdges(eds => addEdge({
+      ...params,
+      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 18, height: 18 },
+      style: { stroke: 'var(--bg4)', strokeWidth: 2 },
+    }, eds))
   }, [setEdges])
+
+  // Click-to-connect — a touch-friendly alternative to dragging from a
+  // (hover-only, hard to hit on touch) handle. Tap a first node, then a
+  // second, to draw a connection between them.
+  const clearConnectPick = useCallback(() => {
+    setConnectFrom(null)
+    setNodes(nds => nds.map(n => n.selected ? { ...n, selected: false } : n))
+  }, [setNodes])
+
+  useEffect(() => {
+    if (activeTool !== 'connect') clearConnectPick()
+  }, [activeTool, clearConnectPick])
+
+  const onNodeClick = useCallback((e, node) => {
+    if (activeTool !== 'connect') return
+    e.stopPropagation()
+    if (!connectFrom) {
+      setConnectFrom(node.id)
+      setNodes(nds => nds.map(n => ({ ...n, selected: n.id === node.id })))
+      return
+    }
+    if (connectFrom === node.id) { clearConnectPick(); return }
+    setEdges(eds => addEdge({
+      source: connectFrom, target: node.id,
+      sourceHandle: 'bottom', targetHandle: 'top-t',
+      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 18, height: 18 },
+      style: { stroke: 'var(--bg4)', strokeWidth: 2 },
+    }, eds))
+    clearConnectPick()
+  }, [activeTool, connectFrom, setNodes, setEdges, clearConnectPick])
 
   const onDragOver = useCallback((e) => {
     e.preventDefault(); e.dataTransfer.dropEffect = 'copy'
@@ -1167,6 +1213,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
   }, [screenToFlowPosition, setNodes])
 
   const onPaneClick = useCallback((e) => {
+    if (activeTool === 'connect') { clearConnectPick(); return }
     if (!isPlaceModeTool(activeTool)) return
     const rect = canvasRef.current.getBoundingClientRect()
     const position = screenToFlowPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top })
@@ -1199,7 +1246,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       }])
     }
     onToolReset()
-  }, [activeTool, screenToFlowPosition, setNodes, onToolReset])
+  }, [activeTool, screenToFlowPosition, setNodes, onToolReset, clearConnectPick])
 
   const isPlaceMode = isPlaceModeTool(activeTool)
 
@@ -1209,12 +1256,12 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
         nodes={nodes} edges={edges}
         onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
         onConnect={onConnect} onDrop={onDrop} onDragOver={onDragOver}
-        onPaneClick={onPaneClick}
+        onPaneClick={onPaneClick} onNodeClick={onNodeClick}
         nodeTypes={nodeTypes}
         panOnDrag={!isPlaceMode}
         selectionOnDrag={!isPlaceMode}
         deleteKeyCode={['Delete', 'Backspace']}
-        style={{ cursor: isPlaceMode ? 'crosshair' : 'default' }}
+        style={{ cursor: (isPlaceMode || activeTool === 'connect') ? 'crosshair' : 'default' }}
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={36} size={1.5}
@@ -1257,6 +1304,34 @@ export default function ExploreCanvas({ app }) {
   const [activeTool, setActiveTool]   = useState('select')
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [boardsLoaded, setBoardsLoaded] = useState(false)
+
+  // Resizable Strands/Drafts/Threads drawer width — remembered across sessions.
+  const [drawerWidth, setDrawerWidth] = useState(() => {
+    const saved = Number(localStorage.getItem('woven:canvasDrawerWidth'))
+    return saved >= DRAWER_MIN_W && saved <= DRAWER_MAX_W ? saved : 280
+  })
+  const [isResizingDrawer, setIsResizingDrawer] = useState(false)
+  const drawerDragRef = useRef(null)
+
+  function startDrawerResize(e) {
+    e.preventDefault()
+    drawerDragRef.current = { startX: e.clientX, startWidth: drawerWidth }
+    setIsResizingDrawer(true)
+    function onMove(ev) {
+      const { startX, startWidth } = drawerDragRef.current
+      // Drawer sits to the right of the canvas, so dragging left widens it.
+      const next = Math.min(DRAWER_MAX_W, Math.max(DRAWER_MIN_W, startWidth - (ev.clientX - startX)))
+      setDrawerWidth(next)
+    }
+    function onUp() {
+      setIsResizingDrawer(false)
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      setDrawerWidth(w => { localStorage.setItem('woven:canvasDrawerWidth', String(w)); return w })
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+  }
 
   // Load board list for this project
   useEffect(() => {
@@ -1316,7 +1391,7 @@ export default function ExploreCanvas({ app }) {
           />
           <div className="ex-canvas-row">
             <div className="ex-canvas-area"
-              style={{ cursor: isPlaceModeTool(activeTool) ? 'crosshair' : undefined }}>
+              style={{ cursor: (isPlaceModeTool(activeTool) || activeTool === 'connect') ? 'crosshair' : undefined }}>
               <ReactFlowProvider>
                 <FlowCanvas
                   key={`${projId}:${activeBoard}`}
@@ -1332,9 +1407,15 @@ export default function ExploreCanvas({ app }) {
                 activeTool={activeTool} onToolSelect={handleToolSelect}
                 activeDrawer={activeDrawer} onDrawerToggle={toggleDrawer}
               />
-              <div className={`ex-drawer ${activeDrawer ? 'open' : ''}`}>
-                <div className="ex-drawer-inner">
-                  <Drawer variant="inline" open={true} title={drawerLabel} onClose={() => setActiveDrawer(null)} padded={false} width={280}>
+              <div className={`ex-drawer ${activeDrawer ? 'open' : ''} ${isResizingDrawer ? 'resizing' : ''}`}
+                style={{ width: activeDrawer ? drawerWidth : 0 }}>
+                {activeDrawer && (
+                  <div className="ex-drawer-resize-handle"
+                    onPointerDown={startDrawerResize}
+                    title="Drag to resize" />
+                )}
+                <div className="ex-drawer-inner" style={{ width: drawerWidth }}>
+                  <Drawer variant="inline" open={true} title={drawerLabel} onClose={() => setActiveDrawer(null)} padded={false} width={drawerWidth}>
                     <DrawerContent
                       panel={activeDrawer}
                       templates={templates} strandsObj={strandsObj}
