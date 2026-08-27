@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import { Drawer, Field, ArchiveConfirmModal, StrandRefPicker, StrandSearchDropdown, DraftThumbnailUpload, Avatar, PrimaryButton, SecondaryButton, TertiaryButton, HelpText, OptionsEditor, Radio } from './SharedUI';
 import { genId, STATUSES, FIELD_TYPES } from './utils';
+import { projSequence, projStatusMap, draftDateOf } from './projectConfig';
 
 export default function PropertiesDrawer({ app, draft, variant, open, onClose, onOpenStrand }) {
   var pid = app.projId;
@@ -34,6 +35,8 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
 
   var project = app.currentProject || {};
   var draftFieldDefs = project.draftFieldDefs || [];
+  var statusMap = projStatusMap(project);
+  var byDate = projSequence(project) === 'date';
 
   var allDrafts = app.allDrafts[pid] || [];
   var seqSiblings = allDrafts
@@ -80,14 +83,25 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
         <div style={{ flex: 2 }}>
           <span className="wv-field-lbl">Status</span>
           <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)', width: 9, height: 9, borderRadius: '50%', background: (STATUSES[draft.status] && STATUSES[draft.status].color) || '#999', pointerEvents: 'none' }} />
+            <span style={{ position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)', width: 9, height: 9, borderRadius: '50%', background: (statusMap[draft.status] && statusMap[draft.status].color) || '#999', pointerEvents: 'none' }} />
             <select className="wv-field-box" style={{ paddingLeft: 32 }} value={draft.status} onChange={handleStatusChange}>
-              {Object.keys(STATUSES).map(function (k) { return <option key={k} value={k}>{STATUSES[k].label}</option>; })}
+              {Object.keys(statusMap).map(function (k) { return <option key={k} value={k}>{statusMap[k].label}</option>; })}
               <option value="archive">Archive...</option>
             </select>
           </div>
         </div>
-        {isInSequence && (
+        {byDate ? (
+          <div style={{ flex: 1 }}>
+            <span className="wv-field-lbl">Date</span>
+            <input
+              key={draft.id + '-date'}
+              className="wv-field-box"
+              type="date"
+              defaultValue={draftDateOf(draft)}
+              onBlur={function (e) { update({ draftDate: e.target.value || null }); }}
+            />
+          </div>
+        ) : isInSequence && (
           <div style={{ flex: 1 }}>
             <span className="wv-field-lbl">Sequence</span>
             <select className="wv-field-box" value={myPosition} onChange={handleSequenceChange}>

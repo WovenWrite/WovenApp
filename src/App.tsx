@@ -10,6 +10,8 @@ import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
 import LooseThreadDrawer from './LooseThreadDrawer'
 import BindDrawer from './BindDrawer'
+import ProjectWizard from './ProjectWizard'
+import ProjectDrawer from './ProjectDrawer'
 import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor, Radio } from './SharedUI'
 import {
   STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
@@ -17,6 +19,7 @@ import {
   compressImage, uploadImage, deleteStorageImage,
   saveSnapshot
 } from './utils'
+import { PROJ_TYPES, projIsNumbered, projIsManualOrder, projSequence, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
 // Snapshot helpers, Supabase client, and env constants now live in ./utils
 
 // ── Storage ──
@@ -53,14 +56,7 @@ var VIEW_MODES=[
   {key:'cards',  icon:'book_ribbon',  label:'Storyboard', group:'main'},
   {key:'strands',icon:'gesture',      label:'Spools',     group:'strands'}
 ];
-var PROJ_TYPES=[
-  {id:'fiction',    label:'Fiction',     icon:'auto_stories',colls:['Characters','Locations','Lore & World'],desc:'Novels, short fiction, narrative'},
-  {id:'nonfiction', label:'Non-Fiction', icon:'article',     colls:['Sources','Interviews','Subjects'],      desc:'Essays, memoir, journalism'},
-  {id:'research',   label:'Research',   icon:'science',     colls:['Sources','Reports','Interviews'],        desc:'Academic or investigative writing'},
-  {id:'blog',       label:'Blog Series',icon:'rss_feed',    colls:['Topics','Sources','Audience Notes'],     desc:'Posts, columns, newsletters'},
-  {id:'screenplay', label:'Screenplay', icon:'movie',       colls:['Characters','Locations','Scenes'],       desc:'Film, TV, stage scripts'},
-  {id:'other',      label:'Other',      icon:'edit_note',   colls:['Characters','Sources'],                  desc:'Everything else'}
-];
+// PROJ_TYPES now lives in ./projectConfig (label/icon/desc/colls + presets)
 var DEFAULT_TABLE_COLS=['title','synopsis','status','strandTags'];
 
 // ── Seed Data ──
@@ -219,7 +215,7 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .view-layout{display:flex;flex-direction:column;flex:1;overflow:hidden;position:relative;}
 .view-area{flex:1;overflow-y:auto;padding:0;display:flex;flex-direction:column;}
 .cards-grid{display:flex;flex-wrap:wrap;gap:16px;padding:20px;align-content:flex-start;flex:1;}
-.draft-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s,box-shadow .15s;height:226px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
+.draft-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s,box-shadow .15s;height:244px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
 .draft-card:hover{box-shadow:0 4px 12px rgba(42,31,16,.08);}
 .draft-card.drag-over{border-color:var(--indigo);background:rgba(196,94,40,.03);}
 .draft-card.drop-before{border-left:3px solid var(--indigo);background:transparent;}
@@ -432,30 +428,7 @@ function GlobalSaveIndicator(){
 // ArchiveConfirmModal now lives in ./SharedUI
 
 // ── ArchiveProjectConfirmModal ──
-function ArchiveProjectConfirmModal({proj,onConfirm,onCancel}){
-  return(
-<div className="modal-overlay">
-  <div className="modal-backdrop" onClick={onCancel}/>
-  <div className="modal-box" style={{maxWidth:420}}>
-    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
-      <span className="mi" style={{fontSize:28,color:'var(--indigo)'}}>inventory_2</span>
-      <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,color:'var(--text)'}}>Archive this project?</div>
-    </div>
-    <div style={{fontSize:14,color:'var(--body-text)',lineHeight:1.6,marginBottom:12}}>
-      <strong style={{color:'var(--text)'}}>{proj.title||'Untitled'}</strong> and all its content will be hidden from your dashboard.
-    </div>
-    <div style={{fontSize:13,color:'var(--mid)',marginBottom:20}}>You can restore it any time from <strong>Your Archive</strong> on the dashboard.</div>
-    <div style={{display:'flex',gap:8}}>
-      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onCancel}>Cancel</button>
-      <button className="btn btn-primary" style={{flex:1,justifyContent:'center'}} onClick={onConfirm}>
-        <span className="mi" style={{fontSize:16}}>inventory_2</span>Archive project
-      </button>
-    </div>
-  </div>
-</div>
-  );
-}
-
+// Moved into ProjectDrawer — it was only ever used by ProjectEditPanel
 
 // ── OverflowTooltip ──
 function OverflowTooltip({label,names}){
@@ -590,53 +563,7 @@ function StatsSection({app,onOpenProfile,greeting}){
 }
 
 // ── ProjectEditPanel ──
-function ProjectEditPanel({proj,app,onClose}){
-  var st=useState(proj.title||'');var title=st[0];var setTitle=st[1];
-  var ss=useState(proj.synopsis||'');var synopsis=ss[0];var setSynopsis=ss[1];
-  var si=useState(proj.image||null);var image=si[0];var setImage=si[1];
-  var spa=useState(false);var projArchiveConfirm=spa[0];var setProjArchiveConfirm=spa[1];
-  var spt=useState(proj.type||'Fiction');var projType=spt[0];var setProjType=spt[1];
-  function autoSaveField(changes){
-    if(changes.title!==undefined)app.updateProjectTitle(proj.id,changes.title.trim()||proj.title);
-    if(changes.synopsis!==undefined)app.updateProjectSynopsis(proj.id,changes.synopsis);
-    if(changes.image!==undefined)app.updateProjectImage(proj.id,changes.image);
-    if(changes.type!==undefined)app.updateProjectType(proj.id,changes.type);
-  }
-  return(
-<Panel open={true} onClose={onClose} title="Edit Project" footer={null}>
-  <div style={{marginBottom:16}}>
-    <span className="sect-lbl">Cover image</span>
-    <div style={{display:'flex',alignItems:'center',gap:10}}>
-      {image&&<img src={image} alt="" style={{width:64,height:44,objectFit:'cover',borderRadius:6,flexShrink:0}}/>}
-      <label style={{cursor:'pointer'}}>
-        <span className="btn btn-ghost btn-sm">{image?'Change':'Upload cover'}</span>
-        <input type="file" accept="image/*" style={{display:'none'}} onChange={function(e){
-          var file=e.target.files&&e.target.files[0];if(!file)return;
-          if(file.size>5*1024*1024){alert('Image must be under 5 MB.');return;}
-          uploadImage(file).then(function(url){if(url){setImage(url);autoSaveField({image:url});}});
-        }}/>
-      </label>
-      {image&&<button className="btn-icon" onClick={function(){setImage(null);autoSaveField({image:null});}}><span className="mi" style={{fontSize:16}}>delete</span></button>}
-    </div>
-  </div>
-  <div style={{marginBottom:16}}><span className="sect-lbl">Title</span><input value={title} onChange={function(e){setTitle(e.target.value);}}/></div>
-  <div style={{marginBottom:16}}><span className="sect-lbl">Synopsis</span><textarea value={synopsis} onChange={function(e){setSynopsis(e.target.value);}} rows={4}/></div>
-  <div style={{marginBottom:16}}>
-    <span className="sect-lbl">Type</span>
-    <select value={projType} onChange={function(e){setProjType(e.target.value);}}>
-      {PROJ_TYPES.map(function(t){return <option key={t.id} value={t.label}>{t.label}</option>;})}
-    </select>
-  </div>
-  <div style={{paddingTop:16,borderTop:'1px solid var(--border)'}}>
-    <button className="btn btn-danger" style={{width:'100%',justifyContent:'center'}} onClick={function(){setProjArchiveConfirm(true);}}>
-      <span className="mi" style={{fontSize:16}}>inventory_2</span>Archive project
-    </button>
-  </div>
-  {projArchiveConfirm&&<ArchiveProjectConfirmModal proj={proj} onCancel={function(){setProjArchiveConfirm(false);}} onConfirm={function(){app.archiveProject(proj.id);setProjArchiveConfirm(false);onClose();}}/>}
-</Panel>
-  );
-}
-
+// Replaced by ProjectDrawer — see ./ProjectDrawer
 
 // ── GlobalLooseThreads ──
 function GlobalLooseThreads({app}){
@@ -791,7 +718,7 @@ function Dashboard({app,onOpenProfile,onNewProject}){
       </div>
     </div>
   </div>
-  {editProj&&<ProjectEditPanel proj={editProj} app={app} onClose={function(){setEditingProjId(null);}}/>}
+  {editProj&&<ProjectDrawer proj={editProj} app={app} open={true} variant="overlay" topOffset={54} onClose={function(){setEditingProjId(null);}}/>}
   <ArchiveDrawer app={app} open={archiveOpen} onClose={function(){setArchiveOpen(false);}}/>
 </div>
   );
@@ -1431,6 +1358,12 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   function showOverflow(){if(!overflowRef.current||!overflowTt.current)return;var r=overflowRef.current.getBoundingClientRect();overflowTt.current.style.left=(r.left+r.width/2)+'px';overflowTt.current.style.top=(r.bottom+6)+'px';overflowTt.current.style.opacity='1';}
   function hideOverflow(){if(overflowTt.current)overflowTt.current.style.opacity='0';}
 
+  var cardProj=app.currentProject;
+  var seqNumbered=projIsNumbered(cardProj);
+  var seqByDate=projSequence(cardProj)==='date';
+  var canReorder=projIsManualOrder(cardProj);
+  var cardDate=seqByDate?formatDraftDate(draftDateOf(draft)):'';
+
   var AMBER='#c45e28';
 
   return(
@@ -1471,18 +1404,30 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   {/* Content */}
   <div style={{flex:1,background:'#F5EDE0',padding:'10px 15px',display:'flex',flexDirection:'column',gap:10,minHeight:0,borderRadius:'0 0 13px 13px',overflow:'hidden'}}>
 
-    {/* Title */}
-    {structureMode&&editTitle?(
+    {/* Title block — eyebrow (number or date) plus title share ONE flex slot
+        in the card's gap:10 column, so the eyebrow adds only its own line
+        height rather than a whole extra gapped row. The card has a fixed
+        height (see .draft-card), so a second top-level flex child here was
+        silently eating into the synopsis area below. */}
+    <div style={{flexShrink:0}}>
+      {/* Date eyebrow — numbered mode goes back to inline "1- Title" below,
+          matching the original styling exactly. Date has no prior precedent
+          to match, so it keeps the small caption treatment. */}
+      {seqByDate&&cardDate&&(
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:11,fontWeight:600,letterSpacing:'.08em',textTransform:'uppercase',color:'#A88060',padding:'0 4px',marginBottom:2}}>{cardDate}</div>
+      )}
+      {structureMode&&editTitle?(
 <textarea autoFocus rows={2} value={titleVal} onChange={function(e){setTitleVal(e.target.value);}} onBlur={function(){app.updateDraft(pid,draft.id,{title:titleVal});setEditTitle(false);}} style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,background:'transparent',border:'2px solid '+AMBER,borderRadius:8,outline:'none',resize:'none',padding:'4px 8px',width:'100%',boxSizing:'border-box'}}/>
-    ):(
+      ):(
 <div
-  style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',flexShrink:0,borderRadius:6,padding:'2px 4px',transition:'background .15s',cursor:structureMode?'text':'inherit',border:'2px solid transparent'}}
+  style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:18,color:'#2a1f10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',borderRadius:6,padding:'2px 4px',transition:'background .15s',cursor:structureMode?'text':'inherit',border:'2px solid transparent'}}
   onClick={function(){if(structureMode){setTitleVal(draft.title||'');setEditTitle(true);}}}
   onMouseEnter={function(e){if(structureMode)e.currentTarget.style.background='rgba(196,94,40,.06)';}}
   onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
-  {label}- {draft.title||'Untitled'}
+  {seqNumbered?label+'- ':''}{draft.title||'Untitled'}
 </div>
-    )}
+      )}
+    </div>
 
     {/* Synopsis / preview */}
     {structureMode&&editSyn?(
@@ -1541,8 +1486,8 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   )}
 </div>
       )}
-      {/* Left: arrows in structure mode */}
-      {structureMode&&(
+      {/* Left: arrows in structure mode — hidden when order is derived from dates */}
+      {structureMode&&canReorder&&(
 <div style={{display:'flex',alignItems:'center',gap:4}}>
   <button onClick={function(e){e.stopPropagation();if(onMoveUp)onMoveUp(draft.id);}} title="Move left" style={{width:26,height:26,borderRadius:6,border:'1px solid var(--border)',background:'var(--bg2)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
     <span className="material-symbols-outlined" style={{fontSize:16,color:'var(--mid)'}}>arrow_back</span>
@@ -1805,7 +1750,7 @@ function CardsView({app}){
   function addDraft(){var nid=genId();app.addDraft(app.projId,{id:nid,projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqDrafts.length+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});app.openDraft(nid);}
   function moveUp(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<=0)return;app.reorderDraft(app.projId,did,sorted[idx-1].order||0);}
   function moveDown(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<0||idx>=sorted.length-1)return;app.reorderDraft(app.projId,did,sorted[idx+1].order||0);}
-  var displayed=applyFS(tree,filter,sort).filter(function(p){
+  var displayed=(sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort),app.currentProject):applyFS(tree,filter,sort)).filter(function(p){
     if(!searchQ.trim())return true;
     var q=searchQ.toLowerCase();
     var matchTitle=(p.title||'').toLowerCase().includes(q);
@@ -1860,7 +1805,7 @@ function TilesView({app}){
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
   function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
-  var displayed=applyFS(tree,filter,sort);
+  var displayed=sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort),app.currentProject):applyFS(tree,filter,sort);
   return(
 <div className="view-layout">
   <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
@@ -1904,6 +1849,8 @@ function TilesView({app}){
 
 // ── TableView ──
 function TableView({app}){
+  var tblNumbered=projIsNumbered(app.currentProject);
+  var tblByDate=projSequence(app.currentProject)==='date';
   var sf=useState(function(){return loadFilterState(app.projId);});var filter=sf[0];var setFilterRaw=sf[1];
   function setFilter(next){setFilterRaw(next);persistFilterState(app.projId,next);}
   var ss=useState('order');var sort=ss[0];var setSort=ss[1];
@@ -1946,7 +1893,7 @@ function TableView({app}){
   var allDrafts=app.allDrafts[app.projId]||[];
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
   var ltDrafts=allDrafts.filter(function(d){return d.status==='loose_thread'&&!d.archived;});
-  var displayed=applyFS(tree,filter,sort).filter(function(p){
+  var displayed=(sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort),app.currentProject):applyFS(tree,filter,sort)).filter(function(p){
     if(!searchQ.trim())return true;
     var q=searchQ.toLowerCase();
     return (p.title||'').toLowerCase().includes(q)||(p.synopsis||'').toLowerCase().includes(q)||(p.body?stripHtml(p.body).toLowerCase().includes(q):false);
@@ -2000,13 +1947,15 @@ function TableView({app}){
     <span draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}} style={{cursor:'grab',color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:18}}>drag_indicator</span></span>
     {isNested&&<button className="btn-icon" style={{padding:2}} title="Unnest draft" onClick={function(){app.updateDraft(app.projId,draft.id,{parentId:null,order:Date.now()});}}><span className="mi" style={{fontSize:14,color:'var(--mid)'}}>vertical_align_top</span></button>}
   </div></td>
+  {(tblNumbered||tblByDate)&&(
   <td style={{color:'var(--mid)',fontSize:11,whiteSpace:'nowrap',paddingLeft:isNested?28:12}}>
     <div style={{display:'flex',alignItems:'center',gap:2}}>
       {hasChildren&&<span className="mi" style={{fontSize:16,cursor:'pointer',color:'var(--mid)',flexShrink:0,lineHeight:1}} onClick={function(){app.updateDraft(app.projId,draft.id,{nestExpanded:!isExpanded});}}>{isExpanded?'expand_less':'expand_more'}</span>}
       {isNested&&<span className="mi" style={{fontSize:12,color:'var(--border)',flexShrink:0}}>subdirectory_arrow_right</span>}
-      {label}
+      {tblNumbered?label:formatDraftDate(draftDateOf(draft))}
     </div>
   </td>
+  )}
   {visCols.map(function(col){return <td key={col}>{renderCell(col,draft)}</td>;})}
   <td><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
     <span className="material-symbols-outlined" style={{fontSize:20}}>arrow_forward</span>
@@ -2023,7 +1972,8 @@ function TableView({app}){
     <thead>
       <tr style={{background:'#E2D0B8'}}>
         <th style={{width:28,background:'#E2D0B8'}}/>
-        <th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>
+        {tblNumbered&&<th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>}
+        {tblByDate&&<th style={{width:96,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>Date</th>}
         {visCols.map(function(col,ci){var av=allAvailCols.find(function(c){return c.id===col;});return(
 <th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600,cursor:'grab',userSelect:'none'}} className="resizable"
   draggable={true}
@@ -2921,64 +2871,7 @@ function ArchiveDrawer({app,open,onClose}){
 }
 
 // ── Wizard ──
-function ProjectWizard({app,onClose}){
-  var ss=useState(0);var step=ss[0];var setStep=ss[1];
-  var spt=useState(null);var projType=spt[0];var setProjType=spt[1];
-  var st=useState('');var title=st[0];var setTitle=st[1];
-  var ssyn=useState('');var synopsis=ssyn[0];var setSynopsis=ssyn[1];
-  var ssc=useState([]);var selectedColls=ssc[0];var setSelectedColls=ssc[1];
-  var titleRef=useRef(null);
-  useEffect(function(){if(step===1&&titleRef.current)titleRef.current.focus();},[step]);
-  var allColls=['Characters','Locations','Lore & World','Sources','Interviews','Subjects','Scenes','Plot Threads','Topics','Audience Notes','Reports'];
-  function selectType(t){setProjType(t);setSelectedColls(t.colls);setStep(1);}
-  function toggleColl(c){setSelectedColls(function(sc){return sc.includes(c)?sc.filter(function(x){return x!==c;}):sc.concat([c]);});}
-  function create(){if(!title.trim())return;var pid=genId();var now=new Date().toISOString();var proj={id:pid,title:title.trim(),type:projType?projType.label:'Other',synopsis:synopsis.trim(),lastEdited:now,createdAt:now,draftFieldDefs:[]};var tpls=selectedColls.map(function(c){return{id:genId(),projectId:pid,name:c,fields:defaultFields(c),sharedWith:[]};});var strandsObj={};selectedColls.forEach(function(c){strandsObj[c]=[];});app.createProject(proj,{templates:tpls,strandsObj:strandsObj});onClose();app.loadProjectData(pid);app.setProjId(pid);app.setView('cards');}
-  return(
-<div className="modal-overlay">
-  <div className="modal-backdrop" onClick={onClose}/>
-  <div className="modal-box">
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-      <div style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600}}>{step===0?'What are you writing?':step===1?'Name your project':'Your collections'}</div>
-      <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-    </div>
-    <div style={{minHeight:220}}>
-      {step===0&&(
-<div className="wizard-type-grid">
-  {PROJ_TYPES.map(function(t){return(
-<div key={t.id} className={'wizard-type-card'+(projType&&projType.id===t.id?' sel':'')} onClick={function(){selectType(t);}}>
-  <div style={{marginBottom:8}}><span className="mi" style={{fontSize:26,color:'var(--indigoL)'}}>{t.icon}</span></div>
-  <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:3}}>{t.label}</div>
-  <div style={{fontSize:12,color:'var(--mid)'}}>{t.desc}</div>
-</div>
-  );})}
-</div>
-      )}
-      {step===1&&(
-<div>
-  <input ref={titleRef} style={{fontSize:18,padding:'12px 14px',background:'var(--bg2)',border:'2px solid var(--border)',borderRadius:10,width:'100%',marginBottom:14,color:'var(--text)',fontFamily:'var(--serif)',fontWeight:600}} value={title} onChange={function(e){setTitle(e.target.value);}} placeholder="Working title..." onKeyDown={function(e){if(e.key==='Enter'&&title.trim())setStep(2);}}/>
-  <textarea style={{fontSize:14,padding:'10px 14px',background:'var(--bg2)',border:'2px solid var(--border)',borderRadius:10,width:'100%',color:'var(--text)',marginBottom:14}} value={synopsis} onChange={function(e){setSynopsis(e.target.value);}} placeholder="What is this about? (optional)" rows={3}/>
-  <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
-    <button className="btn btn-ghost" onClick={function(){setStep(0);}}>Back</button>
-    <button className="btn btn-primary" onClick={function(){setStep(2);}} disabled={!title.trim()}>Next</button>
-  </div>
-</div>
-      )}
-      {step===2&&(
-<div>
-  <div style={{fontSize:14,color:'var(--mid)',marginBottom:14}}>Select collections to include. You can add more later.</div>
-  <div className="wizard-coll-tags" style={{marginBottom:20}}>{allColls.map(function(c){return <span key={c} className={'wizard-coll-tag'+(selectedColls.includes(c)?' sel':'')} onClick={function(){toggleColl(c);}}>{c}</span>;})}</div>
-  <div style={{display:'flex',justifyContent:'space-between'}}>
-    <button className="btn btn-ghost" onClick={function(){setStep(1);}}>Back</button>
-    <button className="btn btn-primary" onClick={create} disabled={!title.trim()}>Create Project</button>
-  </div>
-</div>
-      )}
-    </div>
-    <div className="wizard-dots">{[0,1,2].map(function(i){return <div key={i} className={'wizard-dot'+(step===i?' active':'')}/>;})}</div>
-  </div>
-</div>
-  );
-}
+// ProjectWizard now lives in ./ProjectWizard
 
 // ── Profile Panel ──
 // ProfilePanel moved to its own file — see ./ProfileDrawer
@@ -3349,6 +3242,7 @@ function App(){
   function updateProjectTitle(pid,newTitle){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{title:newTitle});});saveDB('woven:projects',next);return next;});}
   function updateProjectSynopsis(pid,syn){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{synopsis:syn});});saveDB('woven:projects',next);return next;});}
   function updateProjectImage(pid,img){setProjects(function(prev){var old=prev.find(function(p){return p.id===pid;});if(old&&old.image&&old.image!==img)deleteStorageImage(old.image);var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{image:img});});saveDB('woven:projects',next);return next;});}
+  function updateProjectConfig(pid,patch){setProjects(function(prev){var next=prev.map(function(p){if(p.id!==pid)return p;var cfg=Object.assign({},p.config||{},patch);return Object.assign({},p,{config:cfg});});saveDB('woven:projects',next);return next;});}
   function updateProjectType(pid,type){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{type:type});});saveDB('woven:projects',next);return next;});}
   function archiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:true});});saveDB('woven:projects',next);return next;});}
   function unarchiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:false});});saveDB('woven:projects',next);return next;});}
@@ -3423,7 +3317,7 @@ function App(){
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
 
   function signOut(){
     supabase.auth.signOut().then(function(){
