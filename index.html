@@ -40,6 +40,11 @@
     <link href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.bubble.css" rel="stylesheet"/>
     <script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
 
+    <!-- jsPDF — required by App.jsx's PDF export (window.doExport, format
+         'PDF'). Without this, window.jspdf is undefined and export shows
+         "PDF export is still loading" indefinitely. -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
+
     <!-- Editor font choices — required by DraftEditor.jsx's font picker.
          Crimson Text / DM Sans already load via App.jsx's CSS; the rest of
          the FONTS list needs this to render correctly instead of falling
