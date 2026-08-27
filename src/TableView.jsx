@@ -2,15 +2,17 @@
 import { useState, useEffect, useRef } from "react";
 import BindDrawer from './BindDrawer'
 import StrandsDrawer from './StrandsDrawer'
-import { StatusSelect } from './SharedUI'
+import { StatusSelect, StrandSearchDropdown } from './SharedUI'
 import { genId, stripHtml, initials } from './utils'
 import { projIsNumbered, projSequence, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
 import { buildTree, applyFS, loadFilterState, persistFilterState, ViewHeader, DraftLoadingSpinner, EmptyDrafts, LooseThreadsSection, TaggedSpoolsEditor } from './App'
 
 // ── ExpandingCell ──
-// Shows up to 2 lines with ellipsis when idle; clicking switches to an
-// auto-growing textarea (the row grows with it) until you click away.
-function ExpandingCell({value,placeholder,style,onCommit}){
+// When the row isn't expanded: clamped to 2 lines. When the row IS
+// expanded (rowExpanded prop, driven by the parent row): shows full
+// unclamped text. Either way, clicking it switches to an auto-growing
+// textarea to actually edit, which reverts on blur.
+function ExpandingCell({value,placeholder,style,onCommit,rowExpanded}){
   var sv=useState(value||'');var val=sv[0];var setVal=sv[1];
   var sf=useState(false);var focused=sf[0];var setFocused=sf[1];
   var ref=useRef(null);
@@ -27,29 +29,29 @@ function ExpandingCell({value,placeholder,style,onCommit}){
   function commit(){setFocused(false);if(val!==(value||''))onCommit(val);}
   if(!focused){
     var hasVal=!!(value&&value.length);
-    return <div className="tbl-inp" style={Object.assign({cursor:'text',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',wordBreak:'break-word',whiteSpace:'normal'},style,!hasVal?{fontStyle:'italic',opacity:.75,color:'var(--placeholder)'}:null)}
+    var clampStyle=rowExpanded?{whiteSpace:'pre-wrap'}:{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',whiteSpace:'normal'};
+    return <div className="tbl-inp" style={Object.assign({cursor:'text',wordBreak:'break-word'},clampStyle,style,!hasVal?{fontStyle:'italic',opacity:.75,color:'var(--placeholder)'}:null)}
       onClick={function(){setFocused(true);}}>
       {hasVal?value:placeholder}
     </div>;
   }
   return <textarea ref={ref} className="tbl-inp" style={Object.assign({},style,{whiteSpace:'pre-wrap',resize:'none',overflow:'hidden',width:'100%',display:'block'})}
     value={val} placeholder={placeholder}
+    onClick={function(e){e.stopPropagation();}}
     onChange={function(e){setVal(e.target.value);e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px';}}
     onBlur={commit}
     onKeyDown={function(e){if(e.key==='Escape'){setVal(value||'');setFocused(false);}}}/>;
 }
 
-// ── CollapsibleTags ──
-// Wraps TaggedSpoolsEditor for use in a table cell: shows tagged spools
-// clamped to ~2 lines by default (so a heavily-tagged draft doesn't blow
-// out the row height), with a "+N more" hint when it overflows. Clicking
-// anywhere on the collapsed view expands to the full add/remove editor;
-// a "Show less" link collapses it back.
-function CollapsibleTags({draft,app,pid}){
-  var se=useState(false);var expanded=se[0];var setExpanded=se[1];
-  var containerRef=useRef(null);
-  var chipRefs=useRef({});
-  var shc=useState(0);var hiddenCount=shc[0];var setHiddenCount=shc[1];
+// ── SpoolsCell ──
+// Default: the same small avatar-stack thumbnails Cards shows outside
+// Structure mode, capped at 4 with a "+N" overflow. Expanded (row is in
+// its expanded state): the full TaggedSpoolsEditor, matching Cards'
+// Structure mode — every tag listed with its own "×", plus the add
+// button. No separate collapse control here; the whole row's expanded
+// state (toggled by clicking the row, reverted by clicking outside it)
+// drives which view renders.
+function SpoolsCell({draft,app,pid,expanded}){
   var projStrands=app.allStrands[pid]||{};
   var projTemplates=app.allTemplates[pid]||[];
   var tagged=[];
@@ -61,39 +63,74 @@ function CollapsibleTags({draft,app,pid}){
       }
     });
   });
-  var CLAMP_HEIGHT=56; // ~2 lines of chips
-  useEffect(function(){
-    if(expanded||!containerRef.current){setHiddenCount(0);return;}
-    var containerTop=containerRef.current.getBoundingClientRect().top;
-    var cutoff=containerTop+CLAMP_HEIGHT;
-    var hidden=0;
-    tagged.forEach(function(st){
-      var el=chipRefs.current[st.id];
-      if(el&&el.getBoundingClientRect().top>=cutoff-2)hidden++;
-    });
-    setHiddenCount(hidden);
-  });
   if(expanded){
-    return(
-<div onClick={function(e){e.stopPropagation();}}>
-  <TaggedSpoolsEditor draft={draft} app={app} pid={pid}/>
-  <button onClick={function(){setExpanded(false);}} style={{marginTop:4,background:'none',border:'none',color:'var(--indigo)',fontSize:11,fontFamily:'DM Sans, sans-serif',cursor:'pointer',padding:0}}>Show less</button>
-</div>
-    );
+    return <div onClick={function(e){e.stopPropagation();}}><TaggedSpoolsEditor draft={draft} app={app} pid={pid}/></div>;
   }
   if(tagged.length===0){
-    return <div onClick={function(){setExpanded(true);}} style={{cursor:'pointer',fontFamily:'DM Sans, sans-serif',fontSize:12,color:'var(--placeholder)',fontStyle:'italic'}}>Click to tag spools…</div>;
+    return <span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'var(--placeholder)',fontStyle:'italic'}}>—</span>;
+  }
+  var visible=tagged.slice(0,4);
+  var overflow=tagged.length-4;
+  return(
+<div style={{display:'flex',alignItems:'center'}}>
+  {visible.map(function(st,i){return(
+<div key={st.id} title={st.name} style={{width:25,height:25,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-8:0,boxSizing:'border-box'}}>
+  {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
+</div>
+  );})}
+  {overflow>0&&(
+<div title={tagged.slice(4).map(function(s){return s.name;}).join(', ')} style={{width:25,height:25,borderRadius:'50%',background:'#E2D0B8',border:'1px solid #A88060',display:'flex',alignItems:'center',justifyContent:'center',marginLeft:-8,flexShrink:0}}>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:10,color:'#7A5A38',fontWeight:600}}>+{overflow}</span>
+</div>
+  )}
+</div>
+  );
+}
+
+// ── SpoolRefEmptyPicker ──
+// The click-target for an empty spool-reference custom field: clicking it
+// opens the same search dropdown used everywhere else in the app for
+// picking a spool, and also tags the draft (matching PropertiesDrawer's
+// behavior for this same field type). Positioned as a viewport-fixed
+// overlay (computed from the trigger's own position) rather than
+// CSS-absolute, since an absolutely-positioned dropdown nested inside
+// this table's scrollable wrapper gets clipped by that wrapper's own
+// overflow — fixed positioning is immune to that.
+function SpoolRefEmptyPicker({app,pid,draft,fieldDef}){
+  var so=useState(false);var open=so[0];var setOpen=so[1];
+  var sp=useState({top:0,left:0});var pos=sp[0];var setPos=sp[1];
+  var triggerRef=useRef(null);
+  function toggle(e){
+    e.stopPropagation();
+    if(!open&&triggerRef.current){
+      var r=triggerRef.current.getBoundingClientRect();
+      setPos({top:r.bottom+6,left:r.left});
+    }
+    setOpen(!open);
+  }
+  function pick(st){
+    var cf=Object.assign({},draft.customFields||{});
+    cf[fieldDef.id]=JSON.stringify([st.id]);
+    var changes={customFields:cf};
+    var tagIds=draft.strandTags||[];
+    if(tagIds.indexOf(st.id)<0)changes.strandTags=tagIds.concat([st.id]);
+    app.updateDraft(pid,draft.id,changes);
+    setOpen(false);
   }
   return(
-<div onClick={function(){setExpanded(true);}} style={{cursor:'pointer'}}>
-  <div ref={containerRef} style={{display:'flex',flexWrap:'wrap',gap:6,maxHeight:CLAMP_HEIGHT,overflow:'hidden'}}>
-    {tagged.map(function(st){return(
-<div key={st.id} ref={function(el){chipRefs.current[st.id]=el;}} style={{display:'flex',alignItems:'center',gap:5,padding:'3px 8px',borderRadius:12,background:st.spoolColor+'22',border:'1px solid '+st.spoolColor}}>
-  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:11,color:st.spoolColor,fontWeight:600}}>{st.name}</span>
-</div>
-    );})}
-  </div>
-  {hiddenCount>0&&<span style={{fontSize:11,fontFamily:'DM Sans, sans-serif',color:'var(--mid)',marginTop:2,display:'inline-block'}}>+{hiddenCount} more</span>}
+<div style={{display:'inline-block'}}>
+  <span ref={triggerRef} onClick={toggle} style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'var(--placeholder)',fontStyle:'italic',cursor:'pointer'}}>Click to select…</span>
+  {open&&(
+<StrandSearchDropdown
+  app={app}
+  pid={pid}
+  collection={fieldDef.refSpool}
+  excludeIds={[]}
+  onPick={pick}
+  onClose={function(){setOpen(false);}}
+  style={{position:'fixed',top:pos.top,left:pos.left,right:'auto',width:220}}
+/>
+  )}
 </div>
   );
 }
@@ -113,6 +150,21 @@ function TableView({app}){
   var colRef=useRef(null);
   // Spool drawer (opened by clicking a spool thumbnail in the Strands column)
   var ssv=useState(null);var spoolView=ssv[0];var setSpoolView=ssv[1]; // {draftId,strandId} | null
+  // Row-level expand — clicking a row (like entering Cards' Structure mode)
+  // expands everything in it together: full synopsis/text, full spool
+  // chips instead of thumbnails. Clicking outside the expanded row
+  // collapses it back.
+  var ser=useState(null);var expandedRowId=ser[0];var setExpandedRowId=ser[1];
+  var rowRefs=useRef({});
+  useEffect(function(){
+    if(!expandedRowId)return;
+    function onDown(e){
+      var el=rowRefs.current[expandedRowId];
+      if(el&&!el.contains(e.target))setExpandedRowId(null);
+    }
+    document.addEventListener('mousedown',onDown);
+    return function(){document.removeEventListener('mousedown',onDown);};
+  },[expandedRowId]);
 
   var project=app.currentProject||{};
   var draftFieldDefs=project.draftFieldDefs||[];
@@ -161,7 +213,7 @@ function TableView({app}){
 
   var widthsKey='colwidths:'+app.projId;
   var scw=useState(function(){
-    var defaults={title:160,synopsis:260,status:130,strandTags:160,wordCount:64};
+    var defaults={title:160,synopsis:260,status:160,strandTags:160,wordCount:64};
     try{var v=localStorage.getItem(widthsKey);if(v){var p=JSON.parse(v);if(p&&typeof p==='object')return Object.assign({},defaults,p);}}catch(e){}
     return defaults;
   });
@@ -202,7 +254,7 @@ function TableView({app}){
 <div style={{display:'flex',alignItems:'center',gap:-4,overflow:'hidden'}}>
   {list.slice(0,4).map(function(st,i){return(
 <div key={st.id} title={st.name} style={{width:24,height:24,borderRadius:'50%',background:st.color||'#c45e28',border:'2px solid '+(st.spoolColor||'#c45e28'),display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,marginLeft:i>0?-6:0,boxSizing:'border-box',cursor:'pointer'}}
-  onClick={function(){setSpoolView({draftId:draftId,strandId:st.id});}}
+  onClick={function(e){e.stopPropagation();setSpoolView({draftId:draftId,strandId:st.id});}}
   onMouseEnter={function(e){var tt=document.getElementById('woven-tt');if(tt){var r=e.currentTarget.getBoundingClientRect();tt.textContent=st.name;tt.style.display='block';tt.style.left=(r.left+r.width/2)+'px';tt.style.top=(r.bottom+6)+'px';}}}
   onMouseLeave={function(){var tt=document.getElementById('woven-tt');if(tt)tt.style.display='none';}}>
   {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontFamily:'DM Sans, sans-serif',fontSize:8,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
@@ -218,10 +270,10 @@ function TableView({app}){
       return(
 <div style={{display:'flex',alignItems:'flex-start',gap:2}}>
   <div style={{flex:'0 1 auto',minWidth:0,maxWidth:canPromote?'calc(100% - 26px)':'100%'}}>
-    <ExpandingCell value={draft.title} placeholder="Untitled" style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2a1f10'}} onCommit={function(v){app.updateDraft(app.projId,draft.id,{title:v});}}/>
+    <ExpandingCell value={draft.title} placeholder="Untitled" rowExpanded={rowCtx&&rowCtx.rowExpanded} style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2a1f10'}} onCommit={function(v){app.updateDraft(app.projId,draft.id,{title:v});}}/>
   </div>
   {canPromote&&(rowCtx.isNested?(
-<button className="btn-icon" style={{padding:2,flexShrink:0,marginTop:1}} title="Make this the primary strand" onClick={function(){app.promoteStrand(app.projId,rowCtx.parentId,draft.id);}}>
+<button className="btn-icon" style={{padding:2,flexShrink:0,marginTop:1}} title="Make this the primary strand" onClick={function(e){e.stopPropagation();app.promoteStrand(app.projId,rowCtx.parentId,draft.id);}}>
   <span className="mi" style={{fontSize:16,color:'var(--mid)'}}>star_outline</span>
 </button>
   ):(
@@ -232,37 +284,41 @@ function TableView({app}){
 </div>
       );
     }
-    if(col==='status')return <StatusSelect app={app} draft={draft} project={project} selectStyle={{height:34,fontSize:14,padding:'8px 10px 8px 32px'}}/>;
+    if(col==='status')return <StatusSelect app={app} draft={draft} project={project} selectStyle={{height:34,fontSize:14,padding:'8px 10px 8px 32px',minWidth:150}}/>;
     if(col==='wordCount')return <span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}>{draft.wordCount||0}</span>;
-    if(col==='synopsis')return <ExpandingCell value={draft.synopsis} placeholder="No synopsis…" onCommit={function(v){app.updateDraft(app.projId,draft.id,{synopsis:v});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}/>;
-    if(col==='strandTags')return <CollapsibleTags draft={draft} app={app} pid={app.projId}/>;
+    if(col==='synopsis')return <ExpandingCell value={draft.synopsis} placeholder="No synopsis…" rowExpanded={rowCtx&&rowCtx.rowExpanded} onCommit={function(v){app.updateDraft(app.projId,draft.id,{synopsis:v});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}/>;
+    if(col==='strandTags')return <SpoolsCell draft={draft} app={app} pid={app.projId} expanded={!!(rowCtx&&rowCtx.rowExpanded)}/>;
     if(col.startsWith('cf_')){
       var fid=col.slice(3);
       var cfVal=draft.customFields&&draft.customFields[fid]?draft.customFields[fid]:'';
       var fieldDef=draftFieldDefs.find(function(f){return f.id===fid;});
       if(fieldDef&&fieldDef.type==='strand_ref'){
         var refIds=[];try{var parsed=JSON.parse(cfVal);if(Array.isArray(parsed))refIds=parsed;}catch(e){}
+        if(refIds.length===0)return <SpoolRefEmptyPicker app={app} pid={app.projId} draft={draft} fieldDef={fieldDef}/>;
         return renderSpoolThumbs(refIds,draft.id);
       }
       if(fieldDef&&fieldDef.type==='boolean'){
         var boolVal=cfVal==='Yes'?'Yes':'No';
-        return <select value={boolVal} onChange={function(e){var cf=Object.assign({},draft.customFields||{});cf[fid]=e.target.value;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38',background:'transparent',border:'1px solid var(--border)',borderRadius:6,padding:'5px 8px',cursor:'pointer'}}>
+        return <select value={boolVal} onClick={function(e){e.stopPropagation();}} onChange={function(e){var cf=Object.assign({},draft.customFields||{});cf[fid]=e.target.value;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38',background:'transparent',border:'1px solid var(--border)',borderRadius:6,padding:'5px 8px',cursor:'pointer'}}>
           <option value="Yes">Yes</option>
           <option value="No">No</option>
         </select>;
       }
-      return <ExpandingCell value={cfVal} placeholder="—" onCommit={function(v){var cf=Object.assign({},draft.customFields||{});cf[fid]=v;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}/>;
+      return <ExpandingCell value={cfVal} placeholder="—" rowExpanded={rowCtx&&rowCtx.rowExpanded} onCommit={function(v){var cf=Object.assign({},draft.customFields||{});cf[fid]=v;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}/>;
     }
     return null;
   }
-  function renderRow(draft,label,isNested,parentId,hasChildren,isExpanded){return(
-<tr key={draft.id} className={isNested?'nest-row':''} style={dragOver===draft.id?{boxShadow:'inset 0 2px 0 0 var(--indigo)'}:undefined}
+  function renderRow(draft,label,isNested,parentId,hasChildren,isExpanded){
+    var rowExp=expandedRowId===draft.id;
+    return(
+<tr key={draft.id} ref={function(el){rowRefs.current[draft.id]=el;}} className={isNested?'nest-row':''} style={dragOver===draft.id?{boxShadow:'inset 0 2px 0 0 var(--indigo)'}:undefined}
+  onClick={function(){setExpandedRowId(draft.id);}}
   onDragOver={function(e){e.preventDefault();setDragOver(draft.id);}}
   onDragLeave={function(){setDragOver(null);}}
   onDrop={function(e){e.preventDefault();setDragOver(null);var fromId=e.dataTransfer.getData('draftId');if(fromId&&fromId!==draft.id){var fromDraft=(app.allDrafts[app.projId]||[]).find(function(d){return d.id===fromId;});if(fromDraft&&fromDraft.status==='loose_thread'){app.updateDraft(app.projId,fromId,{status:'first_draft',order:draft.order||0,parentId:null});}else{app.reorderDraft(app.projId,fromId,draft.order||0);}}}}>
   <td><div style={{display:'flex',alignItems:'center',gap:2}}>
     <span draggable={true} onDragStart={function(e){e.dataTransfer.setData('draftId',draft.id);}} style={{cursor:'grab',color:'var(--border)',display:'flex',alignItems:'center'}}><span className="mi" style={{fontSize:18}}>drag_indicator</span></span>
-    {hasChildren&&<span className="mi" style={{fontSize:16,cursor:'pointer',color:isExpanded?'#C45E28':'var(--mid)',flexShrink:0}} title={isExpanded?'Collapse branches':'Expand branches'} onClick={function(){app.updateDraft(app.projId,draft.id,{nestExpanded:!isExpanded});}}>account_tree</span>}
+    {hasChildren&&<span className="mi" style={{fontSize:16,cursor:'pointer',color:isExpanded?'#C45E28':'var(--mid)',flexShrink:0}} title={isExpanded?'Collapse branches':'Expand branches'} onClick={function(e){e.stopPropagation();app.updateDraft(app.projId,draft.id,{nestExpanded:!isExpanded});}}>account_tree</span>}
   </div></td>
   {(tblNumbered||tblByDate)&&(
   <td style={{color:'var(--mid)',fontSize:11,whiteSpace:'nowrap',paddingLeft:isNested?28:12}}>
@@ -272,12 +328,13 @@ function TableView({app}){
     </div>
   </td>
   )}
-  {visCols.map(function(col){var td=<td key={col}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId})}</td>;if(col==='title')return [td,<td key="__arrowcol"><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
+  {visCols.map(function(col){var td=<td key={col}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId,rowExpanded:rowExp})}</td>;if(col==='title')return [td,<td key="__arrowcol" onClick={function(e){e.stopPropagation();}}><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
     <span className="material-symbols-outlined" style={{fontSize:18}}>arrow_forward</span>
   </button></td>];return td;})}
   <td/>
 </tr>
-  );}
+    );
+  }
   return(
 <div className="view-layout">
   <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} hideStructure={true} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>

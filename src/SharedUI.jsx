@@ -933,7 +933,7 @@ export function StatusSelect({ app, draft, project, style, selectStyle }) {
   return (
     <div style={Object.assign({ position: 'relative' }, style)}>
       <span style={{ position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)', width: 9, height: 9, borderRadius: '50%', background: (statusMap[draft.status] && statusMap[draft.status].color) || '#999', pointerEvents: 'none' }} />
-      <select className="wv-field-box" style={Object.assign({ paddingLeft: 32 }, selectStyle)} value={draft.status} onChange={handleStatusChange}>
+      <select className="wv-field-box" style={Object.assign({ paddingLeft: 32 }, selectStyle)} value={draft.status} onClick={function (e) { e.stopPropagation(); }} onChange={handleStatusChange}>
         {Object.keys(statusMap).map(function (k) { return <option key={k} value={k}>{statusMap[k].label}</option>; })}
         <option value="archive">Archive...</option>
       </select>
