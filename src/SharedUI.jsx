@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { STATUSES, FIELD_TYPES, SYSTEM_COLORS, PRESET_COLORS, initials, uploadImage } from './utils';
+import { projStatusMap } from './projectConfig';
 
 // ══════════════════════════════════════════════
 // Styles — injected once, idempotent
@@ -895,6 +896,48 @@ export function StatusDotWithArchive({ draft, app, showLabel, dotSize }) {
       <StatusDot status={draft.status} onChange={handleChange} size={dotSize} />
       {showLabel && <span style={{ fontSize: 13, color: info.color }}>{info.label}</span>}
       {showConfirm && <ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[app.projId] || []} onConfirm={doArchive} onCancel={function () { setShowConfirm(false); }} />}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// StatusSelect
+// A uniform-background dropdown with just the status dot colored — the
+// "field" style status control (as opposed to StatusDot's colored-pill
+// popover above). Used by PropertiesDrawer and TableView so both share
+// one implementation instead of each rebuilding it.
+// ══════════════════════════════════════════════
+
+export function StatusSelect({ app, draft, project, style, selectStyle }) {
+  var sac = useState(false); var showArchiveConfirm = sac[0]; var setShowArchiveConfirm = sac[1];
+  var pid = app.projId;
+  var statusMap = projStatusMap(project);
+  var allDrafts = app.allDrafts[pid] || [];
+  var seqSiblings = allDrafts.filter(function (d) { return d.status !== 'loose_thread' && !d.parentId && !d.archived; });
+
+  function handleStatusChange(e) {
+    var v = e.target.value;
+    if (v === 'archive') { setShowArchiveConfirm(true); return; }
+    var changes = { status: v };
+    if (v === 'loose_thread') { changes.order = null; changes.parentId = null; }
+    else if (draft.status === 'loose_thread') { changes.order = seqSiblings.length + 1; }
+    app.updateDraft(pid, draft.id, changes);
+  }
+  function doArchive() {
+    var children = allDrafts.filter(function (d) { return d.parentId === draft.id && !d.archived; });
+    app.updateDraft(pid, draft.id, { archived: true });
+    children.forEach(function (c) { app.updateDraft(pid, c.id, { archived: true }); });
+    setShowArchiveConfirm(false);
+  }
+
+  return (
+    <div style={Object.assign({ position: 'relative' }, style)}>
+      <span style={{ position: 'absolute', left: 15, top: '50%', transform: 'translateY(-50%)', width: 9, height: 9, borderRadius: '50%', background: (statusMap[draft.status] && statusMap[draft.status].color) || '#999', pointerEvents: 'none' }} />
+      <select className="wv-field-box" style={Object.assign({ paddingLeft: 32 }, selectStyle)} value={draft.status} onChange={handleStatusChange}>
+        {Object.keys(statusMap).map(function (k) { return <option key={k} value={k}>{statusMap[k].label}</option>; })}
+        <option value="archive">Archive...</option>
+      </select>
+      {showArchiveConfirm && <ArchiveConfirmModal draft={draft} allDrafts={allDrafts} onConfirm={doArchive} onCancel={function () { setShowArchiveConfirm(false); }} />}
     </div>
   );
 }

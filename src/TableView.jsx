@@ -2,9 +2,9 @@
 import { useState, useEffect, useRef } from "react";
 import BindDrawer from './BindDrawer'
 import StrandsDrawer from './StrandsDrawer'
-import { ArchiveConfirmModal } from './SharedUI'
+import { StatusSelect } from './SharedUI'
 import { genId, stripHtml, initials } from './utils'
-import { projIsNumbered, projSequence, projStatusMap, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
+import { projIsNumbered, projSequence, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
 import { buildTree, applyFS, loadFilterState, persistFilterState, ViewHeader, DraftLoadingSpinner, EmptyDrafts, LooseThreadsSection } from './App'
 
 // ── ExpandingCell ──
@@ -37,41 +37,6 @@ function ExpandingCell({value,placeholder,style,onCommit}){
     onChange={function(e){setVal(e.target.value);e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px';}}
     onBlur={commit}
     onKeyDown={function(e){if(e.key==='Escape'){setVal(value||'');setFocused(false);}}}/>;
-}
-
-// ── StatusCell ──
-// Mirrors PropertiesDrawer's status control: a native select with a
-// colored dot, including the same Archive confirmation flow.
-function StatusCell({draft,app,project}){
-  var sac=useState(false);var showConfirm=sac[0];var setShowConfirm=sac[1];
-  var statusMap=projStatusMap(project);
-  var allDr=app.allDrafts[app.projId]||[];
-  var seqSiblings=allDr.filter(function(d){return d.status!=='loose_thread'&&!d.parentId&&!d.archived;});
-  function handleChange(e){
-    var v=e.target.value;
-    if(v==='archive'){setShowConfirm(true);return;}
-    var changes={status:v};
-    if(v==='loose_thread'){changes.order=null;changes.parentId=null;}
-    else if(draft.status==='loose_thread'){changes.order=seqSiblings.length+1;}
-    app.updateDraft(app.projId,draft.id,changes);
-  }
-  function doArchive(){
-    var children=allDr.filter(function(d){return d.parentId===draft.id&&!d.archived;});
-    app.updateDraft(app.projId,draft.id,{archived:true});
-    children.forEach(function(c){app.updateDraft(app.projId,c.id,{archived:true});});
-    setShowConfirm(false);
-  }
-  var info=statusMap[draft.status]||statusMap.first_draft||{color:'#999',label:draft.status};
-  return(
-<div style={{position:'relative',display:'inline-block'}}>
-  <span style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',width:8,height:8,borderRadius:'50%',background:info.color,pointerEvents:'none'}}/>
-  <select value={draft.status} onChange={handleChange} style={{paddingLeft:24,paddingRight:8,height:28,borderRadius:12,border:'1px solid transparent',background:info.color+'18',color:info.color,fontFamily:'DM Sans, sans-serif',fontSize:13,fontWeight:500,cursor:'pointer'}}>
-    {Object.keys(statusMap).map(function(k){return <option key={k} value={k}>{statusMap[k].label}</option>;})}
-    <option value="archive">Archive...</option>
-  </select>
-  {showConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={allDr} onConfirm={doArchive} onCancel={function(){setShowConfirm(false);}}/>}
-</div>
-  );
 }
 
 // ── TableView ──
@@ -178,7 +143,7 @@ function TableView({app}){
 </div>
       );
     }
-    if(col==='status')return <StatusCell draft={draft} app={app} project={project}/>;
+    if(col==='status')return <StatusSelect app={app} draft={draft} project={project} selectStyle={{height:34,fontSize:14,padding:'8px 10px 8px 32px'}}/>;
     if(col==='wordCount')return <span style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38'}}>{draft.wordCount||0}</span>;
     if(col==='synopsis')return <ExpandingCell value={draft.synopsis} placeholder="No synopsis…" onCommit={function(v){app.updateDraft(app.projId,draft.id,{synopsis:v});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',fontStyle:draft.synopsis?'normal':'italic',opacity:draft.synopsis?1:.75}}/>;
     if(col==='strandTags'){var ts2=[];Object.keys(tblProjStrands).forEach(function(c){(tblProjStrands[c]||[]).forEach(function(st){if((draft.strandTags||[]).includes(st.id)){var tpl=tblProjTemplates.find(function(t){return t.name===c||t.id===st.templateId;});ts2.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));}});});return(
