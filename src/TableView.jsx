@@ -39,6 +39,65 @@ function ExpandingCell({value,placeholder,style,onCommit}){
     onKeyDown={function(e){if(e.key==='Escape'){setVal(value||'');setFocused(false);}}}/>;
 }
 
+// ── CollapsibleTags ──
+// Wraps TaggedSpoolsEditor for use in a table cell: shows tagged spools
+// clamped to ~2 lines by default (so a heavily-tagged draft doesn't blow
+// out the row height), with a "+N more" hint when it overflows. Clicking
+// anywhere on the collapsed view expands to the full add/remove editor;
+// a "Show less" link collapses it back.
+function CollapsibleTags({draft,app,pid}){
+  var se=useState(false);var expanded=se[0];var setExpanded=se[1];
+  var containerRef=useRef(null);
+  var chipRefs=useRef({});
+  var shc=useState(0);var hiddenCount=shc[0];var setHiddenCount=shc[1];
+  var projStrands=app.allStrands[pid]||{};
+  var projTemplates=app.allTemplates[pid]||[];
+  var tagged=[];
+  Object.keys(projStrands).forEach(function(coll){
+    (projStrands[coll]||[]).forEach(function(st){
+      if((draft.strandTags||[]).includes(st.id)){
+        var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
+        tagged.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));
+      }
+    });
+  });
+  var CLAMP_HEIGHT=56; // ~2 lines of chips
+  useEffect(function(){
+    if(expanded||!containerRef.current){setHiddenCount(0);return;}
+    var containerTop=containerRef.current.getBoundingClientRect().top;
+    var cutoff=containerTop+CLAMP_HEIGHT;
+    var hidden=0;
+    tagged.forEach(function(st){
+      var el=chipRefs.current[st.id];
+      if(el&&el.getBoundingClientRect().top>=cutoff-2)hidden++;
+    });
+    setHiddenCount(hidden);
+  });
+  if(expanded){
+    return(
+<div onClick={function(e){e.stopPropagation();}}>
+  <TaggedSpoolsEditor draft={draft} app={app} pid={pid}/>
+  <button onClick={function(){setExpanded(false);}} style={{marginTop:4,background:'none',border:'none',color:'var(--indigo)',fontSize:11,fontFamily:'DM Sans, sans-serif',cursor:'pointer',padding:0}}>Show less</button>
+</div>
+    );
+  }
+  if(tagged.length===0){
+    return <div onClick={function(){setExpanded(true);}} style={{cursor:'pointer',fontFamily:'DM Sans, sans-serif',fontSize:12,color:'var(--placeholder)',fontStyle:'italic'}}>Click to tag spools…</div>;
+  }
+  return(
+<div onClick={function(){setExpanded(true);}} style={{cursor:'pointer'}}>
+  <div ref={containerRef} style={{display:'flex',flexWrap:'wrap',gap:6,maxHeight:CLAMP_HEIGHT,overflow:'hidden'}}>
+    {tagged.map(function(st){return(
+<div key={st.id} ref={function(el){chipRefs.current[st.id]=el;}} style={{display:'flex',alignItems:'center',gap:5,padding:'3px 8px',borderRadius:12,background:st.spoolColor+'22',border:'1px solid '+st.spoolColor}}>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:11,color:st.spoolColor,fontWeight:600}}>{st.name}</span>
+</div>
+    );})}
+  </div>
+  {hiddenCount>0&&<span style={{fontSize:11,fontFamily:'DM Sans, sans-serif',color:'var(--mid)',marginTop:2,display:'inline-block'}}>+{hiddenCount} more</span>}
+</div>
+  );
+}
+
 // ── TableView ──
 function TableView({app}){
   var tblNumbered=projIsNumbered(app.currentProject);
@@ -62,7 +121,7 @@ function TableView({app}){
     {id:'status',label:'Status'},
     {id:'wordCount',label:'Words'},
     {id:'synopsis',label:'Synopsis'}
-    ,{id:'strandTags',label:'Strands'}
+    ,{id:'strandTags',label:'Spools'}
   ].concat(draftFieldDefs.map(function(f){return{id:'cf_'+f.id,label:f.label};}));
 
   // Column order + hidden state, stored separately so custom fields are
@@ -82,28 +141,40 @@ function TableView({app}){
   });
   var hiddenCols=shs[0];var setHiddenColsRaw=shs[1];
   function persistHiddenCols(next){setHiddenColsRaw(next);try{localStorage.setItem(hiddenKey,JSON.stringify(next));}catch(e){}}
-  // Reconcile: any available column (e.g. a newly-added custom field) not
-  // yet tracked in colOrder gets appended, so it shows up automatically.
+  var availIds={};allAvailCols.forEach(function(c){availIds[c.id]=true;});
+  // Reconcile: any available column not yet tracked in colOrder gets
+  // appended. Runs off the full column-id list (not just custom fields)
+  // so a built-in column can never permanently vanish either.
   useEffect(function(){
     var known={};colOrder.forEach(function(id){known[id]=true;});
     var missing=allAvailCols.filter(function(c){return !known[c.id];}).map(function(c){return c.id;});
     if(missing.length>0)persistColOrder(colOrder.concat(missing));
-  },[draftFieldDefs.map(function(f){return f.id;}).join(',')]);
-  var availIds={};allAvailCols.forEach(function(c){availIds[c.id]=true;});
-  var visCols=colOrder.filter(function(id){return availIds[id]&&hiddenCols.indexOf(id)<0;});
+  },[allAvailCols.map(function(c){return c.id;}).join(',')]);
+  // Title is the row's identifying column and anchors the fixed "open
+  // draft" column right after it — it can be reordered but never hidden.
+  var visCols=colOrder.filter(function(id){return availIds[id]&&(id==='title'||hiddenCols.indexOf(id)<0);});
   function toggleCol(id){
+    if(id==='title')return;
     var next=hiddenCols.indexOf(id)>=0?hiddenCols.filter(function(c){return c!==id;}):hiddenCols.concat([id]);
     persistHiddenCols(next);
   }
 
-  var scw=useState({title:160,synopsis:260,status:130,strandTags:160,wordCount:64});
-  var colWidths=scw[0];var setColWidths=scw[1];
+  var widthsKey='colwidths:'+app.projId;
+  var scw=useState(function(){
+    var defaults={title:160,synopsis:260,status:130,strandTags:160,wordCount:64};
+    try{var v=localStorage.getItem(widthsKey);if(v){var p=JSON.parse(v);if(p&&typeof p==='object')return Object.assign({},defaults,p);}}catch(e){}
+    return defaults;
+  });
+  var colWidths=scw[0];var setColWidthsRaw=scw[1];
   var resizing=useRef(null);
   function startResize(col,e){
     e.preventDefault();
     resizing.current={col:col,startX:e.clientX,startW:colWidths[col]||160};
-    function onMove(e2){if(!resizing.current)return;var diff=e2.clientX-resizing.current.startX;var nw=Math.max(60,resizing.current.startW+diff);setColWidths(function(prev){var n=Object.assign({},prev);n[resizing.current.col]=nw;return n;});}
-    function onUp(){resizing.current=null;document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);}
+    function onMove(e2){if(!resizing.current)return;var diff=e2.clientX-resizing.current.startX;var nw=Math.max(60,resizing.current.startW+diff);setColWidthsRaw(function(prev){var n=Object.assign({},prev);n[resizing.current.col]=nw;return n;});}
+    function onUp(){
+      if(resizing.current){setColWidthsRaw(function(prev){try{localStorage.setItem(widthsKey,JSON.stringify(prev));}catch(e){}return prev;});}
+      resizing.current=null;document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);
+    }
     document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
   }
   var colDropRef=useRef(null);
@@ -146,12 +217,9 @@ function TableView({app}){
       var canPromote=rowCtx&&(rowCtx.hasChildren||rowCtx.isNested);
       return(
 <div style={{display:'flex',alignItems:'flex-start',gap:2}}>
-  <div style={{flex:'0 1 auto',minWidth:0,maxWidth:canPromote?'calc(100% - 50px)':'calc(100% - 26px)'}}>
+  <div style={{flex:'0 1 auto',minWidth:0,maxWidth:canPromote?'calc(100% - 26px)':'100%'}}>
     <ExpandingCell value={draft.title} placeholder="Untitled" style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2a1f10'}} onCommit={function(v){app.updateDraft(app.projId,draft.id,{title:v});}}/>
   </div>
-  <button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:2,display:'flex',alignItems:'center',color:'var(--mid)',flexShrink:0,marginTop:1,transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
-    <span className="material-symbols-outlined" style={{fontSize:18}}>arrow_forward</span>
-  </button>
   {canPromote&&(rowCtx.isNested?(
 <button className="btn-icon" style={{padding:2,flexShrink:0,marginTop:1}} title="Make this the primary strand" onClick={function(){app.promoteStrand(app.projId,rowCtx.parentId,draft.id);}}>
   <span className="mi" style={{fontSize:16,color:'var(--mid)'}}>star_outline</span>
@@ -167,7 +235,7 @@ function TableView({app}){
     if(col==='status')return <StatusSelect app={app} draft={draft} project={project} selectStyle={{height:34,fontSize:14,padding:'8px 10px 8px 32px'}}/>;
     if(col==='wordCount')return <span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}>{draft.wordCount||0}</span>;
     if(col==='synopsis')return <ExpandingCell value={draft.synopsis} placeholder="No synopsis…" onCommit={function(v){app.updateDraft(app.projId,draft.id,{synopsis:v});}} style={{width:'100%',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38'}}/>;
-    if(col==='strandTags')return <TaggedSpoolsEditor draft={draft} app={app} pid={app.projId}/>;
+    if(col==='strandTags')return <CollapsibleTags draft={draft} app={app} pid={app.projId}/>;
     if(col.startsWith('cf_')){
       var fid=col.slice(3);
       var cfVal=draft.customFields&&draft.customFields[fid]?draft.customFields[fid]:'';
@@ -177,8 +245,8 @@ function TableView({app}){
         return renderSpoolThumbs(refIds,draft.id);
       }
       if(fieldDef&&fieldDef.type==='boolean'){
-        return <select value={cfVal||''} onChange={function(e){var cf=Object.assign({},draft.customFields||{});cf[fid]=e.target.value;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:cfVal?'#7A5A38':'var(--placeholder)',background:'transparent',border:'1px solid var(--border)',borderRadius:6,padding:'5px 8px',cursor:'pointer'}}>
-          <option value="">—</option>
+        var boolVal=cfVal==='Yes'?'Yes':'No';
+        return <select value={boolVal} onChange={function(e){var cf=Object.assign({},draft.customFields||{});cf[fid]=e.target.value;app.updateDraft(app.projId,draft.id,{customFields:cf});}} style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#7A5A38',background:'transparent',border:'1px solid var(--border)',borderRadius:6,padding:'5px 8px',cursor:'pointer'}}>
           <option value="Yes">Yes</option>
           <option value="No">No</option>
         </select>;
@@ -204,7 +272,9 @@ function TableView({app}){
     </div>
   </td>
   )}
-  {visCols.map(function(col){return <td key={col}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId})}</td>;})}
+  {visCols.map(function(col){var td=<td key={col}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId})}</td>;if(col==='title')return [td,<td key="__arrowcol"><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
+    <span className="material-symbols-outlined" style={{fontSize:18}}>arrow_forward</span>
+  </button></td>];return td;})}
   <td/>
 </tr>
   );}
@@ -220,7 +290,7 @@ function TableView({app}){
         <th style={{width:28,background:'#E2D0B8'}}/>
         {tblNumbered&&<th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>}
         {tblByDate&&<th style={{width:96,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>Date</th>}
-        {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});return(
+        {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});var thEl=(
 <th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600,cursor:'grab',userSelect:'none'}} className="resizable"
   draggable={true}
   onDragStart={function(e){e.dataTransfer.setData('colId',col);}}
@@ -229,7 +299,7 @@ function TableView({app}){
   {av?av.label:col}
   <div className="col-resize-handle" onMouseDown={function(e){e.stopPropagation();startResize(col,e);}}/>
 </th>
-        );})}
+        );if(col==='title')return [thEl,<th key="__arrowcol" style={{width:34,background:'#E2D0B8'}}/>];return thEl;})}
         <th style={{width:46,background:'#E2D0B8'}}>
           <button ref={colRef} className="btn-icon" style={{padding:2,color:'var(--mid)'}} onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setColPos({top:r.bottom+4,right:window.innerWidth-r.right});setColOpen(!colOpen);}} title="Edit columns">
             <span className="mi" style={{fontSize:18}}>settings</span>
@@ -257,7 +327,7 @@ function TableView({app}){
   {colOpen&&(
 <div ref={colDropRef} className="col-vis-drop" style={{top:colPos.top,right:colPos.right,maxHeight:'60vh',overflowY:'auto'}}>
   <div style={{padding:'4px 8px 6px',fontSize:11,color:'var(--mid)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.06em'}}>Columns</div>
-  {allAvailCols.map(function(col){var isVis=visCols.includes(col.id);return(
+  {allAvailCols.filter(function(col){return col.id!=='title';}).map(function(col){var isVis=visCols.includes(col.id);return(
 <div key={col.id} className="col-vis-item" onClick={function(){toggleCol(col.id);}}>
   <span style={{width:18,height:18,borderRadius:4,border:'1px solid var(--border)',background:isVis?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
     {isVis&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
@@ -279,6 +349,7 @@ function TableView({app}){
   strandId={spoolView.strandId}
   onOpenStrand={function(id){setSpoolView(id?{draftId:spoolView.draftId,strandId:id}:null);}}
   onClose={function(){setSpoolView(null);}}
+  hideDisconnect={true}
 />
   )}
 </div>

@@ -35,7 +35,7 @@ var SPOOL_COLOR_BY_COLLECTION = {
   'Reports': '#b83220', 'Audience Notes': '#f0c050'
 };
 
-export default function StrandsDrawer({ app, draft, variant, open, onClose, strandId, onOpenStrand }) {
+export default function StrandsDrawer({ app, draft, variant, open, onClose, strandId, onOpenStrand, hideDisconnect }) {
   var sv = useState('list'); var view = sv[0]; var setView = sv[1]; // 'list' | 'category'
   var sc = useState(null); var activeCategory = sc[0]; var setActiveCategory = sc[1];
   var si = useState(null); var localDetailId = si[0]; var setLocalDetailId = si[1];
@@ -140,12 +140,14 @@ export default function StrandsDrawer({ app, draft, variant, open, onClose, stra
         <SecondaryButton icon="tune" onClick={function () { editTemplate(collName); }}>
           Edit Spool Template
         </SecondaryButton>
-        <TertiaryButton
-          style={{ color: 'var(--danger)' }}
-          onClick={function () { untagStrand(detailId); backToList(); }}
-        >
-          Disconnect from draft
-        </TertiaryButton>
+        {!hideDisconnect && (
+          <TertiaryButton
+            style={{ color: 'var(--danger)' }}
+            onClick={function () { untagStrand(detailId); backToList(); }}
+          >
+            Disconnect from draft
+          </TertiaryButton>
+        )}
       </div>
     );
 
