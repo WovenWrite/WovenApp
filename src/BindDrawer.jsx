@@ -3,15 +3,28 @@
 // Formerly BindPanel. Select a sequence of drafts and export as PDF / Word,
 // or publish a read-only link.
 //
-// FIXED: handlePublishLink previously contained a stray line referencing
-// `shareId` and `SharedDraftView`, and then used an undefined `link` variable,
-// so publishing always threw a ReferenceError. Now uses buildShareLink().
+// FIXED (earlier): handlePublishLink previously contained a stray line
+// referencing `shareId` and `SharedDraftView`, and then used an undefined
+// `link` variable, so publishing always threw a ReferenceError. Now uses
+// buildShareLink().
+//
+// FIXED: `activeFilter` was being treated as a single strand id string
+// ("does this draft's strandTags include activeFilter?"). But every caller
+// in App.jsx actually passes the full multi-criteria filter object from the
+// Define Filter panel ({status, strandTags, customFields}) — an object that
+// is truthy even when empty, so the old check always took the "filtered"
+// branch and no draft's strandTags array ever literally contains that
+// object. The bind list was therefore always empty, in every project,
+// filter or no filter. Now uses the same draftMatchesFilter/
+// filterCriteriaCount helpers the rest of the app uses, so Bind respects
+// whatever is actually active (status, one or more strands, custom fields —
+// any combination) exactly the way Storyboard/Outline do.
 //
 //   <BindDrawer app={app} open={bindOpen} activeFilter={filter} onClose={...} />
 
 import { useState } from 'react';
 import { Drawer, Check, Spinner, PrimaryButton } from './SharedUI';
-import { STATUSES, genId, supabase, doExport, buildShareLink } from './utils';
+import { STATUSES, genId, supabase, doExport, buildShareLink, filterCriteriaCount, draftMatchesFilter } from './utils';
 
 export default function BindDrawer({ app, open, onClose, activeFilter, variant, topOffset }) {
   var sf = useState('PDF'); var format = sf[0]; var setFormat = sf[1];
@@ -28,17 +41,12 @@ export default function BindDrawer({ app, open, onClose, activeFilter, variant, 
   var bindShare = sb[0]; var setBindShare = sb[1];
 
   // ── Data ──
-  var projStrands = app.allStrands[app.projId] || {};
-  var activeStrand = null;
-  if (activeFilter) {
-    Object.keys(projStrands).forEach(function (c) {
-      (projStrands[c] || []).forEach(function (st) { if (st.id === activeFilter) activeStrand = st; });
-    });
-  }
+  var criteriaCount = filterCriteriaCount(activeFilter);
+  var hasActiveFilter = criteriaCount > 0;
 
   var allDraftsList = app.allDrafts[app.projId] || [];
-  var strandFiltered = activeFilter
-    ? allDraftsList.filter(function (d) { return (d.strandTags || []).includes(activeFilter); })
+  var strandFiltered = hasActiveFilter
+    ? allDraftsList.filter(function (d) { return draftMatchesFilter(d, activeFilter); })
     : allDraftsList;
 
   function bySeq(a, b) { return (a.order || 0) - (b.order || 0); }
@@ -80,7 +88,6 @@ export default function BindDrawer({ app, open, onClose, activeFilter, variant, 
         return '<h2 style="margin-top:32px;margin-bottom:8px;font-family:serif;">'
           + (d.title || 'Untitled') + '</h2>' + (d.body || '');
       }).join('');
-      var linkTitle = activeStrand ? activeStrand.name + ' — ' + projName : projName;
 
       if (bindShare && bindShare.id) {
         await supabase.from('shared_drafts').delete().eq('id', bindShare.id);
@@ -88,7 +95,7 @@ export default function BindDrawer({ app, open, onClose, activeFilter, variant, 
 
       var sid = genId();
       var res = await supabase.from('shared_drafts').insert({
-        id: sid, title: linkTitle, body: combinedBody,
+        id: sid, title: projName, body: combinedBody,
         project_name: projName, author_name: authorName()
       });
       if (res.error) { console.error('Publish failed:', res.error); setLinkLoading(false); return; }
@@ -157,10 +164,12 @@ export default function BindDrawer({ app, open, onClose, activeFilter, variant, 
   return (
     <Drawer variant={variant || 'overlay'} open={open} title="Bind your drafts" onClose={onClose} footer={footer} topOffset={topOffset}>
 
-      {activeStrand && (
+      {hasActiveFilter && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, padding: '8px 12px', background: 'var(--bg2)', borderRadius: 'var(--r)', border: '1px solid var(--border)' }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: activeStrand.color, flexShrink: 0 }} />
-          <span style={{ fontSize: 13, color: 'var(--text)', flex: 1 }}>Filtered to <strong>{activeStrand.name}</strong></span>
+          <span className="mi" style={{ fontSize: 16, color: 'var(--indigo)' }}>filter_alt</span>
+          <span style={{ fontSize: 13, color: 'var(--text)', flex: 1 }}>
+            Using your active filter — {criteriaCount} criteria applied
+          </span>
         </div>
       )}
 
