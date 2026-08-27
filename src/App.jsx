@@ -13,7 +13,7 @@ import BindDrawer from './BindDrawer'
 import ProjectWizard from './ProjectWizard'
 import ProjectDrawer from './ProjectDrawer'
 import TableView from './TableView'
-import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor, Radio, FloatingPanel } from './SharedUI'
+import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, DeleteConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor, Radio, FloatingPanel } from './SharedUI'
 import {
   STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
   supabase, genId, stripHtml, countWords, initials, todayStr,
@@ -2413,18 +2413,13 @@ function StrandsPage({app,allProjects}){
   </div>
   <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:12,color:'var(--text)'}}>Fields</div>
   {deleteCollConfirm&&(
-<div className="modal-overlay">
-  <div className="modal-backdrop" onClick={function(){setDeleteCollConfirm(false);}}/>
-  <div className="modal-box" style={{maxWidth:400}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,marginBottom:12}}>Delete "{activeColl}"?</div>
-    <div style={{fontSize:14,color:'var(--body-text)',lineHeight:1.6,marginBottom:8}}>This will permanently delete the collection and all <strong>{(app.allStrands[pid]&&app.allStrands[pid][activeColl]?app.allStrands[pid][activeColl].length:0)}</strong> strands inside it.</div>
-    <div style={{fontSize:13,color:'var(--mid)',marginBottom:20}}>This cannot be undone.</div>
-    <div style={{display:'flex',gap:8}}>
-      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={function(){setDeleteCollConfirm(false);}}>Cancel</button>
-      <button className="btn btn-danger" style={{flex:1,justifyContent:'center'}} onClick={deleteCollection}><span className="mi" style={{fontSize:16}}>delete</span>Delete collection</button>
-    </div>
-  </div>
-</div>
+    <DeleteConfirmModal
+      itemName={activeColl}
+      message={<>This will permanently delete the collection and all <strong>{(app.allStrands[pid]&&app.allStrands[pid][activeColl]?app.allStrands[pid][activeColl].length:0)}</strong> strands inside it.</>}
+      confirmLabel="Delete collection"
+      onConfirm={deleteCollection}
+      onCancel={function(){setDeleteCollConfirm(false);}}
+    />
   )}
   {editingFields.map(function(f,i){return(
 <div key={f.id} draggable={true}

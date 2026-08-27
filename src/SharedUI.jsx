@@ -884,6 +884,39 @@ export function ArchiveConfirmModal({ draft, allDrafts, onConfirm, onCancel }) {
 }
 
 // ══════════════════════════════════════════════
+// DeleteConfirmModal — generic one-click delete confirmation.
+// Used by the Strands (Spools) collection delete and the Canvas
+// board delete so both share one look and one behavior.
+// ══════════════════════════════════════════════
+
+export function DeleteConfirmModal({ title, itemName, message, note, confirmLabel, onConfirm, onCancel }) {
+  return (
+    <div className="modal-overlay">
+      <div className="modal-backdrop" onClick={onCancel} />
+      <div className="modal-box" style={{ maxWidth: 400 }}>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>
+          {title || (itemName ? `Delete "${itemName}"?` : 'Delete this?')}
+        </div>
+        {message && (
+          <div style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 8 }}>
+            {message}
+          </div>
+        )}
+        <div style={{ fontSize: 13, color: 'var(--mid)', marginBottom: 20 }}>
+          {note || 'This cannot be undone.'}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={onCancel}>Cancel</button>
+          <button className="btn btn-danger" style={{ flex: 1, justifyContent: 'center' }} onClick={onConfirm}>
+            <span className="mi" style={{ fontSize: 16 }}>delete</span>{confirmLabel || 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
 // StatusDot / StatusDotWithArchive
 // ══════════════════════════════════════════════
 

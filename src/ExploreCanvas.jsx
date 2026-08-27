@@ -17,7 +17,7 @@ import {
   Controls, MiniMap, addEdge, useNodesState, useEdgesState, useReactFlow,
   Handle, Position, NodeResizer,
 } from '@xyflow/react'
-import { Drawer } from './SharedUI'
+import { Drawer, DeleteConfirmModal } from './SharedUI'
 import { STATUSES, genId, initials, getSupabase } from './utils'
 
 // ─────────────────────────────────────────────────────────────
@@ -210,19 +210,6 @@ const CANVAS_CSS = `
 .ex-ctx-action.danger{color:var(--danger);}
 .ex-ctx-action .mi{font-size:15px;}
 
-/* Delete board modal */
-.ex-modal-wrap{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;}
-.ex-modal-bg{position:absolute;inset:0;background:rgba(42,31,16,.4);backdrop-filter:blur(2px);}
-.ex-modal{position:relative;background:var(--bg1);border:1px solid var(--border);
-  border-radius:var(--rl);padding:28px;width:420px;max-width:92vw;
-  box-shadow:0 20px 60px rgba(42,31,16,.18);z-index:1;}
-.ex-modal-title{font-family:var(--serif);font-size:20px;font-weight:600;color:var(--text);margin-bottom:10px;}
-.ex-modal-body{font-size:14px;color:var(--body-text);line-height:1.6;margin-bottom:16px;}
-.ex-modal-input{width:100%;border:1.5px solid var(--border);border-radius:var(--r);
-  padding:8px 12px;font-family:var(--ui);font-size:14px;background:var(--bg0);
-  color:var(--text);outline:none;margin-bottom:16px;}
-.ex-modal-input:focus{border-color:var(--indigo);}
-.ex-modal-btns{display:flex;gap:8px;}
 `
 
 function CanvasStyles() {
@@ -815,31 +802,6 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle }) {
 // ─────────────────────────────────────────────────────────────
 // DELETE BOARD MODAL
 // ─────────────────────────────────────────────────────────────
-function DeleteBoardModal({ boardName, onConfirm, onCancel }) {
-  const [val, setVal] = useState('')
-  return (
-    <div className="ex-modal-wrap">
-      <div className="ex-modal-bg" onClick={onCancel} />
-      <div className="ex-modal">
-        <div className="ex-modal-title">Delete this board?</div>
-        <div className="ex-modal-body">
-          <strong>{boardName}</strong> and all its cards will be permanently removed.
-          This cannot be undone.<br /><br />
-          Type <strong>DELETE</strong> to confirm.
-        </div>
-        <input className="ex-modal-input" value={val}
-          onChange={e => setVal(e.target.value)} placeholder="Type DELETE" autoFocus />
-        <div className="ex-modal-btns">
-          <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}
-            onClick={onCancel}>Cancel</button>
-          <button className="btn btn-danger" style={{ flex: 1, justifyContent: 'center' }}
-            disabled={val !== 'DELETE'} onClick={onConfirm}>Delete board</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─────────────────────────────────────────────────────────────
 // FLOW CANVAS
 // ─────────────────────────────────────────────────────────────
@@ -1115,8 +1077,10 @@ export default function ExploreCanvas({ app }) {
       </div>
 
       {deleteTarget && (
-        <DeleteBoardModal
-          boardName={deleteTarget.name}
+        <DeleteConfirmModal
+          itemName={deleteTarget.name}
+          message={<>All cards on this board will be permanently removed.</>}
+          confirmLabel="Delete board"
           onConfirm={confirmDelete}
           onCancel={() => setDeleteTarget(null)}
         />
