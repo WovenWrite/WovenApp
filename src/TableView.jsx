@@ -370,20 +370,21 @@ function TableView({app}){
     </div>
   </td>
   )}
-  {visCols.map(function(col){var td=<td key={col} style={{verticalAlign:vAlign}} onClick={col==='branches'?function(e){e.stopPropagation();}:undefined}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId,rowExpanded:rowExp,branchesOpen:isExpanded,childCount:childCount})}</td>;if(col==='title')return [td,<td key="__arrowcol" style={{verticalAlign:vAlign}} onClick={function(e){e.stopPropagation();}}><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
+  {visCols.map(function(col){var td=<td key={col} style={{verticalAlign:vAlign,overflow:'hidden'}} onClick={col==='branches'?function(e){e.stopPropagation();}:undefined}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId,rowExpanded:rowExp,branchesOpen:isExpanded,childCount:childCount})}</td>;if(col==='title')return [td,<td key="__arrowcol" style={{verticalAlign:vAlign}} onClick={function(e){e.stopPropagation();}}><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
     <span className="material-symbols-outlined" style={{fontSize:18}}>arrow_forward</span>
   </button></td>];return td;})}
   <td style={{verticalAlign:vAlign}}/>
 </tr>
     );
   }
+  var totalTableWidth=28+(tblNumbered?36:0)+(tblByDate?96:0)+visCols.reduce(function(sum,col){var w=colWidths[col]||160;return sum+w+(col==='title'?34:0);},0)+46;
   return(
 <div className="view-layout">
   <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} hideStructure={true} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
   <div className="table-wrap" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto',padding:20}}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>
-  <table className="wt" style={{width:'max-content',minWidth:'100%'}}>
+  <table className="wt" style={{width:totalTableWidth+'px',minWidth:'100%'}}>
     <thead>
       <tr style={{background:'#E2D0B8'}}>
         <th style={{width:28,background:'#E2D0B8'}}/>
