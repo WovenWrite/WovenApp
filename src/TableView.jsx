@@ -5,7 +5,7 @@ import StrandsDrawer from './StrandsDrawer'
 import { StatusSelect, StrandSearchDropdown, FloatingPanel } from './SharedUI'
 import { genId, stripHtml, initials } from './utils'
 import { projIsNumbered, projSequence, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
-import { buildTree, applyFS, loadFilterState, persistFilterState, ViewHeader, DraftLoadingSpinner, EmptyDrafts, LooseThreadsSection, TaggedSpoolsEditor } from './App'
+import { buildTree, applyFS, loadFilterState, persistFilterState, ViewHeader, DraftLoadingSpinner, EmptyDrafts, LooseThreadsSection, TaggedSpoolsEditor, saveDB, loadDB } from './App'
 
 // ── ExpandingCell ──
 // When the row isn't expanded: clamped to 2 lines. When the row IS
@@ -209,20 +209,31 @@ function TableView({app}){
   // Column order + hidden state, stored separately so custom fields are
   // visible by default (and stay visible automatically as new ones are
   // added) — hiding a column is an explicit opt-out, not a default.
-  var orderKey='colorder:'+app.projId;
-  var hiddenKey='colhidden:'+app.projId;
+  //
+  // Persisted via saveDB/loadDB (Supabase-backed, same as the rest of the
+  // app's durable settings) rather than plain localStorage. localStorage
+  // is still read synchronously on first paint so there's no flicker —
+  // loadDB then corrects it once the real value comes back, which also
+  // covers the case where localStorage doesn't have it yet (new device,
+  // new browser, or a different deploy/preview origin).
+  var orderKey='woven:colorder:'+app.projId;
+  var hiddenKey='woven:colhidden:'+app.projId;
   var sco2=useState(function(){
     try{var v=localStorage.getItem(orderKey);if(v){var p=JSON.parse(v);if(Array.isArray(p))return p;}}catch(e){}
     return allAvailCols.map(function(c){return c.id;});
   });
   var colOrder=sco2[0];var setColOrderRaw=sco2[1];
-  function persistColOrder(next){setColOrderRaw(next);try{localStorage.setItem(orderKey,JSON.stringify(next));}catch(e){}}
+  function persistColOrder(next){setColOrderRaw(next);saveDB(orderKey,next);}
   var shs=useState(function(){
     try{var v=localStorage.getItem(hiddenKey);if(v){var p=JSON.parse(v);if(Array.isArray(p))return p;}}catch(e){}
     return [];
   });
   var hiddenCols=shs[0];var setHiddenColsRaw=shs[1];
-  function persistHiddenCols(next){setHiddenColsRaw(next);try{localStorage.setItem(hiddenKey,JSON.stringify(next));}catch(e){}}
+  function persistHiddenCols(next){setHiddenColsRaw(next);saveDB(hiddenKey,next);}
+  useEffect(function(){
+    loadDB(orderKey,null).then(function(v){if(Array.isArray(v))setColOrderRaw(v);});
+    loadDB(hiddenKey,null).then(function(v){if(Array.isArray(v))setHiddenColsRaw(v);});
+  },[orderKey,hiddenKey]);
   var availIds={};allAvailCols.forEach(function(c){availIds[c.id]=true;});
   // Reconcile: any available column not yet tracked in colOrder gets
   // appended. Runs off the full column-id list (not just custom fields)
@@ -241,20 +252,23 @@ function TableView({app}){
     persistHiddenCols(next);
   }
 
-  var widthsKey='colwidths:'+app.projId;
+  var widthsKey='woven:colwidths:'+app.projId;
+  var widthDefaults={title:160,branches:110,synopsis:260,status:160,strandTags:160,wordCount:64};
   var scw=useState(function(){
-    var defaults={title:160,branches:110,synopsis:260,status:160,strandTags:160,wordCount:64};
-    try{var v=localStorage.getItem(widthsKey);if(v){var p=JSON.parse(v);if(p&&typeof p==='object')return Object.assign({},defaults,p);}}catch(e){}
-    return defaults;
+    try{var v=localStorage.getItem(widthsKey);if(v){var p=JSON.parse(v);if(p&&typeof p==='object')return Object.assign({},widthDefaults,p);}}catch(e){}
+    return widthDefaults;
   });
   var colWidths=scw[0];var setColWidthsRaw=scw[1];
+  useEffect(function(){
+    loadDB(widthsKey,null).then(function(v){if(v&&typeof v==='object')setColWidthsRaw(function(prev){return Object.assign({},widthDefaults,prev,v);});});
+  },[widthsKey]);
   var resizing=useRef(null);
   function startResize(col,e){
     e.preventDefault();
     resizing.current={col:col,startX:e.clientX,startW:colWidths[col]||160};
     function onMove(e2){if(!resizing.current)return;var diff=e2.clientX-resizing.current.startX;var nw=Math.max(60,resizing.current.startW+diff);setColWidthsRaw(function(prev){var n=Object.assign({},prev);n[resizing.current.col]=nw;return n;});}
     function onUp(){
-      if(resizing.current){setColWidthsRaw(function(prev){try{localStorage.setItem(widthsKey,JSON.stringify(prev));}catch(e){}return prev;});}
+      if(resizing.current){setColWidthsRaw(function(prev){saveDB(widthsKey,prev);return prev;});}
       resizing.current=null;document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);
     }
     document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);

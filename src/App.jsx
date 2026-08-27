@@ -26,13 +26,13 @@ import { PROJ_TYPES, projIsNumbered, projIsManualOrder, projSequence, sortDrafts
 // ── Storage ──
 function saveLS(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
 function loadLS(key,def){return Promise.resolve().then(function(){try{var v=localStorage.getItem(key);return v?JSON.parse(v):def;}catch(e){return def;}});}
-function saveDB(key,val){
+export function saveDB(key,val){
   var uid=window.__wovenUserId;
   if(!uid)return saveLS(key,val);
   saveLS(key,val); // keep local copy too
   supabase.from('wf_data').upsert({key:key,user_id:uid,value:val,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(r){if(r.error)console.error('saveDB error:',r.error);});
 }
-function loadDB(key,def){
+export function loadDB(key,def){
   var uid=window.__wovenUserId;
   if(!uid)return loadLS(key,def);
   return supabase.from('wf_data').select('value').eq('key',key).eq('user_id',uid).maybeSingle().then(function(r){
