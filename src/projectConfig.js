@@ -312,6 +312,16 @@ export var PROJ_TYPES = [
     ]
   },
   {
+    id: 'dissertation', label: 'Dissertation', icon: 'school',
+    desc: 'Thesis chapters, committee-ready',
+    colls: ['Sources', 'Committee', 'Terms & Concepts'],
+    config: { sequenceMode: 'numeric', draftThumbnails: false, labels: { draft: 'Chapter', drafts: 'Chapters' } },
+    draftFields: [
+      { id: 'argument', label: 'Core argument', type: 'long_text' },
+      { id: 'notes',    label: 'Notes',         type: 'long_text' }
+    ]
+  },
+  {
     id: 'blog', label: 'Blog Series', icon: 'rss_feed',
     desc: 'Posts, columns, newsletters',
     colls: ['Topics', 'Sources', 'Audience Notes'],

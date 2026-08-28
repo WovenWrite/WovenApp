@@ -2581,7 +2581,7 @@ function App(){
   function deleteDraftPermanently(pid,did){
     setAllDrafts(function(prev){
       var current=(prev[pid]||[]).find(function(d){return d.id===did;});
-      if(current&&current.thumbnail)deleteStorageImage(current.thumbnail);
+      if(current&&current.thumbnail){try{deleteStorageImage(current.thumbnail);}catch(e){console.error('deleteStorageImage failed, continuing anyway:',e);}}
       var next=Object.assign({},prev);
       var ds=(next[pid]||[]).filter(function(d){return d.id!==did;});
       next[pid]=ds;
@@ -2745,7 +2745,7 @@ function App(){
   }
   function updateProjectTitle(pid,newTitle){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{title:newTitle});});saveDB('woven:projects',next);return next;});}
   function updateProjectSynopsis(pid,syn){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{synopsis:syn});});saveDB('woven:projects',next);return next;});}
-  function updateProjectImage(pid,img){setProjects(function(prev){var old=prev.find(function(p){return p.id===pid;});if(old&&old.image&&old.image!==img)deleteStorageImage(old.image);var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{image:img});});saveDB('woven:projects',next);return next;});}
+  function updateProjectImage(pid,img){setProjects(function(prev){var old=prev.find(function(p){return p.id===pid;});if(old&&old.image&&old.image!==img){try{deleteStorageImage(old.image);}catch(e){console.error('deleteStorageImage failed, continuing anyway:',e);}}var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{image:img});});saveDB('woven:projects',next);return next;});}
   function updateProjectConfig(pid,patch){setProjects(function(prev){var next=prev.map(function(p){if(p.id!==pid)return p;var cfg=Object.assign({},p.config||{},patch);return Object.assign({},p,{config:cfg});});saveDB('woven:projects',next);return next;});}
   function updateProjectType(pid,type){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{type:type});});saveDB('woven:projects',next);return next;});}
   function archiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:true});});saveDB('woven:projects',next);return next;});}

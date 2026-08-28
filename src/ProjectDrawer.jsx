@@ -402,9 +402,33 @@ export default function ProjectDrawer({ proj, app, variant, open, onClose, topOf
 
       <div>
         <span className="wv-field-lbl">Type</span>
-        <select value={proj.type || 'Other'} onChange={function (e) { app.updateProjectType(pid, e.target.value); }} style={{ width: '100%' }}>
-          {PROJ_TYPES.map(function (t) { return <option key={t.id} value={t.label}>{t.label}</option>; })}
-        </select>
+        {(function () {
+          var knownLabel = PROJ_TYPES.some(function (t) { return t.label === proj.type; });
+          var selectValue = knownLabel ? proj.type : 'Other';
+          return (
+            <div>
+              <select
+                value={selectValue}
+                onChange={function (e) { app.updateProjectType(pid, e.target.value); }}
+                style={{ width: '100%' }}
+              >
+                {PROJ_TYPES.map(function (t) { return <option key={t.id} value={t.label}>{t.label}</option>; })}
+              </select>
+              {selectValue === 'Other' && (
+                <input
+                  key={pid + '-ot'}
+                  defaultValue={proj.type === 'Other' ? '' : proj.type}
+                  placeholder="Name this type of project..."
+                  style={{ width: '100%', marginTop: 8 }}
+                  onBlur={function (e) {
+                    var v = e.target.value.trim();
+                    app.updateProjectType(pid, v || 'Other');
+                  }}
+                />
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── Progress ── */}
