@@ -17,8 +17,8 @@ import {
   Controls, MiniMap, addEdge, useNodesState, useEdgesState, useReactFlow,
   Handle, Position, NodeResizer, MarkerType,
 } from '@xyflow/react'
-import { Drawer, DeleteConfirmModal, StrandResultRow } from './SharedUI'
-import { STATUSES, genId, initials, getSupabase } from './utils'
+import { Drawer, DeleteConfirmModal, StrandResultRow, Field, SecondaryButton, AvatarEditModal, SpoolThumbnailUpload, HelpText } from './SharedUI'
+import { STATUSES, genId, initials, getSupabase, defaultFields } from './utils'
 
 // ─────────────────────────────────────────────────────────────
 // STYLES
@@ -87,22 +87,20 @@ const CANVAS_CSS = `
 
 /* Toolbar */
 .ex-toolbar{width:60px;background:var(--bg1);display:flex;flex-direction:column;
-  align-items:center;padding:10px 0;gap:1px;flex-shrink:0;border-left:1px solid var(--border);
+  align-items:center;padding:10px 0;gap:2px;flex-shrink:0;border-left:1px solid var(--border);
   min-height:0;overflow:hidden;}
-.ex-tool{width:52px;min-height:46px;border-radius:8px;display:flex;flex-direction:column;
+.ex-tool{width:44px;height:44px;border-radius:8px;display:flex;
   align-items:center;justify-content:center;cursor:pointer;color:var(--mid);
-  transition:all .12s;gap:2px;padding:4px 2px;flex-shrink:0;}
+  transition:all .12s;flex-shrink:0;}
 .ex-tool:hover{background:var(--bg2);color:var(--text);}
 .ex-tool.active{background:rgba(196,94,40,.12);color:var(--indigo);}
-.ex-tool .mi{font-size:18px;line-height:1;}
-.ex-tool-lbl{font-size:9px;font-weight:500;text-align:center;line-height:1;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:52px;}
-.ex-tool-sep{width:32px;height:1px;background:var(--border);margin:4px 0;flex-shrink:0;}
+.ex-tool .material-symbols-outlined{font-size:22px;line-height:1;}
+.ex-tool-sep{width:28px;height:1px;background:#A88060;opacity:.4;margin:5px 0;flex-shrink:0;}
 /* Per-Spool collection buttons — one per Spool, dynamic per project.
    Scrolls independently so a project with many Spools doesn't push
    the fixed placement tools or Drafts/Threads off screen. */
 .ex-toolbar-colls{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;
-  align-items:center;gap:1px;width:100%;scrollbar-width:thin;}
+  align-items:center;gap:2px;width:100%;scrollbar-width:thin;}
 .ex-toolbar-colls::-webkit-scrollbar{width:4px;}
 .ex-toolbar-colls::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
 
@@ -127,6 +125,8 @@ const CANVAS_CSS = `
   border-bottom:1px solid var(--border);cursor:grab;user-select:none;transition:background .12s;}
 .ex-edrawer-row:hover{background:var(--bg2);}
 .ex-edrawer-row:active{cursor:grabbing;}
+.ex-spool-row{cursor:grab;}
+.ex-spool-row:active{cursor:grabbing;}
 .ex-edrawer-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;
   justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0;overflow:hidden;}
 .ex-edrawer-av img{width:100%;height:100%;object-fit:cover;}
@@ -225,7 +225,7 @@ const CANVAS_CSS = `
 .ex-shape-popover-item{width:38px;height:38px;border-radius:6px;display:flex;
   align-items:center;justify-content:center;cursor:pointer;color:var(--mid);transition:all .12s;}
 .ex-shape-popover-item:hover{background:var(--bg2);color:var(--indigo);}
-.ex-shape-popover-item .mi{font-size:20px;}
+.ex-shape-popover-item .material-symbols-outlined{font-size:22px;}
 
 /* Context menu */
 .ex-ctx{position:fixed;z-index:9999;background:var(--bg1);border:1px solid var(--border);
@@ -306,6 +306,24 @@ function isPlaceModeTool(tool) {
 // HELPERS
 // ─────────────────────────────────────────────────────────────
 // genId and initials now live in ./utils
+
+// Shared app-wide tooltip — same #woven-tt element and imperative
+// show/hide pattern used elsewhere in App.jsx, so toolbar tooltips look
+// and behave identically to tooltips anywhere else in Woven.
+function showTt(e, text) {
+  const tt = document.getElementById('woven-tt')
+  if (!tt) return
+  const r = e.currentTarget.getBoundingClientRect()
+  tt.textContent = text
+  tt.style.display = 'block'
+  tt.style.left = (r.left + r.width / 2) + 'px'
+  tt.style.top = (r.bottom + 6) + 'px'
+}
+function hideTt() {
+  const tt = document.getElementById('woven-tt')
+  if (tt) tt.style.display = 'none'
+}
+
 function accentColor(item) {
   if (!item) return '#aaa'
   if (item.itemType === 'strand') return item.color || '#aaa'
@@ -820,100 +838,182 @@ function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
 // ─────────────────────────────────────────────────────────────
 // SPOOL COLLECTION LIST — the drawer body for one specific Spool,
 // selected directly from its own toolbar button (see Toolbar).
-// Uses the same StrandResultRow the rest of the app uses for browsing
-// strands: click through to view/edit in the Strands page, or tap the
-// add icon to drop it onto the current canvas board. Still draggable
-// too, for the existing drag-to-place workflow.
+// Mirrors StrandsDrawer's two inner layers (list -> detail), minus the
+// draft-tagging concepts that don't apply here: "add" places the strand
+// on the canvas instead of tagging it to a draft, and there's no
+// "Presently tagged" section or Create New Spool, since a specific
+// collection is already chosen via its own toolbar button.
 // ─────────────────────────────────────────────────────────────
-function SpoolCollectionList({ collectionName, strandsObj, templates, onDragStart, onAddToCanvas, onViewStrand }) {
+function SpoolDrawerPanel({ app, projId, collectionName, strandsObj, templates, onDragStart, onAddToCanvas, onClose, width }) {
+  const [detailId, setDetailId] = useState(null)
+  const [showAvatarEdit, setShowAvatarEdit] = useState(false)
   const items = strandsObj[collectionName] || []
   const tpl = (templates || []).find(t => t.name === collectionName)
+
+  function backToList() { setDetailId(null); setShowAvatarEdit(false) }
+  function editTemplate() {
+    app.setStrandsFocusColl?.(collectionName)
+    app.setView?.('strands')
+  }
+
+  // ── Detail layer ──
+  if (detailId) {
+    let strand = null
+    items.forEach(st => { if (st.id === detailId) strand = st })
+
+    if (!strand) {
+      return (
+        <Drawer variant="inline" open title="Spool" onBack={backToList} onClose={onClose} width={width}>
+          <HelpText>That spool no longer exists.</HelpText>
+        </Drawer>
+      )
+    }
+
+    const fields = (tpl?.fields?.length > 0) ? tpl.fields : defaultFields(collectionName)
+
+    function updateField(fid, val) {
+      const nf = { ...(strand.fields || {}) }
+      nf[fid] = val
+      app.updateStrand(projId, collectionName, detailId, { fields: nf })
+    }
+
+    const footer = <SecondaryButton icon="tune" onClick={editTemplate}>Edit Spool Template</SecondaryButton>
+
+    return (
+      <Drawer variant="inline" open title={strand.name} onBack={backToList} onClose={onClose} footer={footer} width={width}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+          <SpoolThumbnailUpload strand={strand} onClick={() => setShowAvatarEdit(true)} />
+          <span style={{ fontSize: 13, color: 'var(--indigo)', cursor: 'pointer', textDecoration: 'underline' }}
+            onClick={() => setShowAvatarEdit(true)}>
+            Edit appearance
+          </span>
+        </div>
+
+        <Field
+          label="Name"
+          key={strand.id + '-name'}
+          defaultValue={strand.name}
+          placeholder="Spool name"
+          onBlur={e => {
+            const v = e.target.value.trim()
+            if (v && v !== strand.name) app.updateStrand(projId, collectionName, detailId, { name: v })
+          }}
+        />
+
+        {fields.map(f => {
+          const val = (strand.fields && strand.fields[f.id]) || ''
+          const isLong = f.type === 'long_text'
+          return (
+            <Field
+              key={f.id}
+              label={f.label}
+              defaultValue={val}
+              placeholder={`Add ${f.label.toLowerCase()}...`}
+              resizeMode={isLong ? 'manual' : 'auto'}
+              rows={isLong ? 5 : undefined}
+              onBlur={e => updateField(f.id, e.target.value)}
+            />
+          )
+        })}
+
+        {showAvatarEdit && (
+          <AvatarEditModal
+            strand={strand}
+            onClose={() => setShowAvatarEdit(false)}
+            onSave={updates => { app.updateStrand(projId, collectionName, detailId, updates); setShowAvatarEdit(false) }}
+          />
+        )}
+      </Drawer>
+    )
+  }
+
+  // ── List layer ──
   return (
-    <div className="ex-edrawer-body">
+    <Drawer variant="inline" open title={collectionName} onClose={onClose} width={width}>
       {items.length === 0
-        ? <div style={{ padding: '12px 14px', fontSize: 13, color: 'var(--mid)' }}>
-            No {collectionName.toLowerCase()} yet.
-          </div>
+        ? <HelpText>No {collectionName.toLowerCase()} yet.</HelpText>
         : items.map(s => (
-            <div key={s.id} draggable
+            <div key={s.id} className="ex-spool-row" draggable
               onDragStart={e => onDragStart(e, buildPayload(s, 'strand', templates))}>
               <StrandResultRow
                 strand={s}
                 spoolIcon={tpl?.icon}
-                onClick={() => onViewStrand(collectionName, s.id)}
+                onClick={() => setDetailId(s.id)}
                 onAdd={() => onAddToCanvas(s)}
               />
             </div>
           ))
       }
-    </div>
+    </Drawer>
   )
 }
 
 // ─────────────────────────────────────────────────────────────
-// DRAWER CONTENT
+// DRAWER CONTENT — each panel owns its own Drawer (title/back button
+// vary per layer), rather than one shared outer Drawer.
 // ─────────────────────────────────────────────────────────────
-function DrawerContent({ panel, templates, strandsObj, drafts, looseThreads, onDragStart, onAddToCanvas, onViewStrand }) {
+function DrawerContent({ panel, app, projId, templates, strandsObj, drafts, looseThreads, onDragStart, onAddToCanvas, onClose, width }) {
   if (panel?.startsWith(SPOOL_DRAWER_PREFIX)) {
     const collectionName = panel.slice(SPOOL_DRAWER_PREFIX.length)
     return (
-      <SpoolCollectionList
+      <SpoolDrawerPanel
+        key={collectionName}
+        app={app} projId={projId}
         collectionName={collectionName}
         strandsObj={strandsObj}
         templates={templates}
         onDragStart={onDragStart}
         onAddToCanvas={onAddToCanvas}
-        onViewStrand={onViewStrand}
+        onClose={onClose}
+        width={width}
       />
     )
   }
   if (panel === 'drafts') {
     return (
-      <div className="ex-edrawer-body">
-        <div className="ex-edrawer-section">
-          <span className="ex-edrawer-lbl">Drafts</span>
-        </div>
-        {drafts.length === 0
-          ? <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--mid)' }}>No drafts yet.</div>
-          : drafts.map(d => (
-              <div key={d.id} className="ex-edrawer-row" draggable
-                onDragStart={e => onDragStart(e, buildPayload(d, 'draft', templates))}>
-                <div className="ex-edrawer-dot" style={{ background: STATUSES[d.status]?.color }} />
-                <div className="ex-edrawer-info">
-                  <div className="ex-edrawer-name">
-                    {d.title || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
+      <Drawer variant="inline" open title="Drafts" onClose={onClose} width={width} padded={false}>
+        <div className="ex-edrawer-body">
+          {drafts.length === 0
+            ? <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--mid)' }}>No drafts yet.</div>
+            : drafts.map(d => (
+                <div key={d.id} className="ex-edrawer-row" draggable
+                  onDragStart={e => onDragStart(e, buildPayload(d, 'draft', templates))}>
+                  <div className="ex-edrawer-dot" style={{ background: STATUSES[d.status]?.color }} />
+                  <div className="ex-edrawer-info">
+                    <div className="ex-edrawer-name">
+                      {d.title || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
+                    </div>
+                    <div className="ex-edrawer-sub">{STATUSES[d.status]?.label}</div>
                   </div>
-                  <div className="ex-edrawer-sub">{STATUSES[d.status]?.label}</div>
+                  <span className="ex-edrawer-hint">drag</span>
                 </div>
-                <span className="ex-edrawer-hint">drag</span>
-              </div>
-            ))
-        }
-      </div>
+              ))
+          }
+        </div>
+      </Drawer>
     )
   }
   if (panel === 'loose_threads') {
     return (
-      <div className="ex-edrawer-body">
-        <div className="ex-edrawer-section">
-          <span className="ex-edrawer-lbl">Loose Threads</span>
-        </div>
-        {looseThreads.length === 0
-          ? <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--mid)' }}>No loose threads.</div>
-          : looseThreads.map(lt => (
-              <div key={lt.id} className="ex-edrawer-row" draggable
-                onDragStart={e => onDragStart(e, buildPayload(lt, 'loose_thread', templates))}>
-                <div className="ex-edrawer-dot" style={{ background: STATUSES.loose_thread.color }} />
-                <div className="ex-edrawer-info">
-                  <div className="ex-edrawer-name">
-                    {lt.title || lt.synopsis || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
+      <Drawer variant="inline" open title="Threads" onClose={onClose} width={width} padded={false}>
+        <div className="ex-edrawer-body">
+          {looseThreads.length === 0
+            ? <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--mid)' }}>No loose threads.</div>
+            : looseThreads.map(lt => (
+                <div key={lt.id} className="ex-edrawer-row" draggable
+                  onDragStart={e => onDragStart(e, buildPayload(lt, 'loose_thread', templates))}>
+                  <div className="ex-edrawer-dot" style={{ background: STATUSES.loose_thread.color }} />
+                  <div className="ex-edrawer-info">
+                    <div className="ex-edrawer-name">
+                      {lt.title || lt.synopsis || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
+                    </div>
                   </div>
+                  <span className="ex-edrawer-hint">drag</span>
                 </div>
-                <span className="ex-edrawer-hint">drag</span>
-              </div>
-            ))
-        }
-      </div>
+              ))
+          }
+        </div>
+      </Drawer>
     )
   }
   return null
@@ -1004,16 +1104,17 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, colle
       {TOOL_ITEMS.map(t => (
         <div key={t.id} style={{ position: 'relative' }} ref={t.id === 'shape' ? shapeWrapRef : null}>
           <div className={`ex-tool ${(t.id === 'shape' ? shapeActive : activeTool === t.id) ? 'active' : ''}`}
-            onClick={() => handleClick(t)} title={t.label}>
-            <span className="mi">{t.icon}</span>
-            <span className="ex-tool-lbl">{t.label}</span>
+            onClick={() => handleClick(t)}
+            onMouseEnter={e => showTt(e, t.label)} onMouseLeave={hideTt}>
+            <span className="material-symbols-outlined">{t.icon}</span>
           </div>
           {t.id === 'shape' && shapePickerOpen && (
             <div className="ex-shape-popover">
               {SHAPE_VARIANTS.map(v => (
                 <div key={v.id} className="ex-shape-popover-item"
-                  onClick={() => pickShape(v.id)} title={v.label}>
-                  <span className="mi">{v.icon}</span>
+                  onClick={() => pickShape(v.id)}
+                  onMouseEnter={e => showTt(e, v.label)} onMouseLeave={hideTt}>
+                  <span className="material-symbols-outlined">{v.icon}</span>
                 </div>
               ))}
             </div>
@@ -1029,9 +1130,9 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, colle
               const drawerId = `${SPOOL_DRAWER_PREFIX}${c.name}`
               return (
                 <div key={c.name} className={`ex-tool ${activeDrawer === drawerId ? 'active' : ''}`}
-                  onClick={() => onDrawerToggle(drawerId)} title={c.name}>
-                  <span className="mi" style={{ color: c.color }}>{c.icon}</span>
-                  <span className="ex-tool-lbl">{c.name}</span>
+                  onClick={() => onDrawerToggle(drawerId)}
+                  onMouseEnter={e => showTt(e, c.name)} onMouseLeave={hideTt}>
+                  <span className="material-symbols-outlined">{c.icon}</span>
                 </div>
               )
             })}
@@ -1042,9 +1143,9 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, colle
       <div className="ex-tool-sep" />
       {DRAWER_ITEMS.map(p => (
         <div key={p.id} className={`ex-tool ${activeDrawer === p.id ? 'active' : ''}`}
-          onClick={() => onDrawerToggle(p.id)} title={p.label}>
-          <span className="mi">{p.icon}</span>
-          <span className="ex-tool-lbl">{p.label}</span>
+          onClick={() => onDrawerToggle(p.id)}
+          onMouseEnter={e => showTt(e, p.label)} onMouseLeave={hideTt}>
+          <span className="material-symbols-outlined">{p.icon}</span>
         </div>
       ))}
     </div>
@@ -1330,11 +1431,6 @@ export default function ExploreCanvas({ app }) {
   const [boardsLoaded, setBoardsLoaded] = useState(false)
   const [pendingAdd, setPendingAdd]   = useState(null)
 
-  function viewStrand(collectionName, strandId) {
-    app.setFocusStrand?.({ collection: collectionName, strandId })
-    app.setView?.('strands')
-  }
-
   // Resizable Strands/Drafts/Threads drawer width — remembered across sessions.
   const [drawerWidth, setDrawerWidth] = useState(() => {
     const saved = Number(localStorage.getItem('woven:canvasDrawerWidth'))
@@ -1406,9 +1502,6 @@ export default function ExploreCanvas({ app }) {
     e.dataTransfer.effectAllowed = 'copy'
   }
 
-  const drawerLabel = activeDrawer?.startsWith(SPOOL_DRAWER_PREFIX)
-    ? activeDrawer.slice(SPOOL_DRAWER_PREFIX.length)
-    : (DRAWER_ITEMS.find(p => p.id === activeDrawer)?.label || '')
   if (!projId) return null
 
   return (
@@ -1449,16 +1542,16 @@ export default function ExploreCanvas({ app }) {
                     title="Drag to resize" />
                 )}
                 <div className="ex-drawer-inner" style={{ width: drawerWidth }}>
-                  <Drawer variant="inline" open={true} title={drawerLabel} onClose={() => setActiveDrawer(null)} padded={false} width={drawerWidth}>
-                    <DrawerContent
-                      panel={activeDrawer}
-                      templates={templates} strandsObj={strandsObj}
-                      drafts={drafts} looseThreads={looseThreads}
-                      onDragStart={handleDragStart}
-                      onAddToCanvas={setPendingAdd}
-                      onViewStrand={viewStrand}
-                    />
-                  </Drawer>
+                  <DrawerContent
+                    panel={activeDrawer}
+                    app={app} projId={projId}
+                    templates={templates} strandsObj={strandsObj}
+                    drafts={drafts} looseThreads={looseThreads}
+                    onDragStart={handleDragStart}
+                    onAddToCanvas={setPendingAdd}
+                    onClose={() => setActiveDrawer(null)}
+                    width={drawerWidth}
+                  />
                 </div>
               </div>
             </div>
