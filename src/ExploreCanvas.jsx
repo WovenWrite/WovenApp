@@ -80,7 +80,6 @@ const CANVAS_CSS = `
 
 /* Connect tool active — override React Flow's default grab cursor on
    nodes so hovering shows the same crosshair as the empty pane. */
-.ex-connect-mode .react-flow__node{cursor:crosshair!important;}
 
 /* Right panel */
 .ex-right{display:flex;flex-direction:row-reverse;flex-shrink:0;}
@@ -139,28 +138,43 @@ const CANVAS_CSS = `
   opacity:0;transition:opacity .12s;flex-shrink:0;}
 .ex-edrawer-row:hover .ex-edrawer-hint{opacity:1;}
 
+/* Drafts panel status filter pills */
+.ex-filter-row{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px;
+  border-bottom:1px solid var(--border);flex-shrink:0;}
+.ex-filter-pill{--pill-color:var(--mid);height:26px;padding:0 11px;border-radius:13px;
+  border:1.5px solid var(--pill-color);background:transparent;color:var(--pill-color);
+  font-size:12px;font-weight:600;font-family:var(--ui);cursor:pointer;transition:all .12s;}
+.ex-filter-pill:hover{background:rgba(122,90,56,.08);}
+.ex-filter-pill.active{background:var(--pill-color);color:#fff;}
+
 /* Woven cards */
 .woven-card{background:var(--bg1);border:1.5px solid var(--border);border-radius:10px;
   display:flex;flex-direction:column;font-family:var(--ui);overflow:hidden;position:relative;
-  box-shadow:0 2px 8px rgba(42,31,16,.08);min-width:180px;max-width:260px;}
+  box-shadow:0 2px 8px rgba(42,31,16,.08);min-width:200px;max-width:280px;}
 .woven-card.selected{border-color:var(--indigo);box-shadow:0 0 0 2px rgba(196,94,40,.15);}
 .woven-card-hdr{display:flex;align-items:center;gap:7px;padding:8px 10px;
   background:var(--bg0);flex-shrink:0;}
-.woven-card-av{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;
-  align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;overflow:hidden;}
+.woven-card-av{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;
+  align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;overflow:hidden;}
 .woven-card-av img{width:100%;height:100%;object-fit:cover;}
 .woven-card-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
-.woven-card-name{font-family:var(--serif);font-size:14px;font-weight:600;color:var(--text);
-  flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.woven-card-status-badge{font-size:9px;font-weight:600;text-transform:uppercase;
-  letter-spacing:.05em;color:#fff;padding:2px 5px;border-radius:3px;flex-shrink:0;}
-.woven-card-body.has-content{padding:7px 10px;border-top:1px solid var(--border);}
-.woven-card-field{margin-bottom:5px;}
+.woven-card-name-input{font-family:var(--serif);font-size:16px;font-weight:600;color:var(--text);
+  flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  border:none;background:transparent;outline:none;padding:2px 3px;border-radius:4px;cursor:text;}
+.woven-card-name-input:hover{background:rgba(122,90,56,.08);}
+.woven-card-name-input:focus{background:rgba(196,94,40,.08);white-space:normal;}
+.woven-card-status-badge{font-size:14px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.03em;color:#fff;padding:3px 8px;border-radius:4px;flex-shrink:0;}
+.woven-card-body.has-content{padding:8px 10px;border-top:1px solid var(--border);}
+.woven-card-field{margin-bottom:7px;}
 .woven-card-field:last-child{margin-bottom:0;}
-.woven-card-field-lbl{font-size:9px;font-weight:600;color:var(--indigo);text-transform:uppercase;
-  letter-spacing:.06em;margin-bottom:1px;}
-.woven-card-field-val{font-size:11px;color:var(--body-text);line-height:1.4;
-  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+.woven-card-field-lbl{font-size:14px;font-weight:600;color:var(--indigo);text-transform:uppercase;
+  letter-spacing:.04em;margin-bottom:2px;}
+.woven-card-field-input{font-size:16px;color:var(--body-text);line-height:1.4;font-family:var(--ui);
+  border:none;background:transparent;outline:none;resize:none;width:100%;padding:2px 3px;
+  border-radius:4px;box-sizing:border-box;cursor:text;}
+.woven-card-field-input:hover{background:rgba(122,90,56,.08);}
+.woven-card-field-input:focus{background:rgba(196,94,40,.08);}
 
 /* Sticky note */
 .ex-sticky{border-radius:8px;display:flex;flex-direction:column;overflow:hidden;position:relative;
@@ -274,7 +288,6 @@ const STICKY_COLORS = [
 
 const TOOL_ITEMS = [
   { id: 'select',  icon: 'near_me',            label: 'Select'  },
-  { id: 'connect', icon: 'account_tree',       label: 'Connect' },
   { id: 'text',    icon: 'text_fields',        label: 'Text'    },
   { id: 'shape',   icon: 'category',           label: 'Shape'   },
   { id: 'sticky',  icon: 'sticky_note_2',       label: 'Sticky'  },
@@ -285,12 +298,12 @@ const SHAPE_VARIANTS = [
   { id: 'ellipse',   icon: 'circle',          label: 'Ellipse'   },
   { id: 'diamond',   icon: 'diamond',         label: 'Diamond'   },
   { id: 'triangle',  icon: 'change_history',  label: 'Triangle'  },
+  { id: 'arrow',     icon: 'arrow_right_alt', label: 'Arrow'     },
 ]
 // Static drawer buttons — Spool collections are added dynamically per
 // project (see the `collections` prop built in the root component).
 const DRAWER_ITEMS = [
   { id: 'drafts',        icon: 'edit_note',    label: 'Drafts'  },
-  { id: 'loose_threads', icon: 'scatter_plot', label: 'Threads' },
 ]
 const SPOOL_DRAWER_PREFIX = 'strands:'
 const DRAWER_MIN_W = 220
@@ -310,18 +323,29 @@ function isPlaceModeTool(tool) {
 // Shared app-wide tooltip — same #woven-tt element and imperative
 // show/hide pattern used elsewhere in App.jsx, so toolbar tooltips look
 // and behave identically to tooltips anywhere else in Woven.
+// Toolbar-specific tooltip helpers — the vertical toolbar sits flush against
+// the right edge of the screen, so the shared #woven-tt tooltip's default
+// centered position runs off-screen. Right-align it to the button instead,
+// and explicitly clear the inline overrides on hide so they don't leak into
+// other (centered) tooltips elsewhere in the app that reuse #woven-tt.
 function showTt(e, text) {
   const tt = document.getElementById('woven-tt')
   if (!tt) return
   const r = e.currentTarget.getBoundingClientRect()
   tt.textContent = text
   tt.style.display = 'block'
-  tt.style.left = (r.left + r.width / 2) + 'px'
+  tt.style.left = 'auto'
+  tt.style.transform = 'none'
+  tt.style.right = (window.innerWidth - r.right) + 'px'
   tt.style.top = (r.bottom + 6) + 'px'
 }
 function hideTt() {
   const tt = document.getElementById('woven-tt')
-  if (tt) tt.style.display = 'none'
+  if (!tt) return
+  tt.style.display = 'none'
+  tt.style.left = ''
+  tt.style.right = ''
+  tt.style.transform = ''
 }
 
 function accentColor(item) {
@@ -425,13 +449,35 @@ function Checkbox({ checked }) {
 // WOVEN CARD NODE
 // ─────────────────────────────────────────────────────────────
 function WovenCardNode({ id, data, selected }) {
-  const { itemType, name, color, visibleFields = [], showStatus, onCtx, findItemFn } = data
-  // Re-resolve item on every render so ctx menu always has fresh data
+  const { itemType, name, color, visibleFields = [], showStatus, onCtx, findItemFn, app, projId } = data
+  // Re-resolve item on every render so ctx menu — and edits — always see fresh data
   const item = findItemFn ? findItemFn(data.itemId) : null
   const statusInfo = item?.status ? STATUSES[item.status] : null
   const shownFields = (item?.fieldDefs || []).filter(
     fd => fd.id !== 'status' && visibleFields.includes(fd.id) && item?.fields?.[fd.id]
   )
+  // Prefer the live item's own name/colour over the snapshot captured when the
+  // card was first placed, so edits made elsewhere (or here) stay in sync.
+  const displayName = item?.name ?? name
+  const displayColor = item ? accentColor(item) : color
+
+  function commitName(v) {
+    v = v.trim()
+    if (!v || v === displayName || !item || !app) return
+    if (itemType === 'strand') app.updateStrand(projId, item.collectionName, item.id, { name: v })
+    else app.updateDraft(projId, item.id, { title: v })
+  }
+
+  function commitField(fd, v) {
+    if (!item || !app) return
+    if (itemType === 'strand') {
+      const nf = { ...(item.fields || {}) }
+      nf[fd.id] = v
+      app.updateStrand(projId, item.collectionName, item.id, { fields: nf })
+    } else if (fd.id === 'synopsis') {
+      app.updateDraft(projId, item.id, { synopsis: v })
+    }
+  }
 
   return (
     <div
@@ -441,12 +487,19 @@ function WovenCardNode({ id, data, selected }) {
       <Handles />
       <div className="woven-card-hdr">
         {itemType === 'strand'
-          ? <div className="woven-card-av" style={{ background: color }}>
-              {item?.image ? <img src={item.image} alt={name} /> : initials(name)}
+          ? <div className="woven-card-av" style={{ background: displayColor }}>
+              {item?.image ? <img src={item.image} alt={displayName} /> : initials(displayName)}
             </div>
-          : <div className="woven-card-dot" style={{ background: color }} />
+          : <div className="woven-card-dot" style={{ background: displayColor }} />
         }
-        <div className="woven-card-name" title={name}>{name}</div>
+        <input
+          key={`${item?.id || id}:${displayName}`}
+          className="woven-card-name-input nodrag"
+          defaultValue={displayName}
+          onBlur={e => commitName(e.target.value)}
+          onClick={e => e.stopPropagation()}
+          onPointerDown={e => e.stopPropagation()}
+        />
         {showStatus && statusInfo && (
           <div className="woven-card-status-badge" style={{ background: statusInfo.color }}>
             {statusInfo.label}
@@ -462,7 +515,15 @@ function WovenCardNode({ id, data, selected }) {
           {shownFields.map(fd => (
             <div className="woven-card-field" key={fd.id}>
               <div className="woven-card-field-lbl">{fd.label}</div>
-              <div className="woven-card-field-val">{item.fields[fd.id]}</div>
+              <textarea
+                key={`${item.id}:${fd.id}:${item.fields[fd.id]}`}
+                className="woven-card-field-input nodrag"
+                defaultValue={item.fields[fd.id]}
+                rows={2}
+                onBlur={e => commitField(fd, e.target.value)}
+                onClick={e => e.stopPropagation()}
+                onPointerDown={e => e.stopPropagation()}
+              />
             </div>
           ))}
         </div>
@@ -605,6 +666,8 @@ function ShapeNode({ id, data, selected }) {
     ? 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)'
     : variant === 'triangle'
     ? 'polygon(50% 0%, 100% 100%, 0% 100%)'
+    : variant === 'arrow'
+    ? 'polygon(0% 35%, 65% 35%, 65% 10%, 100% 50%, 65% 90%, 65% 65%, 0% 65%)'
     : 'none'
   const borderRadius = variant === 'ellipse' ? '50%' : variant === 'rectangle' ? 8 : 0
 
@@ -949,10 +1012,61 @@ function SpoolDrawerPanel({ app, projId, collectionName, strandsObj, templates, 
 }
 
 // ─────────────────────────────────────────────────────────────
-// DRAWER CONTENT — each panel owns its own Drawer (title/back button
-// vary per layer), rather than one shared outer Drawer.
+// DRAFTS PANEL — Drafts and Loose Threads merged into one list.
+// Loose Threads was just another status ('loose_thread'), so instead
+// of a separate toolbar button and drawer, it's now a filter option
+// here alongside every other status.
 // ─────────────────────────────────────────────────────────────
-function DrawerContent({ panel, app, projId, templates, strandsObj, drafts, looseThreads, onDragStart, onAddToCanvas, onClose, width }) {
+function DraftsPanel({ allDrafts, templates, onDragStart, onClose, width }) {
+  const [filter, setFilter] = useState('all')
+  const statusKeys = Object.keys(STATUSES)
+  const list = filter === 'all' ? allDrafts : allDrafts.filter(d => d.status === filter)
+
+  return (
+    <Drawer variant="inline" open title="Drafts" onClose={onClose} width={width} padded={false}>
+      <div className="ex-filter-row">
+        <button className={`ex-filter-pill ${filter === 'all' ? 'active' : ''}`}
+          onClick={() => setFilter('all')}>
+          All
+        </button>
+        {statusKeys.map(k => (
+          <button key={k} className={`ex-filter-pill ${filter === k ? 'active' : ''}`}
+            style={{ '--pill-color': STATUSES[k].color }}
+            onClick={() => setFilter(k)}>
+            {STATUSES[k].label}
+          </button>
+        ))}
+      </div>
+      <div className="ex-edrawer-body">
+        {list.length === 0
+          ? <div style={{ padding: '8px 14px', fontSize: 14, color: 'var(--mid)' }}>
+              No drafts{filter !== 'all' ? ' with this status' : ''} yet.
+            </div>
+          : list.map(d => {
+              const isLT = d.status === 'loose_thread'
+              return (
+                <div key={d.id} className="ex-edrawer-row" draggable
+                  onDragStart={e => onDragStart(e, buildPayload(d, isLT ? 'loose_thread' : 'draft', templates))}>
+                  <div className="ex-edrawer-dot" style={{ background: STATUSES[d.status]?.color }} />
+                  <div className="ex-edrawer-info">
+                    <div className="ex-edrawer-name">
+                      {d.title || d.synopsis || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
+                    </div>
+                    <div className="ex-edrawer-sub">{STATUSES[d.status]?.label}</div>
+                  </div>
+                  <span className="ex-edrawer-hint">drag</span>
+                </div>
+              )
+            })
+        }
+      </div>
+    </Drawer>
+  )
+}
+
+function DrawerContent({ panel, app, projId, templates, strandsObj, allDrafts, onDragStart, onAddToCanvas, onClose, width }) {
+  // Each panel below owns its own Drawer (title/back button vary per layer),
+  // rather than one shared outer Drawer.
   if (panel?.startsWith(SPOOL_DRAWER_PREFIX)) {
     const collectionName = panel.slice(SPOOL_DRAWER_PREFIX.length)
     return (
@@ -971,49 +1085,13 @@ function DrawerContent({ panel, app, projId, templates, strandsObj, drafts, loos
   }
   if (panel === 'drafts') {
     return (
-      <Drawer variant="inline" open title="Drafts" onClose={onClose} width={width} padded={false}>
-        <div className="ex-edrawer-body">
-          {drafts.length === 0
-            ? <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--mid)' }}>No drafts yet.</div>
-            : drafts.map(d => (
-                <div key={d.id} className="ex-edrawer-row" draggable
-                  onDragStart={e => onDragStart(e, buildPayload(d, 'draft', templates))}>
-                  <div className="ex-edrawer-dot" style={{ background: STATUSES[d.status]?.color }} />
-                  <div className="ex-edrawer-info">
-                    <div className="ex-edrawer-name">
-                      {d.title || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
-                    </div>
-                    <div className="ex-edrawer-sub">{STATUSES[d.status]?.label}</div>
-                  </div>
-                  <span className="ex-edrawer-hint">drag</span>
-                </div>
-              ))
-          }
-        </div>
-      </Drawer>
-    )
-  }
-  if (panel === 'loose_threads') {
-    return (
-      <Drawer variant="inline" open title="Threads" onClose={onClose} width={width} padded={false}>
-        <div className="ex-edrawer-body">
-          {looseThreads.length === 0
-            ? <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--mid)' }}>No loose threads.</div>
-            : looseThreads.map(lt => (
-                <div key={lt.id} className="ex-edrawer-row" draggable
-                  onDragStart={e => onDragStart(e, buildPayload(lt, 'loose_thread', templates))}>
-                  <div className="ex-edrawer-dot" style={{ background: STATUSES.loose_thread.color }} />
-                  <div className="ex-edrawer-info">
-                    <div className="ex-edrawer-name">
-                      {lt.title || lt.synopsis || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
-                    </div>
-                  </div>
-                  <span className="ex-edrawer-hint">drag</span>
-                </div>
-              ))
-          }
-        </div>
-      </Drawer>
+      <DraftsPanel
+        allDrafts={allDrafts}
+        templates={templates}
+        onDragStart={onDragStart}
+        onClose={onClose}
+        width={width}
+      />
     )
   }
   return null
@@ -1158,12 +1236,11 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, colle
 // ─────────────────────────────────────────────────────────────
 // FLOW CANVAS
 // ─────────────────────────────────────────────────────────────
-function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, strandsObj, drafts, looseThreads, pendingAdd, onPendingAddConsumed }) {
+function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, strandsObj, drafts, looseThreads, pendingAdd, onPendingAddConsumed, app }) {
   const { screenToFlowPosition } = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [ctx, setCtx] = useState(null)
-  const [connectFrom, setConnectFrom] = useState(null)
   const canvasRef = useRef(null)
   const saveTimer = useRef(null)
   const boardIdRef = useRef(boardId)
@@ -1171,9 +1248,9 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
 
   // Build live item lookup — always reflects latest app data
   const findItem = useCallback((id) => {
-    for (const items of Object.values(strandsObj)) {
+    for (const [collectionName, items] of Object.entries(strandsObj)) {
       const s = items.find(s => s.id === id)
-      if (s) return buildPayload(s, 'strand', templates)
+      if (s) return { ...buildPayload(s, 'strand', templates), collectionName }
     }
     const d = drafts.find(d => d.id === id)
     if (d) return buildPayload(d, 'draft', templates)
@@ -1216,6 +1293,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       <WovenCardNode {...props} data={{
         ...props.data,
         findItemFn: findItem,
+        app, projId,
         onCtx: (e, id, data) => setCtx({ nodeId: id, nodeType: 'wovenCard', x: e.clientX, y: e.clientY, data }),
       }} />
     ),
@@ -1223,7 +1301,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     imageNode:  ImageNode,
     shapeNode:  ShapeNode,
     textNode:   TextNode,
-  }), [findItem])
+  }), [findItem, app, projId])
 
   function updateNode(nodeId, patch) {
     setNodes(nds => nds.map(n => n.id !== nodeId ? n : { ...n, data: { ...n.data, ...patch } }))
@@ -1245,36 +1323,6 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       style: { stroke: 'var(--bg4)', strokeWidth: 2 },
     }, eds))
   }, [setEdges])
-
-  // Click-to-connect — a touch-friendly alternative to dragging from a
-  // (hover-only, hard to hit on touch) handle. Tap a first node, then a
-  // second, to draw a connection between them.
-  const clearConnectPick = useCallback(() => {
-    setConnectFrom(null)
-    setNodes(nds => nds.map(n => n.selected ? { ...n, selected: false } : n))
-  }, [setNodes])
-
-  useEffect(() => {
-    if (activeTool !== 'connect') clearConnectPick()
-  }, [activeTool, clearConnectPick])
-
-  const onNodeClick = useCallback((e, node) => {
-    if (activeTool !== 'connect') return
-    e.stopPropagation()
-    if (!connectFrom) {
-      setConnectFrom(node.id)
-      setNodes(nds => nds.map(n => ({ ...n, selected: n.id === node.id })))
-      return
-    }
-    if (connectFrom === node.id) { clearConnectPick(); return }
-    setEdges(eds => addEdge({
-      source: connectFrom, target: node.id,
-      sourceHandle: 'bottom', targetHandle: 'top-t',
-      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 18, height: 18 },
-      style: { stroke: 'var(--bg4)', strokeWidth: 2 },
-    }, eds))
-    clearConnectPick()
-  }, [activeTool, connectFrom, setNodes, setEdges, clearConnectPick])
 
   const onDragOver = useCallback((e) => {
     e.preventDefault(); e.dataTransfer.dropEffect = 'copy'
@@ -1319,7 +1367,6 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
   }, [pendingAdd, templates, screenToFlowPosition, setNodes, onPendingAddConsumed])
 
   const onPaneClick = useCallback((e) => {
-    if (activeTool === 'connect') { clearConnectPick(); return }
     if (!isPlaceModeTool(activeTool)) return
     const rect = canvasRef.current.getBoundingClientRect()
     const position = screenToFlowPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top })
@@ -1352,7 +1399,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       }])
     }
     onToolReset()
-  }, [activeTool, screenToFlowPosition, setNodes, onToolReset, clearConnectPick])
+  }, [activeTool, screenToFlowPosition, setNodes, onToolReset])
 
   const isPlaceMode = isPlaceModeTool(activeTool)
 
@@ -1362,14 +1409,12 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
         nodes={nodes} edges={edges}
         onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
         onConnect={onConnect} onDrop={onDrop} onDragOver={onDragOver}
-        onPaneClick={onPaneClick} onNodeClick={onNodeClick}
+        onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         panOnDrag={!isPlaceMode}
         selectionOnDrag={!isPlaceMode}
-        nodesDraggable={activeTool !== 'connect'}
         deleteKeyCode={['Delete', 'Backspace']}
-        className={activeTool === 'connect' ? 'ex-connect-mode' : ''}
-        style={{ cursor: (isPlaceMode || activeTool === 'connect') ? 'crosshair' : 'default' }}
+        style={{ cursor: isPlaceMode ? 'crosshair' : 'default' }}
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={36} size={1.5}
@@ -1516,7 +1561,7 @@ export default function ExploreCanvas({ app }) {
           />
           <div className="ex-canvas-row">
             <div className="ex-canvas-area"
-              style={{ cursor: (isPlaceModeTool(activeTool) || activeTool === 'connect') ? 'crosshair' : undefined }}>
+              style={{ cursor: isPlaceModeTool(activeTool) ? 'crosshair' : undefined }}>
               <ReactFlowProvider>
                 <FlowCanvas
                   key={`${projId}:${activeBoard}`}
@@ -1525,6 +1570,7 @@ export default function ExploreCanvas({ app }) {
                   templates={templates} strandsObj={strandsObj}
                   drafts={drafts} looseThreads={looseThreads}
                   pendingAdd={pendingAdd} onPendingAddConsumed={() => setPendingAdd(null)}
+                  app={app}
                 />
               </ReactFlowProvider>
             </div>
@@ -1546,7 +1592,7 @@ export default function ExploreCanvas({ app }) {
                     panel={activeDrawer}
                     app={app} projId={projId}
                     templates={templates} strandsObj={strandsObj}
-                    drafts={drafts} looseThreads={looseThreads}
+                    allDrafts={allDrafts}
                     onDragStart={handleDragStart}
                     onAddToCanvas={setPendingAdd}
                     onClose={() => setActiveDrawer(null)}
