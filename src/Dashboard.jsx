@@ -1,7 +1,15 @@
 // @ts-nocheck
 import { useState } from "react";
 import { Drawer } from './SharedUI'
-import { genId, initials, todayStr } from './utils'
+import { genId, initials, todayStr, countWords } from './utils'
+
+// Plain text -> simple paragraph HTML, matching how draft bodies are stored
+// elsewhere. Mirrors the same conversion in LooseThreadDrawer.jsx.
+function textToHtml(text){
+  var t=(text||'').trim();
+  if(!t)return '';
+  return t.split(/\n{2,}/).map(function(para){return '<p>'+para.split('\n').join('<br>')+'</p>';}).join('');
+}
 import LooseThreadDrawer from './LooseThreadDrawer'
 import ProjectDrawer from './ProjectDrawer'
 
@@ -128,7 +136,8 @@ function GlobalLooseThreads({app}){
   function moveToProject(ltId,targetPid){
     if(!targetPid)return;
     var lt=app.globalLT[ltId];if(!lt)return;
-    app.addDraft(targetPid,{id:genId(),projectId:targetPid,title:lt.title||'',synopsis:lt.synopsis||'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+    var text=lt.synopsis||'';
+    app.addDraft(targetPid,{id:genId(),projectId:targetPid,title:lt.title||'',synopsis:'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:textToHtml(text),wordCount:countWords(text),strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
     app.updateGlobalLT(ltId,{archived:true});
   }
   var ssm=useState(false);var showMore=ssm[0];var setShowMore=ssm[1];

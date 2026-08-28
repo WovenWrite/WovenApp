@@ -21,7 +21,7 @@ import {
   compressImage, uploadImage, deleteStorageImage,
   saveSnapshot
 } from './utils'
-import { PROJ_TYPES, projIsNumbered, projIsManualOrder, projSequence, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
+import { PROJ_TYPES, projIsNumbered, projIsManualOrder, projSequence, projThumbnails, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
 // Snapshot helpers, Supabase client, and env constants now live in ./utils
 
 // ── Storage ──
@@ -1128,6 +1128,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   onMouseLeave={function(e){e.currentTarget.style.boxShadow='0 2px 8px rgba(42,31,16,.06)';e.currentTarget.style.borderColor='transparent';}}
 >
   {/* Thumbnail */}
+  {projThumbnails(cardProj)&&(
   <div
     style={{height:150,background:'#E2D0B8',flexShrink:0,backgroundImage:draft.thumbnail?'url('+draft.thumbnail+')':undefined,backgroundSize:'cover',backgroundPosition:'center',position:'relative',borderRadius:'13px 13px 0 0',overflow:'hidden',cursor:structureMode?'pointer':'inherit'}}
     onMouseEnter={function(){if(structureMode)setThumbHover(true);}}
@@ -1147,6 +1148,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
 </div>
     )}
   </div>
+  )}
 
   {/* Content */}
   <div style={{flex:1,background:'#F5EDE0',padding:'10px 15px',display:'flex',flexDirection:'column',gap:10,minHeight:0,borderRadius:'0 0 13px 13px',overflow:'hidden'}}>

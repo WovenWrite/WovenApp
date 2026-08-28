@@ -606,6 +606,22 @@ export function FloatingPanel({ anchorRef, open, onClose, children, minWidth, ga
   );
 }
 
+// Reads the per-project spool tab order saved from the Spools page
+// (StrandsPage in App.tsx writes this same key on drag-reorder) so any
+// collection list here matches what the user arranged, rather than raw
+// object key order — which isn't guaranteed to round-trip through storage
+// unchanged.
+function orderedCollNames(pid, rawNames) {
+  var saved = null;
+  try {
+    var s = localStorage.getItem('woven:collOrder:' + pid);
+    if (s) saved = JSON.parse(s);
+  } catch (e) {}
+  if (!saved) return rawNames;
+  return saved.filter(function (c) { return rawNames.indexOf(c) >= 0; })
+    .concat(rawNames.filter(function (c) { return saved.indexOf(c) < 0; }));
+}
+
 export function StrandSearchDropdown({ app, pid, collection, excludeIds, onPick, onClose, style }) {
   var sq = useState(''); var query = sq[0]; var setQuery = sq[1];
   var ref = useRef(null);
@@ -625,7 +641,7 @@ export function StrandSearchDropdown({ app, pid, collection, excludeIds, onPick,
 
   var excl = excludeIds || [];
   var all = [];
-  var collNames = collection ? [collection] : Object.keys(projStrands);
+  var collNames = collection ? [collection] : orderedCollNames(pid, Object.keys(projStrands));
   collNames.forEach(function (coll) {
     (projStrands[coll] || []).forEach(function (st) {
       if (excl.indexOf(st.id) < 0) all.push(Object.assign({}, st, { collectionName: coll }));
@@ -665,7 +681,7 @@ export function StrandRefPicker({ app, pid, collection, value, onChange, placeho
     return (t && t.icon) || 'auto_stories';
   }
   var all = [];
-  var collNames = collection ? [collection] : Object.keys(projStrands);
+  var collNames = collection ? [collection] : orderedCollNames(pid, Object.keys(projStrands));
   collNames.forEach(function (coll) {
     (projStrands[coll] || []).forEach(function (st) {
       all.push(Object.assign({}, st, { collectionName: coll }));
