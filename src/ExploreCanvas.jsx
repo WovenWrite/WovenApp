@@ -15,9 +15,9 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   ReactFlow, ReactFlowProvider, Background, BackgroundVariant,
   Controls, MiniMap, addEdge, useNodesState, useEdgesState, useReactFlow,
-  Handle, Position, NodeResizer,
+  Handle, Position, NodeResizer, MarkerType,
 } from '@xyflow/react'
-import { Drawer } from './SharedUI'
+import { Drawer, DeleteConfirmModal, StrandResultRow, HelpText, SearchSortBar } from './SharedUI'
 import { STATUSES, genId, initials, getSupabase } from './utils'
 
 // ─────────────────────────────────────────────────────────────
@@ -28,28 +28,29 @@ const CANVAS_CSS = `
 .ex-body{display:flex;flex:1;overflow:hidden;min-height:0;}
 .ex-canvas-col{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0;}
 
-/* Board tabs */
-.ex-tabs{display:flex;align-items:flex-end;height:36px;background:var(--bg1);
-  border-bottom:1px solid var(--border);padding:0 8px;gap:2px;flex-shrink:0;overflow:hidden;}
-.ex-tab{display:flex;align-items:center;gap:5px;height:28px;padding:0 10px;
-  border-radius:6px 6px 0 0;font-size:12px;font-weight:500;cursor:pointer;
-  color:var(--mid);border:1px solid transparent;border-bottom:none;
-  transition:all .12s;white-space:nowrap;max-width:160px;flex-shrink:0;}
-.ex-tab:hover{color:var(--text);background:var(--bg2);}
-.ex-tab.active{background:var(--bg0);color:var(--text);border-color:var(--border);
-  border-bottom-color:var(--bg0);position:relative;top:1px;}
-.ex-tab-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.ex-tab-name-input{background:none;border:none;outline:none;font-family:var(--ui);
-  font-size:12px;font-weight:500;color:var(--text);width:80px;padding:0;border-radius:0;}
-.ex-tab-close{font-size:13px;color:var(--placeholder);border-radius:3px;padding:1px 2px;
+/* Board tabs — styled to match the Strands page subnav/tab treatment */
+.ex-tabs{display:flex;align-items:flex-end;height:55px;background:#EDE0CC;
+  border-bottom:1px solid #A88060;padding:0 16px;gap:0;flex-shrink:0;overflow:hidden;}
+.ex-tab{display:flex;align-items:center;gap:6px;height:44px;padding:0 18px;
+  border-radius:10px 10px 0 0;font-size:16px;font-family:'DM Sans',sans-serif;font-weight:600;
+  cursor:pointer;color:rgba(122,90,56,.75);border:1px solid transparent;border-bottom:none;
+  transition:all .15s;white-space:nowrap;max-width:240px;flex-shrink:0;margin-right:2px;
+  position:relative;bottom:0;}
+.ex-tab:hover:not(.active){color:#7A5A38;background:rgba(253,248,240,.4);}
+.ex-tab.active{background:#FDF8F0;color:#6B4A26;border-color:#A88060;
+  border-bottom:2px solid #FDF8F0;margin-bottom:-1px;}
+.ex-tab-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
+.ex-tab-name-input{background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;
+  font-size:16px;font-weight:600;color:inherit;width:100px;padding:0;border-radius:0;}
+.ex-tab-close{font-size:15px;color:rgba(122,90,56,.5);border-radius:3px;padding:1px 2px;
   display:flex;align-items:center;justify-content:center;font-family:'Material Icons';
   line-height:1;flex-shrink:0;}
-.ex-tab-close:hover{background:var(--bg3);color:var(--text);}
-.ex-tab-add{width:26px;height:26px;border-radius:6px;border:1px dashed var(--border);
+.ex-tab-close:hover{background:rgba(168,128,96,.25);color:#6B4A26;}
+.ex-tab-add{width:32px;height:32px;border-radius:8px;border:1px dashed #A88060;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
-  color:var(--placeholder);font-size:18px;flex-shrink:0;margin-left:2px;
+  color:rgba(122,90,56,.6);font-size:20px;flex-shrink:0;margin:0 0 6px 6px;
   transition:all .12s;line-height:1;user-select:none;}
-.ex-tab-add:hover{border-color:var(--indigo);color:var(--indigo);background:rgba(196,94,40,.05);}
+.ex-tab-add:hover{border-color:var(--indigo);color:var(--indigo);background:rgba(196,94,40,.08);}
 
 /* Canvas row */
 .ex-canvas-row{flex:1;display:flex;overflow:hidden;min-height:0;}
@@ -77,41 +78,44 @@ const CANVAS_CSS = `
 .react-flow__node:hover .woven-card:not(.selected){
   box-shadow:0 0 0 2px rgba(196,94,40,.2),0 4px 16px rgba(42,31,16,.1);}
 
+/* Connect tool active — override React Flow's default grab cursor on
+   nodes so hovering shows the same crosshair as the empty pane. */
+
 /* Right panel */
 .ex-right{display:flex;flex-direction:row-reverse;flex-shrink:0;}
 
 /* Toolbar */
 .ex-toolbar{width:60px;background:var(--bg1);display:flex;flex-direction:column;
-  align-items:center;padding:10px 0;gap:1px;flex-shrink:0;border-left:1px solid var(--border);}
-.ex-tool{width:52px;min-height:46px;border-radius:8px;display:flex;flex-direction:column;
+  align-items:center;padding:10px 0;gap:2px;flex-shrink:0;border-left:1px solid var(--border);
+  min-height:0;overflow:hidden;}
+.ex-tool{width:44px;height:44px;border-radius:8px;display:flex;
   align-items:center;justify-content:center;cursor:pointer;color:var(--mid);
-  transition:all .12s;gap:2px;padding:4px 2px;}
+  transition:all .12s;flex-shrink:0;}
 .ex-tool:hover{background:var(--bg2);color:var(--text);}
 .ex-tool.active{background:rgba(196,94,40,.12);color:var(--indigo);}
-.ex-tool .mi{font-size:18px;line-height:1;}
-.ex-tool-lbl{font-size:9px;font-weight:500;text-align:center;line-height:1;}
-.ex-tool-sep{width:32px;height:1px;background:var(--border);margin:4px 0;flex-shrink:0;}
+.ex-tool .material-symbols-outlined{font-size:22px;line-height:1;}
+.ex-tool-sep{width:28px;height:1px;background:#A88060;opacity:.4;margin:5px 0;flex-shrink:0;}
+/* Per-Spool collection buttons — one per Spool, dynamic per project.
+   Scrolls independently so a project with many Spools doesn't push
+   the fixed placement tools or Drafts/Threads off screen. */
+.ex-toolbar-colls{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;
+  align-items:center;gap:2px;width:100%;scrollbar-width:thin;}
+.ex-toolbar-colls::-webkit-scrollbar{width:4px;}
+.ex-toolbar-colls::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
 
 /* Drawer */
 .ex-drawer{width:0;overflow:hidden;transition:width .2s ease;background:var(--bg1);
-  border-left:1px solid var(--border);display:flex;flex-direction:column;}
-.ex-drawer.open{width:280px;margin:5px 5px 5px 0;border:1px solid var(--border);border-radius:var(--r);}
-.ex-drawer-inner{width:280px;display:flex;flex-direction:column;height:100%;overflow:hidden;}
+  border-left:1px solid var(--border);display:flex;flex-direction:column;position:relative;}
+.ex-drawer.open{margin:5px 5px 5px 0;border:1px solid var(--border);border-radius:var(--r);}
+.ex-drawer.resizing{transition:none;}
+.ex-drawer-inner{display:flex;flex-direction:column;height:100%;overflow:hidden;}
+.ex-drawer-resize-handle{position:absolute;top:0;left:-4px;width:8px;height:100%;
+  cursor:col-resize;z-index:5;touch-action:none;}
+.ex-drawer-resize-handle::after{content:'';position:absolute;top:0;left:3px;width:2px;height:100%;
+  background:transparent;transition:background .15s;}
+.ex-drawer-resize-handle:hover::after,.ex-drawer.resizing .ex-drawer-resize-handle::after{
+  background:var(--indigo);}
 .ex-edrawer-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
-
-/* Strand collection tabs — scrollable with overflow arrows */
-.ex-coll-tabs-wrap{display:flex;align-items:center;border-bottom:1px solid var(--border);
-  flex-shrink:0;background:var(--bg1);}
-.ex-coll-tabs-scroll{display:flex;overflow-x:auto;flex:1;scrollbar-width:none;}
-.ex-coll-tabs-scroll::-webkit-scrollbar{display:none;}
-.ex-coll-tab{padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;
-  color:var(--mid);border-bottom:2px solid transparent;white-space:nowrap;
-  transition:color .12s;flex-shrink:0;}
-.ex-coll-tab:hover{color:var(--text);}
-.ex-coll-tab.active{color:var(--indigo);border-bottom-color:var(--indigo);}
-.ex-coll-arrow{width:24px;height:32px;display:flex;align-items:center;justify-content:center;
-  cursor:pointer;color:var(--mid);flex-shrink:0;font-size:14px;}
-.ex-coll-arrow:hover{color:var(--text);}
 
 .ex-edrawer-section{padding:10px 14px;}
 .ex-edrawer-lbl{font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;
@@ -120,6 +124,8 @@ const CANVAS_CSS = `
   border-bottom:1px solid var(--border);cursor:grab;user-select:none;transition:background .12s;}
 .ex-edrawer-row:hover{background:var(--bg2);}
 .ex-edrawer-row:active{cursor:grabbing;}
+.ex-spool-row{cursor:grab;}
+.ex-spool-row:active{cursor:grabbing;}
 .ex-edrawer-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;
   justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0;overflow:hidden;}
 .ex-edrawer-av img{width:100%;height:100%;object-fit:cover;}
@@ -132,43 +138,64 @@ const CANVAS_CSS = `
   opacity:0;transition:opacity .12s;flex-shrink:0;}
 .ex-edrawer-row:hover .ex-edrawer-hint{opacity:1;}
 
+/* Drafts panel rows — styled to match StrandResultRow's visual weight
+   (bold serif title, generous size) rather than the old compact row. */
+.ex-draft-row{display:flex;align-items:center;gap:10px;padding:10px 14px;
+  cursor:grab;border-bottom:1px solid var(--border);transition:background .12s;}
+.ex-draft-row:last-child{border-bottom:none;}
+.ex-draft-row:hover{background:var(--bg2);}
+.ex-draft-row:active{cursor:grabbing;}
+.ex-draft-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;}
+.ex-draft-info{flex:1;min-width:0;}
+.ex-draft-title{font-family:var(--serif,'Crimson Text',serif);font-weight:600;font-size:18px;
+  line-height:1.3;color:#684a26;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ex-draft-sub{font-size:14px;color:var(--mid);margin-top:2px;}
+
 /* Woven cards */
 .woven-card{background:var(--bg1);border:1.5px solid var(--border);border-radius:10px;
-  display:flex;flex-direction:column;font-family:var(--ui);overflow:hidden;
-  box-shadow:0 2px 8px rgba(42,31,16,.08);min-width:180px;max-width:260px;}
+  display:flex;flex-direction:column;font-family:var(--ui);overflow:hidden;position:relative;
+  box-shadow:0 2px 8px rgba(42,31,16,.08);min-width:200px;max-width:280px;}
 .woven-card.selected{border-color:var(--indigo);box-shadow:0 0 0 2px rgba(196,94,40,.15);}
-.woven-card-hdr{display:flex;align-items:center;gap:7px;padding:8px 10px;
+.woven-card-hdr{display:flex;align-items:center;gap:10px;padding:10px;
   background:var(--bg0);flex-shrink:0;}
-.woven-card-av{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;
-  align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;overflow:hidden;}
+.woven-card-av{width:75px;height:75px;border-radius:50%;flex-shrink:0;display:flex;
+  align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#fff;overflow:hidden;}
 .woven-card-av img{width:100%;height:100%;object-fit:cover;}
 .woven-card-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
-.woven-card-name{font-family:var(--serif);font-size:14px;font-weight:600;color:var(--text);
-  flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.woven-card-status-badge{font-size:9px;font-weight:600;text-transform:uppercase;
-  letter-spacing:.05em;color:#fff;padding:2px 5px;border-radius:3px;flex-shrink:0;}
-.woven-card-body.has-content{padding:7px 10px;border-top:1px solid var(--border);}
-.woven-card-field{margin-bottom:5px;}
+.woven-card-name-input{font-family:var(--serif);font-size:16px;font-weight:600;color:var(--text);
+  flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  border:none;background:transparent;outline:none;padding:2px 3px;border-radius:4px;cursor:text;}
+.woven-card-name-input:hover{background:rgba(122,90,56,.08);}
+.woven-card-name-input:focus{background:rgba(196,94,40,.08);white-space:normal;}
+.woven-card-status-badge{font-size:14px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.03em;color:#fff;padding:3px 8px;border-radius:4px;flex-shrink:0;}
+.woven-card-body.has-content{padding:8px 10px;border-top:1px solid var(--border);}
+.woven-card-field{margin-bottom:7px;}
 .woven-card-field:last-child{margin-bottom:0;}
-.woven-card-field-lbl{font-size:9px;font-weight:600;color:var(--indigo);text-transform:uppercase;
-  letter-spacing:.06em;margin-bottom:1px;}
-.woven-card-field-val{font-size:11px;color:var(--body-text);line-height:1.4;
-  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+.woven-card-field-lbl{font-size:14px;font-weight:600;color:var(--indigo);text-transform:uppercase;
+  letter-spacing:.04em;margin-bottom:2px;}
+.woven-card-field-input{font-size:16px;color:var(--body-text);line-height:1.4;font-family:var(--ui);
+  border:none;background:transparent;outline:none;resize:none;width:100%;padding:2px 3px;
+  border-radius:4px;box-sizing:border-box;cursor:text;}
+.woven-card-field-input:hover{background:rgba(122,90,56,.08);}
+.woven-card-field-input:focus{background:rgba(196,94,40,.08);}
+.woven-card-field-input::placeholder{color:var(--placeholder);font-style:italic;}
 
 /* Sticky note */
-.ex-sticky{border-radius:8px;display:flex;flex-direction:column;overflow:hidden;
+.ex-sticky{border-radius:8px;display:flex;flex-direction:column;overflow:hidden;position:relative;
   min-width:160px;min-height:60px;box-shadow:2px 3px 10px rgba(0,0,0,.08);}
 .ex-sticky-drag{height:18px;cursor:grab;display:flex;align-items:center;
   padding:0 6px;flex-shrink:0;opacity:.4;}
 .ex-sticky-drag:active{cursor:grabbing;}
 .ex-sticky-drag .mi{font-size:13px;}
-.ex-sticky-content{padding:4px 12px 10px;flex:1;}
-.ex-sticky-input{background:none;border:none;outline:none;width:100%;resize:none;line-height:1.45;}
+.ex-sticky-content{padding:4px 12px 10px;flex:1;display:flex;min-height:0;}
+.ex-sticky-input{background:none;border:none;outline:none;width:100%;resize:none;line-height:1.45;
+  flex:1;min-height:0;height:100%;box-sizing:border-box;}
 .ex-sticky-input.is-title{font-family:var(--serif);font-size:16px;font-weight:600;}
 .ex-sticky-input.is-body{font-family:var(--ui);font-size:13px;}
 .ex-sticky-input::placeholder{opacity:.4;}
 
-/* Image node — no header bar */
+/* Image node — no header bar, corner grip only */
 .ex-image-node{border:1.5px solid var(--border);border-radius:8px;overflow:hidden;
   box-shadow:0 2px 8px rgba(42,31,16,.08);background:var(--bg1);
   display:flex;align-items:center;justify-content:center;position:relative;}
@@ -183,6 +210,41 @@ const CANVAS_CSS = `
   justify-content:center;flex-direction:column;gap:6px;cursor:pointer;color:var(--placeholder);}
 .ex-image-empty .mi{font-size:32px;}
 .ex-image-empty span{font-size:12px;}
+
+/* Always-tappable node menu button — touch parity for right-click-only
+   secondary actions (colour, shape, style). Subtle on desktop, but never
+   hover-gated, so it works on touch devices with no hover state. */
+.ex-node-menu-btn{position:absolute;top:4px;right:4px;width:26px;height:26px;
+  border-radius:6px;background:rgba(255,255,255,.6);border:none;display:flex;
+  align-items:center;justify-content:center;cursor:pointer;z-index:3;
+  opacity:.6;transition:opacity .15s,background .15s;padding:0;}
+.ex-node-menu-btn:hover,.ex-node-menu-btn:focus-visible{opacity:1;background:rgba(255,255,255,.9);}
+.ex-node-menu-btn .mi{font-size:16px;color:var(--mid);}
+.ex-node-menu-btn--inline{position:static;flex-shrink:0;background:transparent;}
+.ex-node-menu-btn--inline:hover,.ex-node-menu-btn--inline:focus-visible{background:var(--bg2);}
+
+/* Shape node */
+.ex-shape-node{position:relative;box-shadow:0 2px 8px rgba(42,31,16,.08);}
+
+/* Text node — no chrome, just editable text on the canvas */
+.ex-text-node{position:relative;display:flex;flex-direction:column;min-width:60px;min-height:30px;}
+.ex-text-drag{height:14px;cursor:grab;display:flex;align-items:center;
+  padding:0 4px;flex-shrink:0;opacity:0;transition:opacity .15s;}
+.ex-text-node:hover .ex-text-drag{opacity:.4;}
+.ex-text-drag:active{cursor:grabbing;}
+.ex-text-drag .mi{font-size:12px;}
+.ex-text-input{background:none;border:none;outline:none;width:100%;flex:1;resize:none;
+  font-family:var(--serif);line-height:1.3;}
+.ex-text-input::placeholder{opacity:.35;}
+
+/* Shape tool popover — hangs off the Shape toolbar button */
+.ex-shape-popover{position:absolute;right:64px;top:0;background:var(--bg1);
+  border:1px solid var(--border);border-radius:var(--r);box-shadow:0 8px 28px rgba(42,31,16,.16);
+  padding:6px;display:flex;flex-direction:column;gap:2px;z-index:20;}
+.ex-shape-popover-item{width:38px;height:38px;border-radius:6px;display:flex;
+  align-items:center;justify-content:center;cursor:pointer;color:var(--mid);transition:all .12s;}
+.ex-shape-popover-item:hover{background:var(--bg2);color:var(--indigo);}
+.ex-shape-popover-item .material-symbols-outlined{font-size:22px;}
 
 /* Context menu */
 .ex-ctx{position:fixed;z-index:9999;background:var(--bg1);border:1px solid var(--border);
@@ -209,19 +271,6 @@ const CANVAS_CSS = `
 .ex-ctx-action.danger{color:var(--danger);}
 .ex-ctx-action .mi{font-size:15px;}
 
-/* Delete board modal */
-.ex-modal-wrap{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;}
-.ex-modal-bg{position:absolute;inset:0;background:rgba(42,31,16,.4);backdrop-filter:blur(2px);}
-.ex-modal{position:relative;background:var(--bg1);border:1px solid var(--border);
-  border-radius:var(--rl);padding:28px;width:420px;max-width:92vw;
-  box-shadow:0 20px 60px rgba(42,31,16,.18);z-index:1;}
-.ex-modal-title{font-family:var(--serif);font-size:20px;font-weight:600;color:var(--text);margin-bottom:10px;}
-.ex-modal-body{font-size:14px;color:var(--body-text);line-height:1.6;margin-bottom:16px;}
-.ex-modal-input{width:100%;border:1.5px solid var(--border);border-radius:var(--r);
-  padding:8px 12px;font-family:var(--ui);font-size:14px;background:var(--bg0);
-  color:var(--text);outline:none;margin-bottom:16px;}
-.ex-modal-input:focus{border-color:var(--indigo);}
-.ex-modal-btns{display:flex;gap:8px;}
 `
 
 function CanvasStyles() {
@@ -243,20 +292,67 @@ const STICKY_COLORS = [
 ]
 
 const TOOL_ITEMS = [
-  { id: 'select', icon: 'near_me',            label: 'Select' },
-  { id: 'sticky', icon: 'sticky_note_2',       label: 'Sticky' },
-  { id: 'image',  icon: 'add_photo_alternate', label: 'Image'  },
+  { id: 'select',  icon: 'near_me',            label: 'Select'  },
+  { id: 'text',    icon: 'text_fields',        label: 'Text'    },
+  { id: 'shape',   icon: 'category',           label: 'Shape'   },
+  { id: 'sticky',  icon: 'sticky_note_2',       label: 'Sticky'  },
+  { id: 'image',   icon: 'add_photo_alternate', label: 'Image'   },
 ]
+const SHAPE_VARIANTS = [
+  { id: 'rectangle', icon: 'rectangle',       label: 'Rectangle' },
+  { id: 'ellipse',   icon: 'circle',          label: 'Ellipse'   },
+  { id: 'diamond',   icon: 'diamond',         label: 'Diamond'   },
+  { id: 'triangle',  icon: 'change_history',  label: 'Triangle'  },
+  { id: 'arrow',     icon: 'arrow_right_alt', label: 'Arrow'     },
+]
+// Static drawer buttons — Spool collections are added dynamically per
+// project (see the `collections` prop built in the root component).
 const DRAWER_ITEMS = [
-  { id: 'strands',       icon: 'share',        label: 'Strands' },
   { id: 'drafts',        icon: 'edit_note',    label: 'Drafts'  },
-  { id: 'loose_threads', icon: 'scatter_plot', label: 'Threads' },
 ]
+const SPOOL_DRAWER_PREFIX = 'strands:'
+const DRAWER_MIN_W = 220
+const DRAWER_MAX_W = 520
+
+// A tool id is "place mode" if choosing it means the next canvas click/tap
+// drops a new node — sticky, image, text, or any shape:<variant>.
+function isPlaceModeTool(tool) {
+  return tool === 'sticky' || tool === 'image' || tool === 'text' || tool.startsWith('shape:')
+}
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────
 // genId and initials now live in ./utils
+
+// Shared app-wide tooltip — same #woven-tt element and imperative
+// show/hide pattern used elsewhere in App.jsx, so toolbar tooltips look
+// and behave identically to tooltips anywhere else in Woven.
+// Toolbar-specific tooltip helpers — the vertical toolbar sits flush against
+// the right edge of the screen, so the shared #woven-tt tooltip's default
+// centered position runs off-screen. Right-align it to the button instead,
+// and explicitly clear the inline overrides on hide so they don't leak into
+// other (centered) tooltips elsewhere in the app that reuse #woven-tt.
+function showTt(e, text) {
+  const tt = document.getElementById('woven-tt')
+  if (!tt) return
+  const r = e.currentTarget.getBoundingClientRect()
+  tt.textContent = text
+  tt.style.display = 'block'
+  tt.style.left = 'auto'
+  tt.style.transform = 'none'
+  tt.style.right = (window.innerWidth - r.right) + 'px'
+  tt.style.top = (r.bottom + 6) + 'px'
+}
+function hideTt() {
+  const tt = document.getElementById('woven-tt')
+  if (!tt) return
+  tt.style.display = 'none'
+  tt.style.left = ''
+  tt.style.right = ''
+  tt.style.transform = ''
+}
+
 function accentColor(item) {
   if (!item) return '#aaa'
   if (item.itemType === 'strand') return item.color || '#aaa'
@@ -358,13 +454,38 @@ function Checkbox({ checked }) {
 // WOVEN CARD NODE
 // ─────────────────────────────────────────────────────────────
 function WovenCardNode({ id, data, selected }) {
-  const { itemType, name, color, visibleFields = [], showStatus, onCtx, findItemFn } = data
-  // Re-resolve item on every render so ctx menu always has fresh data
+  const { itemType, name, color, visibleFields = [], showStatus, onCtx, findItemFn, app, projId } = data
+  // Re-resolve item on every render so ctx menu — and edits — always see fresh data
   const item = findItemFn ? findItemFn(data.itemId) : null
   const statusInfo = item?.status ? STATUSES[item.status] : null
+  // Show any field the user has chosen to display on this card (visibleFields),
+  // regardless of whether it currently has a value — fields are editable
+  // right here now, so an empty one just means "click to fill it in".
   const shownFields = (item?.fieldDefs || []).filter(
-    fd => fd.id !== 'status' && visibleFields.includes(fd.id) && item?.fields?.[fd.id]
+    fd => fd.id !== 'status' && visibleFields.includes(fd.id)
   )
+  // Prefer the live item's own name/colour over the snapshot captured when the
+  // card was first placed, so edits made elsewhere (or here) stay in sync.
+  const displayName = item?.name ?? name
+  const displayColor = item ? accentColor(item) : color
+
+  function commitName(v) {
+    v = v.trim()
+    if (!v || v === displayName || !item || !app) return
+    if (itemType === 'strand') app.updateStrand(projId, item.collectionName, item.id, { name: v })
+    else app.updateDraft(projId, item.id, { title: v })
+  }
+
+  function commitField(fd, v) {
+    if (!item || !app) return
+    if (itemType === 'strand') {
+      const nf = { ...(item.fields || {}) }
+      nf[fd.id] = v
+      app.updateStrand(projId, item.collectionName, item.id, { fields: nf })
+    } else if (fd.id === 'synopsis') {
+      app.updateDraft(projId, item.id, { synopsis: v })
+    }
+  }
 
   return (
     <div
@@ -374,24 +495,44 @@ function WovenCardNode({ id, data, selected }) {
       <Handles />
       <div className="woven-card-hdr">
         {itemType === 'strand'
-          ? <div className="woven-card-av" style={{ background: color }}>
-              {item?.image ? <img src={item.image} alt={name} /> : initials(name)}
+          ? <div className="woven-card-av" style={{ background: displayColor }}>
+              {item?.image ? <img src={item.image} alt={displayName} /> : initials(displayName)}
             </div>
-          : <div className="woven-card-dot" style={{ background: color }} />
+          : <div className="woven-card-dot" style={{ background: displayColor }} />
         }
-        <div className="woven-card-name" title={name}>{name}</div>
+        <input
+          key={`${item?.id || id}:${displayName}`}
+          className="woven-card-name-input nodrag"
+          defaultValue={displayName}
+          onBlur={e => commitName(e.target.value)}
+          onClick={e => e.stopPropagation()}
+          onPointerDown={e => e.stopPropagation()}
+        />
         {showStatus && statusInfo && (
           <div className="woven-card-status-badge" style={{ background: statusInfo.color }}>
             {statusInfo.label}
           </div>
         )}
+        <button className="ex-node-menu-btn ex-node-menu-btn--inline nodrag" title="Options"
+          onClick={e => { e.stopPropagation(); onCtx?.(e, id, data) }}>
+          <span className="mi">more_vert</span>
+        </button>
       </div>
       {shownFields.length > 0 && (
         <div className="woven-card-body has-content">
           {shownFields.map(fd => (
             <div className="woven-card-field" key={fd.id}>
               <div className="woven-card-field-lbl">{fd.label}</div>
-              <div className="woven-card-field-val">{item.fields[fd.id]}</div>
+              <textarea
+                key={`${item.id}:${fd.id}:${item.fields[fd.id] || ''}`}
+                className="woven-card-field-input nodrag"
+                defaultValue={item.fields[fd.id] || ''}
+                placeholder={`Add ${fd.label.toLowerCase()}...`}
+                rows={2}
+                onBlur={e => commitField(fd, e.target.value)}
+                onClick={e => e.stopPropagation()}
+                onPointerDown={e => e.stopPropagation()}
+              />
             </div>
           ))}
         </div>
@@ -429,8 +570,18 @@ function StickyNoteNode({ id, data, selected }) {
     >
       <NodeResizer isVisible={selected} minWidth={140} minHeight={60}
         lineStyle={{ border: '1px dashed var(--indigo)' }}
-        handleStyle={{ width: 8, height: 8, background: 'var(--indigo)', border: 'none', borderRadius: 2 }} />
+        handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
       <Handles />
+      <button className="ex-node-menu-btn nodrag" title="Options"
+        onClick={e => {
+          e.stopPropagation()
+          e.currentTarget.dispatchEvent(new CustomEvent('woven:ctx', {
+            bubbles: true,
+            detail: { nodeId: id, nodeType: 'stickyNote', x: e.clientX, y: e.clientY, data }
+          }))
+        }}>
+        <span className="mi">more_vert</span>
+      </button>
       <div className="ex-sticky-drag drag-handle__custom">
         <span className="mi">drag_indicator</span>
       </div>
@@ -482,8 +633,18 @@ function ImageNode({ id, data, selected }) {
     >
       <NodeResizer isVisible={selected} minWidth={100} minHeight={80}
         lineStyle={{ border: '1px dashed var(--indigo)' }}
-        handleStyle={{ width: 8, height: 8, background: 'var(--indigo)', border: 'none', borderRadius: 2 }} />
+        handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
       <Handles />
+      <button className="ex-node-menu-btn nodrag" title="Options"
+        onClick={e => {
+          e.stopPropagation()
+          e.currentTarget.dispatchEvent(new CustomEvent('woven:ctx', {
+            bubbles: true,
+            detail: { nodeId: id, nodeType: 'imageNode', x: e.clientX, y: e.clientY, data }
+          }))
+        }}>
+        <span className="mi">more_vert</span>
+      </button>
       {/* Corner grip — drag handle */}
       <div className="ex-image-grip drag-handle__custom">
         <span className="mi">drag_indicator</span>
@@ -499,6 +660,111 @@ function ImageNode({ id, data, selected }) {
       }
       <input ref={inputRef} type="file" accept="image/*"
         style={{ display: 'none' }} onChange={handleFile} />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// SHAPE NODE — rectangle / ellipse / diamond / triangle, connectable,
+// colourable, resizable. No built-in text (use the Text tool to label).
+// ─────────────────────────────────────────────────────────────
+function ShapeNode({ id, data, selected }) {
+  const scheme = STICKY_COLORS.find(c => c.id === (data.colorId ?? 'sky')) || STICKY_COLORS[4]
+  const variant = data.variant || 'rectangle'
+  const clipPath = variant === 'diamond'
+    ? 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)'
+    : variant === 'triangle'
+    ? 'polygon(50% 0%, 100% 100%, 0% 100%)'
+    : variant === 'arrow'
+    ? 'polygon(0% 35%, 65% 35%, 65% 10%, 100% 50%, 65% 90%, 65% 65%, 0% 65%)'
+    : 'none'
+  const borderRadius = variant === 'ellipse' ? '50%' : variant === 'rectangle' ? 8 : 0
+
+  function openMenu(e) {
+    e.stopPropagation()
+    e.currentTarget.dispatchEvent(new CustomEvent('woven:ctx', {
+      bubbles: true,
+      detail: { nodeId: id, nodeType: 'shapeNode', x: e.clientX, y: e.clientY, data }
+    }))
+  }
+
+  return (
+    <div
+      className="ex-shape-node"
+      style={{
+        background: scheme.bg, border: `2px solid ${scheme.border}`, clipPath, borderRadius,
+        outline: selected ? '2px solid var(--indigo)' : 'none', outlineOffset: 2,
+        width: '100%', height: '100%', minWidth: 60, minHeight: 60,
+      }}
+      onContextMenu={e => {
+        e.preventDefault(); e.stopPropagation()
+        e.target.dispatchEvent(new CustomEvent('woven:ctx', {
+          bubbles: true,
+          detail: { nodeId: id, nodeType: 'shapeNode', x: e.clientX, y: e.clientY, data }
+        }))
+      }}
+    >
+      <NodeResizer isVisible={selected} minWidth={40} minHeight={40}
+        lineStyle={{ border: '1px dashed var(--indigo)' }}
+        handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
+      <Handles />
+      <button className="ex-node-menu-btn nodrag" title="Options" onClick={openMenu}>
+        <span className="mi">more_vert</span>
+      </button>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// TEXT NODE — chromeless editable text, for labelling shapes,
+// connectors, or freestanding notes on the canvas.
+// ─────────────────────────────────────────────────────────────
+function TextNode({ id, data, selected }) {
+  const { setNodes } = useReactFlow()
+
+  function patch(p) {
+    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...p } } : n))
+  }
+
+  return (
+    <div
+      className="ex-text-node"
+      style={{
+        outline: selected ? '2px solid var(--indigo)' : 'none', outlineOffset: 4,
+        width: '100%', height: '100%',
+      }}
+      onContextMenu={e => {
+        e.preventDefault(); e.stopPropagation()
+        e.target.dispatchEvent(new CustomEvent('woven:ctx', {
+          bubbles: true,
+          detail: { nodeId: id, nodeType: 'textNode', x: e.clientX, y: e.clientY, data }
+        }))
+      }}
+    >
+      <NodeResizer isVisible={selected} minWidth={60} minHeight={30}
+        lineStyle={{ border: '1px dashed var(--indigo)' }}
+        handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
+      <Handles />
+      <button className="ex-node-menu-btn nodrag" title="Options"
+        onClick={e => {
+          e.stopPropagation()
+          e.currentTarget.dispatchEvent(new CustomEvent('woven:ctx', {
+            bubbles: true,
+            detail: { nodeId: id, nodeType: 'textNode', x: e.clientX, y: e.clientY, data }
+          }))
+        }}>
+        <span className="mi">more_vert</span>
+      </button>
+      <div className="ex-text-drag drag-handle__custom">
+        <span className="mi">drag_indicator</span>
+      </div>
+      <textarea
+        className="ex-text-input nodrag"
+        value={data.text || ''}
+        placeholder="Text..."
+        onChange={e => patch({ text: e.target.value })}
+        style={{ color: data.color || '#2a1f10', fontSize: data.size || 18, fontWeight: 600 }}
+      />
     </div>
   )
 }
@@ -541,11 +807,9 @@ function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
             </div>
           )}
           {item.fieldDefs.filter(fd => fd.id !== 'status').map(fd => {
-            const checked  = visibleFields.includes(fd.id)
-            const hasValue = !!(item.fields?.[fd.id])
+            const checked = visibleFields.includes(fd.id)
             return (
               <div key={fd.id} className="ex-ctx-row"
-                style={{ opacity: hasValue ? 1 : 0.45 }}
                 onClick={() => {
                   const next = checked
                     ? visibleFields.filter(f => f !== fd.id)
@@ -553,9 +817,6 @@ function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
                   onUpdateNode(nodeId, { visibleFields: next })
                 }}>
                 <Checkbox checked={checked} /><span>{fd.label}</span>
-                {!hasValue && (
-                  <span style={{ fontSize: 10, color: 'var(--placeholder)', marginLeft: 'auto' }}>empty</span>
-                )}
               </div>
             )
           })}
@@ -585,6 +846,53 @@ function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
         </>
       )}
 
+      {/* Shape options */}
+      {nodeType === 'shapeNode' && (
+        <>
+          <div className="ex-ctx-lbl">Shape</div>
+          {SHAPE_VARIANTS.map(v => (
+            <div key={v.id} className="ex-ctx-row"
+              onClick={() => onUpdateNode(nodeId, { variant: v.id })}>
+              <Checkbox checked={(data.variant || 'rectangle') === v.id} />
+              <span className="mi" style={{ fontSize: 15 }}>{v.icon}</span>
+              <span>{v.label}</span>
+            </div>
+          ))}
+          <div className="ex-ctx-lbl">Colour</div>
+          <div className="ex-ctx-swatches">
+            {STICKY_COLORS.map(c => (
+              <div key={c.id}
+                className={`ex-ctx-swatch ${(data.colorId ?? 'sky') === c.id ? 'active' : ''}`}
+                style={{ background: c.bg, border: `2px solid ${c.border}` }}
+                onClick={() => onUpdateNode(nodeId, { colorId: c.id })}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Text options */}
+      {nodeType === 'textNode' && (
+        <>
+          <div className="ex-ctx-lbl">Size</div>
+          {[['14', 'Small'], ['18', 'Medium'], ['28', 'Large']].map(([sz, lbl]) => (
+            <div key={sz} className="ex-ctx-row" onClick={() => onUpdateNode(nodeId, { size: Number(sz) })}>
+              <Checkbox checked={(data.size || 18) === Number(sz)} /><span>{lbl}</span>
+            </div>
+          ))}
+          <div className="ex-ctx-lbl">Colour</div>
+          <div className="ex-ctx-swatches">
+            {STICKY_COLORS.map(c => (
+              <div key={c.id}
+                className={`ex-ctx-swatch ${(data.color === c.text) ? 'active' : ''}`}
+                style={{ background: c.text, border: '2px solid rgba(0,0,0,.15)' }}
+                onClick={() => onUpdateNode(nodeId, { color: c.text })}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
       <div className="ex-ctx-div" />
       <div className="ex-ctx-action danger"
         onClick={() => { onDeleteNode(nodeId); onClose() }}>
@@ -595,138 +903,185 @@ function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// STRANDS DRAWER — tabs from live strandsObj keys only
+// SPOOL DRAWER PANEL — the drawer body for one specific Spool,
+// selected directly from its own toolbar button (see Toolbar).
+// List view only, with search + an add-to-canvas icon per row — the
+// detail/edit layer this used to have is gone now that cards placed
+// on the canvas are directly editable, so there's no need to view or
+// edit a strand's fields from inside this drawer anymore.
 // ─────────────────────────────────────────────────────────────
-function ExploreStrandsPalette({ strandsObj, templates, onDragStart }) {
-  // Derive collection names from live data — not hardcoded, not from templates
-  const collections = Object.keys(strandsObj)
-  const [activeIdx, setActiveIdx] = useState(0)
-  const scrollRef = useRef(null)
-
-  // Reset active tab if collections change and current idx is out of bounds
-  useEffect(() => {
-    if (activeIdx >= collections.length && collections.length > 0) {
-      setActiveIdx(0)
-    }
-  }, [collections.length])
-
-  const activeColl = collections[activeIdx] || ''
-  const items = strandsObj[activeColl] || []
-
-  function scrollTabs(dir) {
-    if (scrollRef.current) scrollRef.current.scrollLeft += dir * 80
-  }
-
-  if (collections.length === 0) {
-    return (
-      <div style={{ padding: '16px 14px', fontSize: 13, color: 'var(--mid)' }}>
-        No strand collections yet. Create one in the Strands view.
-      </div>
-    )
-  }
+function SpoolDrawerPanel({ collectionName, strandsObj, templates, onDragStart, onAddToCanvas, onClose, width }) {
+  const [search, setSearch] = useState('')
+  const items = strandsObj[collectionName] || []
+  const tpl = (templates || []).find(t => t.name === collectionName)
+  const q = search.trim().toLowerCase()
+  const list = q ? items.filter(s => (s.name || '').toLowerCase().includes(q)) : items
 
   return (
-    <>
-      <div className="ex-coll-tabs-wrap">
-        <div className="ex-coll-arrow" onClick={() => scrollTabs(-1)}>
-          <span className="mi" style={{ fontSize: 16 }}>chevron_left</span>
-        </div>
-        <div className="ex-coll-tabs-scroll" ref={scrollRef}>
-          {collections.map((coll, i) => (
-            <div key={coll}
-              className={`ex-coll-tab ${i === activeIdx ? 'active' : ''}`}
-              onClick={() => setActiveIdx(i)}>
-              {coll}
-            </div>
-          ))}
-        </div>
-        <div className="ex-coll-arrow" onClick={() => scrollTabs(1)}>
-          <span className="mi" style={{ fontSize: 16 }}>chevron_right</span>
-        </div>
-      </div>
+    <Drawer variant="inline" open title={collectionName} onClose={onClose} width={width} padded={false}
+      toolbar={
+        <SearchSortBar
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder={`Search ${collectionName.toLowerCase()}...`}
+        />
+      }
+    >
       <div className="ex-edrawer-body">
-        {items.length === 0
-          ? <div style={{ padding: '12px 14px', fontSize: 13, color: 'var(--mid)' }}>
-              No {activeColl.toLowerCase()} yet.
-            </div>
-          : items.map(s => (
-              <div key={s.id} className="ex-edrawer-row" draggable
+        {list.length === 0
+          ? <HelpText>{q ? 'No matches.' : `No ${collectionName.toLowerCase()} yet.`}</HelpText>
+          : list.map(s => (
+              <div key={s.id} className="ex-spool-row" draggable
                 onDragStart={e => onDragStart(e, buildPayload(s, 'strand', templates))}>
-                <div className="ex-edrawer-av" style={{ background: s.color }}>
-                  {s.image ? <img src={s.image} alt={s.name} /> : initials(s.name)}
-                </div>
-                <div className="ex-edrawer-info">
-                  <div className="ex-edrawer-name">{s.name}</div>
-                </div>
-                <span className="ex-edrawer-hint">drag</span>
+                <StrandResultRow
+                  strand={s}
+                  spoolIcon={tpl?.icon}
+                  hideArrow
+                  onAdd={() => onAddToCanvas(s)}
+                />
               </div>
             ))
         }
       </div>
-    </>
+    </Drawer>
   )
 }
 
 // ─────────────────────────────────────────────────────────────
-// DRAWER CONTENT
+// DRAFT STATUS FILTER — a filter icon that reveals a small radio-style
+// status picker, matching StrandSortFilter's pattern in App.jsx (the
+// "tune" icon + floating option list used for the Strands page filter).
 // ─────────────────────────────────────────────────────────────
-function DrawerContent({ panel, templates, strandsObj, drafts, looseThreads, onDragStart }) {
-  if (panel === 'strands') {
+function DraftStatusFilter({ filter, setFilter }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  const statusKeys = Object.keys(STATUSES)
+  const hasActive = filter !== 'all'
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  function pick(k) { setFilter(k); setOpen(false) }
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button className="btn-icon" style={{
+        padding: 4, border: `1px solid ${hasActive ? 'var(--indigo)' : 'var(--border)'}`,
+        borderRadius: 'var(--r)', color: hasActive ? 'var(--indigo)' : 'var(--mid)',
+      }} onClick={() => setOpen(o => !o)}>
+        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>tune</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 400,
+          background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 'var(--rl)',
+          boxShadow: '0 8px 28px rgba(42,31,16,.14)', minWidth: 180, padding: 10,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--indigo)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
+            Status
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', fontSize: 14, color: filter === 'all' ? 'var(--indigo)' : 'var(--text)', fontWeight: filter === 'all' ? 600 : 400 }}
+            onClick={() => pick('all')}>
+            <span style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${filter === 'all' ? 'var(--indigo)' : 'var(--border)'}`, background: filter === 'all' ? 'var(--indigo)' : 'transparent', flexShrink: 0 }} />
+            All
+          </div>
+          {statusKeys.map(k => (
+            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', fontSize: 14, color: filter === k ? 'var(--indigo)' : 'var(--text)', fontWeight: filter === k ? 600 : 400 }}
+              onClick={() => pick(k)}>
+              <span style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${filter === k ? STATUSES[k].color : 'var(--border)'}`, background: filter === k ? STATUSES[k].color : 'transparent', flexShrink: 0 }} />
+              {STATUSES[k].label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// DRAFTS PANEL — Drafts and Loose Threads merged into one list.
+// Loose Threads was just another status ('loose_thread'), so instead
+// of a separate toolbar button and drawer, it's now a filter option
+// here alongside every other status. Search bar + filter icon match
+// the same SearchSortBar pattern used for the Strands page toolbar.
+// ─────────────────────────────────────────────────────────────
+function DraftsPanel({ allDrafts, templates, onDragStart, onClose, width }) {
+  const [filter, setFilter] = useState('all')
+  const [search, setSearch] = useState('')
+
+  const q = search.trim().toLowerCase()
+  const list = allDrafts.filter(d => {
+    if (filter !== 'all' && d.status !== filter) return false
+    if (q && !(d.title || '').toLowerCase().includes(q) && !(d.synopsis || '').toLowerCase().includes(q)) return false
+    return true
+  })
+
+  return (
+    <Drawer variant="inline" open title="Drafts" onClose={onClose} width={width} padded={false}
+      toolbar={
+        <SearchSortBar
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search drafts..."
+          sortSlot={<DraftStatusFilter filter={filter} setFilter={setFilter} />}
+        />
+      }
+    >
+      <div className="ex-edrawer-body">
+        {list.length === 0
+          ? <HelpText>No drafts{filter !== 'all' || q ? ' match this search.' : ' yet.'}</HelpText>
+          : list.map(d => {
+              const isLT = d.status === 'loose_thread'
+              return (
+                <div key={d.id} className="ex-draft-row" draggable
+                  onDragStart={e => onDragStart(e, buildPayload(d, isLT ? 'loose_thread' : 'draft', templates))}>
+                  <div className="ex-draft-dot" style={{ background: STATUSES[d.status]?.color }} />
+                  <div className="ex-draft-info">
+                    <div className="ex-draft-title">
+                      {d.title || d.synopsis || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
+                    </div>
+                    <div className="ex-draft-sub">{STATUSES[d.status]?.label}</div>
+                  </div>
+                </div>
+              )
+            })
+        }
+      </div>
+    </Drawer>
+  )
+}
+
+function DrawerContent({ panel, templates, strandsObj, allDrafts, onDragStart, onAddToCanvas, onClose, width }) {
+  // Each panel below owns its own Drawer (title/back button vary per layer),
+  // rather than one shared outer Drawer.
+  if (panel?.startsWith(SPOOL_DRAWER_PREFIX)) {
+    const collectionName = panel.slice(SPOOL_DRAWER_PREFIX.length)
     return (
-      <ExploreStrandsPalette
+      <SpoolDrawerPanel
+        key={collectionName}
+        collectionName={collectionName}
         strandsObj={strandsObj}
         templates={templates}
         onDragStart={onDragStart}
+        onAddToCanvas={onAddToCanvas}
+        onClose={onClose}
+        width={width}
       />
     )
   }
   if (panel === 'drafts') {
     return (
-      <div className="ex-edrawer-body">
-        <div className="ex-edrawer-section">
-          <span className="ex-edrawer-lbl">Drafts</span>
-        </div>
-        {drafts.length === 0
-          ? <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--mid)' }}>No drafts yet.</div>
-          : drafts.map(d => (
-              <div key={d.id} className="ex-edrawer-row" draggable
-                onDragStart={e => onDragStart(e, buildPayload(d, 'draft', templates))}>
-                <div className="ex-edrawer-dot" style={{ background: STATUSES[d.status]?.color }} />
-                <div className="ex-edrawer-info">
-                  <div className="ex-edrawer-name">
-                    {d.title || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
-                  </div>
-                  <div className="ex-edrawer-sub">{STATUSES[d.status]?.label}</div>
-                </div>
-                <span className="ex-edrawer-hint">drag</span>
-              </div>
-            ))
-        }
-      </div>
-    )
-  }
-  if (panel === 'loose_threads') {
-    return (
-      <div className="ex-edrawer-body">
-        <div className="ex-edrawer-section">
-          <span className="ex-edrawer-lbl">Loose Threads</span>
-        </div>
-        {looseThreads.length === 0
-          ? <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--mid)' }}>No loose threads.</div>
-          : looseThreads.map(lt => (
-              <div key={lt.id} className="ex-edrawer-row" draggable
-                onDragStart={e => onDragStart(e, buildPayload(lt, 'loose_thread', templates))}>
-                <div className="ex-edrawer-dot" style={{ background: STATUSES.loose_thread.color }} />
-                <div className="ex-edrawer-info">
-                  <div className="ex-edrawer-name">
-                    {lt.title || lt.synopsis || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
-                  </div>
-                </div>
-                <span className="ex-edrawer-hint">drag</span>
-              </div>
-            ))
-        }
-      </div>
+      <DraftsPanel
+        allDrafts={allDrafts}
+        templates={templates}
+        onDragStart={onDragStart}
+        onClose={onClose}
+        width={width}
+      />
     )
   }
   return null
@@ -789,24 +1144,78 @@ function CanvasTabs({ tabs, activeTab, onSelect, onAdd, onRename, onDeleteReques
 // ─────────────────────────────────────────────────────────────
 // TOOLBAR
 // ─────────────────────────────────────────────────────────────
-function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle }) {
+function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, collections }) {
+  const [shapePickerOpen, setShapePickerOpen] = useState(false)
+  const shapeWrapRef = useRef(null)
+  const shapeActive = activeTool.startsWith('shape:')
+
+  useEffect(() => {
+    if (!shapePickerOpen) return
+    function onAny(e) {
+      if (shapeWrapRef.current && !shapeWrapRef.current.contains(e.target)) setShapePickerOpen(false)
+    }
+    document.addEventListener('mousedown', onAny, true)
+    return () => document.removeEventListener('mousedown', onAny, true)
+  }, [shapePickerOpen])
+
+  function handleClick(t) {
+    if (t.id === 'shape') { setShapePickerOpen(o => !o); return }
+    onToolSelect(t.id)
+  }
+  function pickShape(variant) {
+    onToolSelect(`shape:${variant}`)
+    setShapePickerOpen(false)
+  }
+
   return (
     <div className="ex-toolbar">
       {TOOL_ITEMS.map(t => (
-        <div key={t.id} className={`ex-tool ${activeTool === t.id ? 'active' : ''}`}
-          onClick={() => onToolSelect(t.id)} title={t.label}>
-          <span className="mi">{t.icon}</span>
-          <span className="ex-tool-lbl">{t.label}</span>
+        <div key={t.id} style={{ position: 'relative' }} ref={t.id === 'shape' ? shapeWrapRef : null}>
+          <div className={`ex-tool ${(t.id === 'shape' ? shapeActive : activeTool === t.id) ? 'active' : ''}`}
+            onClick={() => handleClick(t)}
+            onMouseEnter={e => showTt(e, t.label)} onMouseLeave={hideTt}>
+            <span className="material-symbols-outlined">{t.icon}</span>
+          </div>
+          {t.id === 'shape' && shapePickerOpen && (
+            <div className="ex-shape-popover">
+              {SHAPE_VARIANTS.map(v => (
+                <div key={v.id} className="ex-shape-popover-item"
+                  onClick={() => pickShape(v.id)}
+                  onMouseEnter={e => showTt(e, v.label)} onMouseLeave={hideTt}>
+                  <span className="material-symbols-outlined">{v.icon}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
+
       <div className="ex-tool-sep" />
       {DRAWER_ITEMS.map(p => (
         <div key={p.id} className={`ex-tool ${activeDrawer === p.id ? 'active' : ''}`}
-          onClick={() => onDrawerToggle(p.id)} title={p.label}>
-          <span className="mi">{p.icon}</span>
-          <span className="ex-tool-lbl">{p.label}</span>
+          onClick={() => onDrawerToggle(p.id)}
+          onMouseEnter={e => showTt(e, p.label)} onMouseLeave={hideTt}>
+          <span className="material-symbols-outlined">{p.icon}</span>
         </div>
       ))}
+
+      {collections.length > 0 && (
+        <>
+          <div className="ex-tool-sep" />
+          <div className="ex-toolbar-colls">
+            {collections.map(c => {
+              const drawerId = `${SPOOL_DRAWER_PREFIX}${c.name}`
+              return (
+                <div key={c.name} className={`ex-tool ${activeDrawer === drawerId ? 'active' : ''}`}
+                  onClick={() => onDrawerToggle(drawerId)}
+                  onMouseEnter={e => showTt(e, c.name)} onMouseLeave={hideTt}>
+                  <span className="material-symbols-outlined">{c.icon}</span>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -814,35 +1223,10 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle }) {
 // ─────────────────────────────────────────────────────────────
 // DELETE BOARD MODAL
 // ─────────────────────────────────────────────────────────────
-function DeleteBoardModal({ boardName, onConfirm, onCancel }) {
-  const [val, setVal] = useState('')
-  return (
-    <div className="ex-modal-wrap">
-      <div className="ex-modal-bg" onClick={onCancel} />
-      <div className="ex-modal">
-        <div className="ex-modal-title">Delete this board?</div>
-        <div className="ex-modal-body">
-          <strong>{boardName}</strong> and all its cards will be permanently removed.
-          This cannot be undone.<br /><br />
-          Type <strong>DELETE</strong> to confirm.
-        </div>
-        <input className="ex-modal-input" value={val}
-          onChange={e => setVal(e.target.value)} placeholder="Type DELETE" autoFocus />
-        <div className="ex-modal-btns">
-          <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}
-            onClick={onCancel}>Cancel</button>
-          <button className="btn btn-danger" style={{ flex: 1, justifyContent: 'center' }}
-            disabled={val !== 'DELETE'} onClick={onConfirm}>Delete board</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─────────────────────────────────────────────────────────────
 // FLOW CANVAS
 // ─────────────────────────────────────────────────────────────
-function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, strandsObj, drafts, looseThreads }) {
+function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, strandsObj, drafts, looseThreads, pendingAdd, onPendingAddConsumed, app }) {
   const { screenToFlowPosition } = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -854,9 +1238,9 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
 
   // Build live item lookup — always reflects latest app data
   const findItem = useCallback((id) => {
-    for (const items of Object.values(strandsObj)) {
+    for (const [collectionName, items] of Object.entries(strandsObj)) {
       const s = items.find(s => s.id === id)
-      if (s) return buildPayload(s, 'strand', templates)
+      if (s) return { ...buildPayload(s, 'strand', templates), collectionName }
     }
     const d = drafts.find(d => d.id === id)
     if (d) return buildPayload(d, 'draft', templates)
@@ -899,12 +1283,15 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       <WovenCardNode {...props} data={{
         ...props.data,
         findItemFn: findItem,
+        app, projId,
         onCtx: (e, id, data) => setCtx({ nodeId: id, nodeType: 'wovenCard', x: e.clientX, y: e.clientY, data }),
       }} />
     ),
     stickyNote: StickyNoteNode,
     imageNode:  ImageNode,
-  }), [findItem])
+    shapeNode:  ShapeNode,
+    textNode:   TextNode,
+  }), [findItem, app, projId])
 
   function updateNode(nodeId, patch) {
     setNodes(nds => nds.map(n => n.id !== nodeId ? n : { ...n, data: { ...n.data, ...patch } }))
@@ -920,7 +1307,11 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
   }
 
   const onConnect = useCallback((params) => {
-    setEdges(eds => addEdge({ ...params, style: { stroke: 'var(--bg4)', strokeWidth: 2 } }, eds))
+    setEdges(eds => addEdge({
+      ...params,
+      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 18, height: 18 },
+      style: { stroke: 'var(--bg4)', strokeWidth: 2 },
+    }, eds))
   }, [setEdges])
 
   const onDragOver = useCallback((e) => {
@@ -944,8 +1335,29 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     }])
   }, [screenToFlowPosition, setNodes])
 
+  // "Add to canvas" from the Spool drawer (StrandResultRow's add icon) —
+  // same node shape as a drag-drop, just placed at the current viewport
+  // centre instead of a drop point.
+  useEffect(() => {
+    if (!pendingAdd || !canvasRef.current) return
+    const item = buildPayload(pendingAdd, 'strand', templates)
+    const position = screenToFlowPosition({
+      x: canvasRef.current.clientWidth / 2,
+      y: canvasRef.current.clientHeight / 2,
+    })
+    setNodes(nds => [...nds, {
+      id: genId(), type: 'wovenCard', position,
+      data: {
+        itemId: item.id, itemType: item.itemType,
+        name: item.name, color: accentColor(item),
+        visibleFields: [], showStatus: false,
+      },
+    }])
+    onPendingAddConsumed?.()
+  }, [pendingAdd, templates, screenToFlowPosition, setNodes, onPendingAddConsumed])
+
   const onPaneClick = useCallback((e) => {
-    if (activeTool !== 'sticky' && activeTool !== 'image') return
+    if (!isPlaceModeTool(activeTool)) return
     const rect = canvasRef.current.getBoundingClientRect()
     const position = screenToFlowPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top })
     if (activeTool === 'sticky') {
@@ -962,10 +1374,24 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
         data: { src: null },
       }])
     }
+    if (activeTool === 'text') {
+      setNodes(nds => [...nds, {
+        id: genId(), type: 'textNode', position,
+        dragHandle: '.drag-handle__custom',
+        data: { text: '', color: '#2a1f10', size: 18 },
+      }])
+    }
+    if (activeTool.startsWith('shape:')) {
+      const variant = activeTool.split(':')[1]
+      setNodes(nds => [...nds, {
+        id: genId(), type: 'shapeNode', position,
+        data: { variant, colorId: 'sky' },
+      }])
+    }
     onToolReset()
   }, [activeTool, screenToFlowPosition, setNodes, onToolReset])
 
-  const isPlaceMode = activeTool === 'sticky' || activeTool === 'image'
+  const isPlaceMode = isPlaceModeTool(activeTool)
 
   return (
     <div ref={canvasRef} style={{ width: '100%', height: '100%' }}>
@@ -1015,12 +1441,58 @@ export default function ExploreCanvas({ app }) {
   const drafts       = allDrafts.filter(d => d.status !== 'loose_thread')
   const looseThreads = allDrafts.filter(d => d.status === 'loose_thread')
 
+  // One toolbar button per Spool collection, using the icon/colour/name set
+  // on that collection in the Strands page. Order mirrors the Strands page's
+  // own saved tab order (same localStorage key) so the two stay consistent.
+  const collections = useMemo(() => {
+    let names = Object.keys(strandsObj)
+    try {
+      const saved = JSON.parse(localStorage.getItem(`woven:collOrder:${projId}`) || 'null')
+      if (Array.isArray(saved)) {
+        names = saved.filter(n => names.includes(n)).concat(names.filter(n => !saved.includes(n)))
+      }
+    } catch {}
+    return names.map(name => {
+      const tpl = templates.find(t => t.name === name)
+      return { name, icon: tpl?.icon || 'auto_stories', color: tpl?.color || '#7A5A38' }
+    })
+  }, [strandsObj, templates, projId])
+
   const [boards, setBoards]           = useState(INIT_BOARDS)
   const [activeBoard, setActiveBoard] = useState(INIT_ID)
   const [activeDrawer, setActiveDrawer] = useState(null)
   const [activeTool, setActiveTool]   = useState('select')
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [boardsLoaded, setBoardsLoaded] = useState(false)
+  const [pendingAdd, setPendingAdd]   = useState(null)
+
+  // Resizable Strands/Drafts/Threads drawer width — remembered across sessions.
+  const [drawerWidth, setDrawerWidth] = useState(() => {
+    const saved = Number(localStorage.getItem('woven:canvasDrawerWidth'))
+    return saved >= DRAWER_MIN_W && saved <= DRAWER_MAX_W ? saved : 280
+  })
+  const [isResizingDrawer, setIsResizingDrawer] = useState(false)
+  const drawerDragRef = useRef(null)
+
+  function startDrawerResize(e) {
+    e.preventDefault()
+    drawerDragRef.current = { startX: e.clientX, startWidth: drawerWidth }
+    setIsResizingDrawer(true)
+    function onMove(ev) {
+      const { startX, startWidth } = drawerDragRef.current
+      // Drawer sits to the right of the canvas, so dragging left widens it.
+      const next = Math.min(DRAWER_MAX_W, Math.max(DRAWER_MIN_W, startWidth - (ev.clientX - startX)))
+      setDrawerWidth(next)
+    }
+    function onUp() {
+      setIsResizingDrawer(false)
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      setDrawerWidth(w => { localStorage.setItem('woven:canvasDrawerWidth', String(w)); return w })
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+  }
 
   // Load board list for this project
   useEffect(() => {
@@ -1065,7 +1537,6 @@ export default function ExploreCanvas({ app }) {
     e.dataTransfer.effectAllowed = 'copy'
   }
 
-  const drawerLabel = DRAWER_ITEMS.find(p => p.id === activeDrawer)?.label || ''
   if (!projId) return null
 
   return (
@@ -1080,7 +1551,7 @@ export default function ExploreCanvas({ app }) {
           />
           <div className="ex-canvas-row">
             <div className="ex-canvas-area"
-              style={{ cursor: isPlaceMode(activeTool) ? 'crosshair' : undefined }}>
+              style={{ cursor: isPlaceModeTool(activeTool) ? 'crosshair' : undefined }}>
               <ReactFlowProvider>
                 <FlowCanvas
                   key={`${projId}:${activeBoard}`}
@@ -1088,6 +1559,8 @@ export default function ExploreCanvas({ app }) {
                   activeTool={activeTool} onToolReset={() => setActiveTool('select')}
                   templates={templates} strandsObj={strandsObj}
                   drafts={drafts} looseThreads={looseThreads}
+                  pendingAdd={pendingAdd} onPendingAddConsumed={() => setPendingAdd(null)}
+                  app={app}
                 />
               </ReactFlowProvider>
             </div>
@@ -1095,17 +1568,25 @@ export default function ExploreCanvas({ app }) {
               <Toolbar
                 activeTool={activeTool} onToolSelect={handleToolSelect}
                 activeDrawer={activeDrawer} onDrawerToggle={toggleDrawer}
+                collections={collections}
               />
-              <div className={`ex-drawer ${activeDrawer ? 'open' : ''}`}>
-                <div className="ex-drawer-inner">
-                  <Drawer variant="inline" open={true} title={drawerLabel} onClose={() => setActiveDrawer(null)} padded={false} width={280}>
-                    <DrawerContent
-                      panel={activeDrawer}
-                      templates={templates} strandsObj={strandsObj}
-                      drafts={drafts} looseThreads={looseThreads}
-                      onDragStart={handleDragStart}
-                    />
-                  </Drawer>
+              <div className={`ex-drawer ${activeDrawer ? 'open' : ''} ${isResizingDrawer ? 'resizing' : ''}`}
+                style={{ width: activeDrawer ? drawerWidth : 0 }}>
+                {activeDrawer && (
+                  <div className="ex-drawer-resize-handle"
+                    onPointerDown={startDrawerResize}
+                    title="Drag to resize" />
+                )}
+                <div className="ex-drawer-inner" style={{ width: drawerWidth }}>
+                  <DrawerContent
+                    panel={activeDrawer}
+                    templates={templates} strandsObj={strandsObj}
+                    allDrafts={allDrafts}
+                    onDragStart={handleDragStart}
+                    onAddToCanvas={setPendingAdd}
+                    onClose={() => setActiveDrawer(null)}
+                    width={drawerWidth}
+                  />
                 </div>
               </div>
             </div>
@@ -1114,8 +1595,10 @@ export default function ExploreCanvas({ app }) {
       </div>
 
       {deleteTarget && (
-        <DeleteBoardModal
-          boardName={deleteTarget.name}
+        <DeleteConfirmModal
+          itemName={deleteTarget.name}
+          message={<>All cards on this board will be permanently removed.</>}
+          confirmLabel="Delete board"
           onConfirm={confirmDelete}
           onCancel={() => setDeleteTarget(null)}
         />
@@ -1124,4 +1607,3 @@ export default function ExploreCanvas({ app }) {
   )
 }
 
-function isPlaceMode(tool) { return tool === 'sticky' || tool === 'image' }
