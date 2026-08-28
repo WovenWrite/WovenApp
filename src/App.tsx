@@ -1115,7 +1115,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
 
   return(
 <div
-  style={{width:270,borderRadius:15,overflow:'visible',background:'var(--bg1)',border:'2px solid transparent',display:'flex',flexDirection:'column',cursor:structureMode?'default':'pointer',boxShadow:'0 2px 8px rgba(42,31,16,.06)',transition:'box-shadow .2s,border-color .2s',flexShrink:0,position:'relative',height:structureMode?'auto':400}}
+  style={{width:270,borderRadius:15,overflow:'visible',background:'var(--bg1)',border:'2px solid transparent',display:'flex',flexDirection:'column',cursor:structureMode?'default':'pointer',boxShadow:'0 2px 8px rgba(42,31,16,.06)',transition:'box-shadow .2s,border-color .2s',flexShrink:0,position:'relative',height:structureMode?'auto':(projThumbnails(cardProj)?400:250)}}
   draggable={structureMode}
   onDragStart={structureMode?function(e){e.dataTransfer.setData('draftId',draft.id);}:undefined}
   onDragOver={structureMode?function(e){e.preventDefault();setDragOver(true);}:undefined}
