@@ -17,8 +17,8 @@ import {
   Controls, MiniMap, addEdge, useNodesState, useEdgesState, useReactFlow,
   Handle, Position, NodeResizer, MarkerType,
 } from '@xyflow/react'
-import { Drawer, DeleteConfirmModal, StrandResultRow, Field, SecondaryButton, AvatarEditModal, SpoolThumbnailUpload, HelpText, SearchSortBar } from './SharedUI'
-import { STATUSES, genId, initials, getSupabase, defaultFields } from './utils'
+import { Drawer, DeleteConfirmModal, StrandResultRow, HelpText, SearchSortBar } from './SharedUI'
+import { STATUSES, genId, initials, getSupabase } from './utils'
 
 // ─────────────────────────────────────────────────────────────
 // STYLES
@@ -807,11 +807,9 @@ function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
             </div>
           )}
           {item.fieldDefs.filter(fd => fd.id !== 'status').map(fd => {
-            const checked  = visibleFields.includes(fd.id)
-            const hasValue = !!(item.fields?.[fd.id])
+            const checked = visibleFields.includes(fd.id)
             return (
               <div key={fd.id} className="ex-ctx-row"
-                style={{ opacity: hasValue ? 1 : 0.45 }}
                 onClick={() => {
                   const next = checked
                     ? visibleFields.filter(f => f !== fd.id)
@@ -819,9 +817,6 @@ function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
                   onUpdateNode(nodeId, { visibleFields: next })
                 }}>
                 <Checkbox checked={checked} /><span>{fd.label}</span>
-                {!hasValue && (
-                  <span style={{ fontSize: 10, color: 'var(--placeholder)', marginLeft: 'auto' }}>empty</span>
-                )}
               </div>
             )
           })}
@@ -908,114 +903,46 @@ function ContextMenu({ ctx, findItem, onClose, onUpdateNode, onDeleteNode }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// SPOOL COLLECTION LIST — the drawer body for one specific Spool,
+// SPOOL DRAWER PANEL — the drawer body for one specific Spool,
 // selected directly from its own toolbar button (see Toolbar).
-// Mirrors StrandsDrawer's two inner layers (list -> detail), minus the
-// draft-tagging concepts that don't apply here: "add" places the strand
-// on the canvas instead of tagging it to a draft, and there's no
-// "Presently tagged" section or Create New Spool, since a specific
-// collection is already chosen via its own toolbar button.
+// List view only, with search + an add-to-canvas icon per row — the
+// detail/edit layer this used to have is gone now that cards placed
+// on the canvas are directly editable, so there's no need to view or
+// edit a strand's fields from inside this drawer anymore.
 // ─────────────────────────────────────────────────────────────
-function SpoolDrawerPanel({ app, projId, collectionName, strandsObj, templates, onDragStart, onAddToCanvas, onClose, width }) {
-  const [detailId, setDetailId] = useState(null)
-  const [showAvatarEdit, setShowAvatarEdit] = useState(false)
+function SpoolDrawerPanel({ collectionName, strandsObj, templates, onDragStart, onAddToCanvas, onClose, width }) {
+  const [search, setSearch] = useState('')
   const items = strandsObj[collectionName] || []
   const tpl = (templates || []).find(t => t.name === collectionName)
+  const q = search.trim().toLowerCase()
+  const list = q ? items.filter(s => (s.name || '').toLowerCase().includes(q)) : items
 
-  function backToList() { setDetailId(null); setShowAvatarEdit(false) }
-  function editTemplate() {
-    app.setStrandsFocusColl?.(collectionName)
-    app.setView?.('strands')
-  }
-
-  // ── Detail layer ──
-  if (detailId) {
-    let strand = null
-    items.forEach(st => { if (st.id === detailId) strand = st })
-
-    if (!strand) {
-      return (
-        <Drawer variant="inline" open title="Spool" onBack={backToList} onClose={onClose} width={width}>
-          <HelpText>That spool no longer exists.</HelpText>
-        </Drawer>
-      )
-    }
-
-    const fields = (tpl?.fields?.length > 0) ? tpl.fields : defaultFields(collectionName)
-
-    function updateField(fid, val) {
-      const nf = { ...(strand.fields || {}) }
-      nf[fid] = val
-      app.updateStrand(projId, collectionName, detailId, { fields: nf })
-    }
-
-    const footer = <SecondaryButton icon="tune" onClick={editTemplate}>Edit Spool Template</SecondaryButton>
-
-    return (
-      <Drawer variant="inline" open title={strand.name} onBack={backToList} onClose={onClose} footer={footer} width={width}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
-          <SpoolThumbnailUpload strand={strand} onClick={() => setShowAvatarEdit(true)} />
-          <span style={{ fontSize: 13, color: 'var(--indigo)', cursor: 'pointer', textDecoration: 'underline' }}
-            onClick={() => setShowAvatarEdit(true)}>
-            Edit appearance
-          </span>
-        </div>
-
-        <Field
-          label="Name"
-          key={strand.id + '-name'}
-          defaultValue={strand.name}
-          placeholder="Spool name"
-          onBlur={e => {
-            const v = e.target.value.trim()
-            if (v && v !== strand.name) app.updateStrand(projId, collectionName, detailId, { name: v })
-          }}
-        />
-
-        {fields.map(f => {
-          const val = (strand.fields && strand.fields[f.id]) || ''
-          const isLong = f.type === 'long_text'
-          return (
-            <Field
-              key={f.id}
-              label={f.label}
-              defaultValue={val}
-              placeholder={`Add ${f.label.toLowerCase()}...`}
-              resizeMode={isLong ? 'manual' : 'auto'}
-              rows={isLong ? 5 : undefined}
-              onBlur={e => updateField(f.id, e.target.value)}
-            />
-          )
-        })}
-
-        {showAvatarEdit && (
-          <AvatarEditModal
-            strand={strand}
-            onClose={() => setShowAvatarEdit(false)}
-            onSave={updates => { app.updateStrand(projId, collectionName, detailId, updates); setShowAvatarEdit(false) }}
-          />
-        )}
-      </Drawer>
-    )
-  }
-
-  // ── List layer ──
   return (
-    <Drawer variant="inline" open title={collectionName} onClose={onClose} width={width}>
-      {items.length === 0
-        ? <HelpText>No {collectionName.toLowerCase()} yet.</HelpText>
-        : items.map(s => (
-            <div key={s.id} className="ex-spool-row" draggable
-              onDragStart={e => onDragStart(e, buildPayload(s, 'strand', templates))}>
-              <StrandResultRow
-                strand={s}
-                spoolIcon={tpl?.icon}
-                onClick={() => setDetailId(s.id)}
-                onAdd={() => onAddToCanvas(s)}
-              />
-            </div>
-          ))
+    <Drawer variant="inline" open title={collectionName} onClose={onClose} width={width} padded={false}
+      toolbar={
+        <SearchSortBar
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder={`Search ${collectionName.toLowerCase()}...`}
+        />
       }
+    >
+      <div className="ex-edrawer-body">
+        {list.length === 0
+          ? <HelpText>{q ? 'No matches.' : `No ${collectionName.toLowerCase()} yet.`}</HelpText>
+          : list.map(s => (
+              <div key={s.id} className="ex-spool-row" draggable
+                onDragStart={e => onDragStart(e, buildPayload(s, 'strand', templates))}>
+                <StrandResultRow
+                  strand={s}
+                  spoolIcon={tpl?.icon}
+                  hideArrow
+                  onAdd={() => onAddToCanvas(s)}
+                />
+              </div>
+            ))
+        }
+      </div>
     </Drawer>
   )
 }
@@ -1128,7 +1055,7 @@ function DraftsPanel({ allDrafts, templates, onDragStart, onClose, width }) {
   )
 }
 
-function DrawerContent({ panel, app, projId, templates, strandsObj, allDrafts, onDragStart, onAddToCanvas, onClose, width }) {
+function DrawerContent({ panel, templates, strandsObj, allDrafts, onDragStart, onAddToCanvas, onClose, width }) {
   // Each panel below owns its own Drawer (title/back button vary per layer),
   // rather than one shared outer Drawer.
   if (panel?.startsWith(SPOOL_DRAWER_PREFIX)) {
@@ -1136,7 +1063,6 @@ function DrawerContent({ panel, app, projId, templates, strandsObj, allDrafts, o
     return (
       <SpoolDrawerPanel
         key={collectionName}
-        app={app} projId={projId}
         collectionName={collectionName}
         strandsObj={strandsObj}
         templates={templates}
@@ -1654,7 +1580,6 @@ export default function ExploreCanvas({ app }) {
                 <div className="ex-drawer-inner" style={{ width: drawerWidth }}>
                   <DrawerContent
                     panel={activeDrawer}
-                    app={app} projId={projId}
                     templates={templates} strandsObj={strandsObj}
                     allDrafts={allDrafts}
                     onDragStart={handleDragStart}
