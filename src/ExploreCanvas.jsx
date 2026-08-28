@@ -17,7 +17,7 @@ import {
   Controls, MiniMap, addEdge, useNodesState, useEdgesState, useReactFlow,
   Handle, Position, NodeResizer, MarkerType,
 } from '@xyflow/react'
-import { Drawer, DeleteConfirmModal, StrandResultRow, Field, SecondaryButton, AvatarEditModal, SpoolThumbnailUpload, HelpText } from './SharedUI'
+import { Drawer, DeleteConfirmModal, StrandResultRow, Field, SecondaryButton, AvatarEditModal, SpoolThumbnailUpload, HelpText, SearchSortBar } from './SharedUI'
 import { STATUSES, genId, initials, getSupabase, defaultFields } from './utils'
 
 // ─────────────────────────────────────────────────────────────
@@ -138,24 +138,28 @@ const CANVAS_CSS = `
   opacity:0;transition:opacity .12s;flex-shrink:0;}
 .ex-edrawer-row:hover .ex-edrawer-hint{opacity:1;}
 
-/* Drafts panel status filter pills */
-.ex-filter-row{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px;
-  border-bottom:1px solid var(--border);flex-shrink:0;}
-.ex-filter-pill{--pill-color:var(--mid);height:26px;padding:0 11px;border-radius:13px;
-  border:1.5px solid var(--pill-color);background:transparent;color:var(--pill-color);
-  font-size:12px;font-weight:600;font-family:var(--ui);cursor:pointer;transition:all .12s;}
-.ex-filter-pill:hover{background:rgba(122,90,56,.08);}
-.ex-filter-pill.active{background:var(--pill-color);color:#fff;}
+/* Drafts panel rows — styled to match StrandResultRow's visual weight
+   (bold serif title, generous size) rather than the old compact row. */
+.ex-draft-row{display:flex;align-items:center;gap:10px;padding:10px 14px;
+  cursor:grab;border-bottom:1px solid var(--border);transition:background .12s;}
+.ex-draft-row:last-child{border-bottom:none;}
+.ex-draft-row:hover{background:var(--bg2);}
+.ex-draft-row:active{cursor:grabbing;}
+.ex-draft-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;}
+.ex-draft-info{flex:1;min-width:0;}
+.ex-draft-title{font-family:var(--serif,'Crimson Text',serif);font-weight:600;font-size:18px;
+  line-height:1.3;color:#684a26;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ex-draft-sub{font-size:14px;color:var(--mid);margin-top:2px;}
 
 /* Woven cards */
 .woven-card{background:var(--bg1);border:1.5px solid var(--border);border-radius:10px;
   display:flex;flex-direction:column;font-family:var(--ui);overflow:hidden;position:relative;
   box-shadow:0 2px 8px rgba(42,31,16,.08);min-width:200px;max-width:280px;}
 .woven-card.selected{border-color:var(--indigo);box-shadow:0 0 0 2px rgba(196,94,40,.15);}
-.woven-card-hdr{display:flex;align-items:center;gap:7px;padding:8px 10px;
+.woven-card-hdr{display:flex;align-items:center;gap:10px;padding:10px;
   background:var(--bg0);flex-shrink:0;}
-.woven-card-av{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;
-  align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;overflow:hidden;}
+.woven-card-av{width:75px;height:75px;border-radius:50%;flex-shrink:0;display:flex;
+  align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#fff;overflow:hidden;}
 .woven-card-av img{width:100%;height:100%;object-fit:cover;}
 .woven-card-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
 .woven-card-name-input{font-family:var(--serif);font-size:16px;font-weight:600;color:var(--text);
@@ -175,6 +179,7 @@ const CANVAS_CSS = `
   border-radius:4px;box-sizing:border-box;cursor:text;}
 .woven-card-field-input:hover{background:rgba(122,90,56,.08);}
 .woven-card-field-input:focus{background:rgba(196,94,40,.08);}
+.woven-card-field-input::placeholder{color:var(--placeholder);font-style:italic;}
 
 /* Sticky note */
 .ex-sticky{border-radius:8px;display:flex;flex-direction:column;overflow:hidden;position:relative;
@@ -453,8 +458,11 @@ function WovenCardNode({ id, data, selected }) {
   // Re-resolve item on every render so ctx menu — and edits — always see fresh data
   const item = findItemFn ? findItemFn(data.itemId) : null
   const statusInfo = item?.status ? STATUSES[item.status] : null
+  // Show any field the user has chosen to display on this card (visibleFields),
+  // regardless of whether it currently has a value — fields are editable
+  // right here now, so an empty one just means "click to fill it in".
   const shownFields = (item?.fieldDefs || []).filter(
-    fd => fd.id !== 'status' && visibleFields.includes(fd.id) && item?.fields?.[fd.id]
+    fd => fd.id !== 'status' && visibleFields.includes(fd.id)
   )
   // Prefer the live item's own name/colour over the snapshot captured when the
   // card was first placed, so edits made elsewhere (or here) stay in sync.
@@ -516,9 +524,10 @@ function WovenCardNode({ id, data, selected }) {
             <div className="woven-card-field" key={fd.id}>
               <div className="woven-card-field-lbl">{fd.label}</div>
               <textarea
-                key={`${item.id}:${fd.id}:${item.fields[fd.id]}`}
+                key={`${item.id}:${fd.id}:${item.fields[fd.id] || ''}`}
                 className="woven-card-field-input nodrag"
-                defaultValue={item.fields[fd.id]}
+                defaultValue={item.fields[fd.id] || ''}
+                placeholder={`Add ${fd.label.toLowerCase()}...`}
                 rows={2}
                 onBlur={e => commitField(fd, e.target.value)}
                 onClick={e => e.stopPropagation()}
@@ -1012,49 +1021,104 @@ function SpoolDrawerPanel({ app, projId, collectionName, strandsObj, templates, 
 }
 
 // ─────────────────────────────────────────────────────────────
+// DRAFT STATUS FILTER — a filter icon that reveals a small radio-style
+// status picker, matching StrandSortFilter's pattern in App.jsx (the
+// "tune" icon + floating option list used for the Strands page filter).
+// ─────────────────────────────────────────────────────────────
+function DraftStatusFilter({ filter, setFilter }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  const statusKeys = Object.keys(STATUSES)
+  const hasActive = filter !== 'all'
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  function pick(k) { setFilter(k); setOpen(false) }
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button className="btn-icon" style={{
+        padding: 4, border: `1px solid ${hasActive ? 'var(--indigo)' : 'var(--border)'}`,
+        borderRadius: 'var(--r)', color: hasActive ? 'var(--indigo)' : 'var(--mid)',
+      }} onClick={() => setOpen(o => !o)}>
+        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>tune</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 400,
+          background: 'var(--bg1)', border: '1px solid var(--border)', borderRadius: 'var(--rl)',
+          boxShadow: '0 8px 28px rgba(42,31,16,.14)', minWidth: 180, padding: 10,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--indigo)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
+            Status
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', fontSize: 14, color: filter === 'all' ? 'var(--indigo)' : 'var(--text)', fontWeight: filter === 'all' ? 600 : 400 }}
+            onClick={() => pick('all')}>
+            <span style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${filter === 'all' ? 'var(--indigo)' : 'var(--border)'}`, background: filter === 'all' ? 'var(--indigo)' : 'transparent', flexShrink: 0 }} />
+            All
+          </div>
+          {statusKeys.map(k => (
+            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', fontSize: 14, color: filter === k ? 'var(--indigo)' : 'var(--text)', fontWeight: filter === k ? 600 : 400 }}
+              onClick={() => pick(k)}>
+              <span style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${filter === k ? STATUSES[k].color : 'var(--border)'}`, background: filter === k ? STATUSES[k].color : 'transparent', flexShrink: 0 }} />
+              {STATUSES[k].label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
 // DRAFTS PANEL — Drafts and Loose Threads merged into one list.
 // Loose Threads was just another status ('loose_thread'), so instead
 // of a separate toolbar button and drawer, it's now a filter option
-// here alongside every other status.
+// here alongside every other status. Search bar + filter icon match
+// the same SearchSortBar pattern used for the Strands page toolbar.
 // ─────────────────────────────────────────────────────────────
 function DraftsPanel({ allDrafts, templates, onDragStart, onClose, width }) {
   const [filter, setFilter] = useState('all')
-  const statusKeys = Object.keys(STATUSES)
-  const list = filter === 'all' ? allDrafts : allDrafts.filter(d => d.status === filter)
+  const [search, setSearch] = useState('')
+
+  const q = search.trim().toLowerCase()
+  const list = allDrafts.filter(d => {
+    if (filter !== 'all' && d.status !== filter) return false
+    if (q && !(d.title || '').toLowerCase().includes(q) && !(d.synopsis || '').toLowerCase().includes(q)) return false
+    return true
+  })
 
   return (
-    <Drawer variant="inline" open title="Drafts" onClose={onClose} width={width} padded={false}>
-      <div className="ex-filter-row">
-        <button className={`ex-filter-pill ${filter === 'all' ? 'active' : ''}`}
-          onClick={() => setFilter('all')}>
-          All
-        </button>
-        {statusKeys.map(k => (
-          <button key={k} className={`ex-filter-pill ${filter === k ? 'active' : ''}`}
-            style={{ '--pill-color': STATUSES[k].color }}
-            onClick={() => setFilter(k)}>
-            {STATUSES[k].label}
-          </button>
-        ))}
-      </div>
+    <Drawer variant="inline" open title="Drafts" onClose={onClose} width={width} padded={false}
+      toolbar={
+        <SearchSortBar
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search drafts..."
+          sortSlot={<DraftStatusFilter filter={filter} setFilter={setFilter} />}
+        />
+      }
+    >
       <div className="ex-edrawer-body">
         {list.length === 0
-          ? <div style={{ padding: '8px 14px', fontSize: 14, color: 'var(--mid)' }}>
-              No drafts{filter !== 'all' ? ' with this status' : ''} yet.
-            </div>
+          ? <HelpText>No drafts{filter !== 'all' || q ? ' match this search.' : ' yet.'}</HelpText>
           : list.map(d => {
               const isLT = d.status === 'loose_thread'
               return (
-                <div key={d.id} className="ex-edrawer-row" draggable
+                <div key={d.id} className="ex-draft-row" draggable
                   onDragStart={e => onDragStart(e, buildPayload(d, isLT ? 'loose_thread' : 'draft', templates))}>
-                  <div className="ex-edrawer-dot" style={{ background: STATUSES[d.status]?.color }} />
-                  <div className="ex-edrawer-info">
-                    <div className="ex-edrawer-name">
+                  <div className="ex-draft-dot" style={{ background: STATUSES[d.status]?.color }} />
+                  <div className="ex-draft-info">
+                    <div className="ex-draft-title">
                       {d.title || d.synopsis || <em style={{ color: 'var(--placeholder)' }}>Untitled</em>}
                     </div>
-                    <div className="ex-edrawer-sub">{STATUSES[d.status]?.label}</div>
+                    <div className="ex-draft-sub">{STATUSES[d.status]?.label}</div>
                   </div>
-                  <span className="ex-edrawer-hint">drag</span>
                 </div>
               )
             })
@@ -1200,6 +1264,15 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, colle
         </div>
       ))}
 
+      <div className="ex-tool-sep" />
+      {DRAWER_ITEMS.map(p => (
+        <div key={p.id} className={`ex-tool ${activeDrawer === p.id ? 'active' : ''}`}
+          onClick={() => onDrawerToggle(p.id)}
+          onMouseEnter={e => showTt(e, p.label)} onMouseLeave={hideTt}>
+          <span className="material-symbols-outlined">{p.icon}</span>
+        </div>
+      ))}
+
       {collections.length > 0 && (
         <>
           <div className="ex-tool-sep" />
@@ -1217,15 +1290,6 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, colle
           </div>
         </>
       )}
-
-      <div className="ex-tool-sep" />
-      {DRAWER_ITEMS.map(p => (
-        <div key={p.id} className={`ex-tool ${activeDrawer === p.id ? 'active' : ''}`}
-          onClick={() => onDrawerToggle(p.id)}
-          onMouseEnter={e => showTt(e, p.label)} onMouseLeave={hideTt}>
-          <span className="material-symbols-outlined">{p.icon}</span>
-        </div>
-      ))}
     </div>
   )
 }
