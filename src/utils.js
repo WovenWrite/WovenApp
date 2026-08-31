@@ -162,37 +162,94 @@ export function deleteStorageImage(url) {
 }
 
 // ══════════════════════════════════════════════
-// Version snapshots (localStorage)
+// Version snapshots (Supabase — draft_versions table)
 // ══════════════════════════════════════════════
+// Snapshots are rows in `draft_versions`, not a localStorage blob, so history
+// survives a cleared cache and follows the user across devices.
+//
+// Autosave cadence is activity-based rather than clock-based: DraftEditor
+// calls saveSnapshot() whenever enough writing has accumulated since the
+// last snapshot (word delta) or enough time has passed with a real content
+// change (time floor), using the constants below. Manual saves (opts.isManual)
+// always write immediately and are never pruned.
 
-export var MAX_SNAPSHOTS = 20;
-export var SNAPSHOT_INTERVAL_MS = 60 * 60 * 1000;
+export var VOLUME_SNAPSHOT_WORDS = 300;      // burst trigger: snapshot after ~this many words change
+export var MIN_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000; // time floor: snapshot at least this often if content changed (catches heavy revision with low net word delta)
 
-export function getSnapshotKey(draftId) { return 'woven:versions:' + draftId; }
-
-export function loadSnapshots(draftId) {
-  try {
-    var v = localStorage.getItem(getSnapshotKey(draftId));
-    return v ? JSON.parse(v) : [];
-  } catch (e) { return []; }
+export async function loadSnapshots(draftId) {
+  var client = getSupabase();
+  if (!client) return [];
+  var res = await client
+    .from('draft_versions')
+    .select('*')
+    .eq('draft_id', draftId)
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (res.error) { console.error('loadSnapshots error:', res.error); return []; }
+  return (res.data || []).map(function (row) {
+    return {
+      id: row.id,
+      ts: new Date(row.created_at).getTime(),
+      body: row.body,
+      wordCount: row.word_count,
+      isManual: !!row.is_manual,
+      label: row.label || null
+    };
+  });
 }
 
-export function saveSnapshot(draftId, body, wordCount, label) {
-  if (!body || !body.trim()) return;
-  var snapshots = loadSnapshots(draftId);
-  var now = Date.now();
-  var last = snapshots[0];
-  if (label === 'auto' && last && (now - last.ts) < SNAPSHOT_INTERVAL_MS) return;
-  var snap = { id: genId(), ts: now, label: label || 'auto', body: body, wordCount: wordCount || 0 };
-  var updated = [snap].concat(snapshots).slice(0, MAX_SNAPSHOTS);
-  try { localStorage.setItem(getSnapshotKey(draftId), JSON.stringify(updated)); } catch (e) {}
+export async function saveSnapshot(draftId, body, wordCount, opts) {
+  if (!body || !body.trim()) return null;
+  var client = getSupabase();
+  if (!client) return null;
   var uid = window.__wovenUserId;
-  if (uid) {
-    supabase.from('wf_data').upsert(
-      { key: getSnapshotKey(draftId), user_id: uid, value: updated, updated_at: new Date().toISOString() },
-      { onConflict: 'key,user_id' }
-    ).then(function () {});
-  }
+  if (!uid) return null;
+  opts = opts || {};
+  var row = {
+    id: genId(),
+    draft_id: draftId,
+    user_id: uid,
+    body: body,
+    word_count: wordCount || 0,
+    is_manual: !!opts.isManual,
+    label: opts.label || null,
+    created_at: new Date().toISOString()
+  };
+  var res = await client.from('draft_versions').insert(row);
+  if (res.error) { console.error('saveSnapshot error:', res.error); return null; }
+  // Occasionally thin old autosaves so the table doesn't grow unbounded.
+  // Manual saves are exempt and this never runs synchronously on the save path.
+  if (!opts.isManual && Math.random() < 0.2) pruneSnapshots(draftId);
+  return row;
+}
+
+export async function pruneSnapshots(draftId) {
+  var client = getSupabase();
+  if (!client) return;
+  var res = await client
+    .from('draft_versions')
+    .select('id,created_at,is_manual')
+    .eq('draft_id', draftId)
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (res.error || !res.data) return;
+  var now = Date.now();
+  var HOUR = 60 * 60 * 1000;
+  var keepIds = {};
+  var seenBuckets = {};
+  res.data.forEach(function (row) {
+    if (row.is_manual) { keepIds[row.id] = true; return; }
+    var createdMs = new Date(row.created_at).getTime();
+    var age = now - createdMs;
+    if (age < 2 * HOUR) { keepIds[row.id] = true; return; } // keep everything from the last 2 hours
+    var bucketMs = age < 48 * HOUR ? 30 * 60 * 1000 : 3 * HOUR; // 1 per 30min up to 48h, then 1 per 3h
+    var bucketKey = Math.floor(createdMs / bucketMs);
+    if (!seenBuckets[bucketKey]) { seenBuckets[bucketKey] = true; keepIds[row.id] = true; }
+  });
+  var toDelete = res.data.filter(function (row) { return !keepIds[row.id]; }).map(function (row) { return row.id; });
+  if (toDelete.length === 0) return;
+  var del = await client.from('draft_versions').delete().in('id', toDelete);
+  if (del.error) console.error('pruneSnapshots delete error:', del.error);
 }
 
 export function formatSnapshotTime(ts) {

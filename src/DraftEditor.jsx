@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropertiesDrawer from './PropertiesDrawer'
 import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
+import { saveSnapshot, VOLUME_SNAPSHOT_WORDS, MIN_SNAPSHOT_INTERVAL_MS } from './utils'
 // ── DraftEditor.jsx ──
 // Quill-based draft editor.
 // Requires in index.html:
@@ -326,6 +327,9 @@ function DraftEditor({app}){
   var saveTimer=useRef(null);
   var initialised=useRef(false);
   var sessionStartWc=useRef(draft.wordCount||0);
+  var lastSnapshotBody=useRef('');
+  var lastSnapshotWc=useRef(draft.wordCount||0);
+  var lastSnapshotTs=useRef(0);
 
   // Derived font size from zoom
   var baseFontSize=DEFAULT_FONT_SIZE;
@@ -351,6 +355,9 @@ function DraftEditor({app}){
     var initialWc=countWords(q.getText());
     setWordCount(initialWc);
     sessionStartWc.current=initialWc;
+    lastSnapshotBody.current=q.root.innerHTML;
+    lastSnapshotWc.current=initialWc;
+    lastSnapshotTs.current=Date.now();
     q.on('selection-change',function(range){
       if(!range||range.length===0){
         // cursor position — get format at cursor
@@ -396,17 +403,21 @@ function DraftEditor({app}){
         // Word count went down (deletion) — update baseline so future additions are correct
         sessionStartWc.current=wc;
       }
-      // Snapshot every hour (mirrors App.jsx saveSnapshot logic)
-      var snKey='woven:versions:'+did;
-      try{
-        var snaps=JSON.parse(localStorage.getItem(snKey)||'[]');
-        var now2=Date.now();
-        if(!snaps.length||(now2-snaps[0].ts)>60*60*1000){
-          var snap={id:genId(),ts:now2,label:'auto',body:html,wordCount:wc};
-          snaps=[snap].concat(snaps).slice(0,20);
-          localStorage.setItem(snKey,JSON.stringify(snaps));
+      // Activity-based version snapshot: capture whenever enough new writing
+      // has accumulated since the last snapshot (word burst), or enough time
+      // has passed with a real content change (catches heavy revision/rewrites
+      // that don't move the net word count much). Manual saves bypass this
+      // entirely via handleManualSnapshot below.
+      if(html!==lastSnapshotBody.current){
+        var wordsSinceSnapshot=Math.abs(wc-lastSnapshotWc.current);
+        var timeSinceSnapshot=Date.now()-lastSnapshotTs.current;
+        if(wordsSinceSnapshot>=VOLUME_SNAPSHOT_WORDS||timeSinceSnapshot>=MIN_SNAPSHOT_INTERVAL_MS){
+          saveSnapshot(did,html,wc,{isManual:false});
+          lastSnapshotBody.current=html;
+          lastSnapshotWc.current=wc;
+          lastSnapshotTs.current=Date.now();
         }
-      }catch(e){}
+      }
       // If a share link is live, keep it in sync
       if(shareId){
         var sc=window.supabase&&window.supabase.createClient?window.supabase.createClient('https://mxsdiqrbxlvcwexfdtrj.supabase.co','sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u'):null;
@@ -449,6 +460,18 @@ function DraftEditor({app}){
 
   function fmt(type,value){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,cur[type]===value?false:value);}}
   function toggleFmt(type){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,!cur[type]);}}
+
+  function handleManualSnapshot(){
+    if(!quillRef.current)return;
+    var label=window.prompt('Name this version (optional):','');
+    if(label===null)return; // cancelled
+    var html=quillRef.current.root.innerHTML;
+    var wc=countWords(quillRef.current.getText());
+    saveSnapshot(did,html,wc,{isManual:true,label:label.trim()||null});
+    lastSnapshotBody.current=html;
+    lastSnapshotWc.current=wc;
+    lastSnapshotTs.current=Date.now();
+  }
 
   function handleRestoreVersion(body){
     if(!quillRef.current)return;
@@ -671,6 +694,7 @@ function DraftEditor({app}){
     <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
       <div className="nav-drawers" style={{display:'flex',alignItems:'center',gap:10}}>
         <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary}/>
+        <IconBtn icon="bookmark_add" title="Save version" onClick={handleManualSnapshot}/>
         <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
         <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowSpool(false);}} active={showProperties}/>
         <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowProperties(false);if(showSpool)setStrandDetailId(null);}} active={showSpool}/>
