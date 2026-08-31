@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropertiesDrawer from './PropertiesDrawer'
 import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
-import { saveSnapshot, VOLUME_SNAPSHOT_WORDS, MIN_SNAPSHOT_INTERVAL_MS } from './utils'
+import CommentsDrawer from './CommentsDrawer'
+import { saveSnapshot, VOLUME_SNAPSHOT_WORDS, MIN_SNAPSHOT_INTERVAL_MS, loadComments, saveComment, markCommentsOrphaned } from './utils'
 // ── DraftEditor.jsx ──
 // Quill-based draft editor.
 // Requires in index.html:
@@ -236,7 +237,7 @@ function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepu
 
 
 // ── NavCollapseMenu (mobile ≤720px) ──
-function NavCollapseMenu({branches,activeBranchId,onSwitch,onCreate,onSetPrimary,onVersions,onProperties,onSpool}){
+function NavCollapseMenu({branches,activeBranchId,onSwitch,onCreate,onSetPrimary,onVersions,onAddComment,onComments,onProperties,onSpool}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
   var ref=useRef(null);
   useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
@@ -244,6 +245,8 @@ function NavCollapseMenu({branches,activeBranchId,onSwitch,onCreate,onSetPrimary
   var items=[
     {icon:'account_tree',label:hasBranches?(branches.length+' strands'):'Create strand',action:function(){onCreate&&onCreate('Strand '+(branches?branches.length+1:2));setOpen(false);}},
     {icon:'history',label:'Versions',action:function(){onVersions();setOpen(false);}},
+    {icon:'add_comment',label:'Add comment',action:function(){onAddComment&&onAddComment();setOpen(false);}},
+    {icon:'comment',label:'Comments',action:function(){onComments&&onComments();setOpen(false);}},
     {icon:'settings',label:'Properties',action:function(){onProperties();setOpen(false);}},
     {icon:'gesture',label:'Spools',action:function(){onSpool();setOpen(false);}},
   ];
@@ -307,6 +310,7 @@ function DraftEditor({app}){
   var slink=useState(null);var shareLink=slink[0];var setShareLink=slink[1];
   var ssid=useState(null);var shareId=ssid[0];var setShareId=ssid[1];
   var spv=useState(false);var showVersions=spv[0];var setShowVersions=spv[1];
+  var spc=useState(false);var showComments=spc[0];var setShowComments=spc[1];
   var spp=useState(false);var showProperties=spp[0];var setShowProperties=spp[1];
   var sps=useState(false);var showSpool=sps[0];var setShowSpool=sps[1];
   var ssd=useState(null);var strandDetailId=ssd[0];var setStrandDetailId=ssd[1];
@@ -330,6 +334,8 @@ function DraftEditor({app}){
   var lastSnapshotBody=useRef('');
   var lastSnapshotWc=useRef(draft.wordCount||0);
   var lastSnapshotTs=useRef(0);
+  var lastVersionId=useRef(null);
+  var activeCommentIdsRef=useRef([]);
 
   // Derived font size from zoom
   var baseFontSize=DEFAULT_FONT_SIZE;
@@ -341,6 +347,28 @@ function DraftEditor({app}){
   useEffect(function(){
     if(initialised.current)return;
     if(!editorContainerRef.current||!window.Quill)return;
+    // Register the comment inline format once globally. Uses class syntax
+    // because Quill's Parchment blots require extending its Inline class —
+    // the rest of this file stays var-style, this is the one exception
+    // the framework itself demands.
+    if(!window.__wovenCommentBlotRegistered){
+      var Inline=window.Quill.import('blots/inline');
+      class CommentBlot extends Inline{
+        static create(commentId){
+          var node=super.create();
+          node.setAttribute('data-comment-id',commentId);
+          node.classList.add('wv-comment-mark');
+          return node;
+        }
+        static formats(node){
+          return node.getAttribute('data-comment-id');
+        }
+      }
+      CommentBlot.blotName='comment';
+      CommentBlot.tagName='span';
+      window.Quill.register(CommentBlot);
+      window.__wovenCommentBlotRegistered=true;
+    }
     var isMobile=window.innerWidth<720;
     var q=new window.Quill(editorContainerRef.current,{
       theme:isMobile?'bubble':'snow',
@@ -358,6 +386,11 @@ function DraftEditor({app}){
     lastSnapshotBody.current=q.root.innerHTML;
     lastSnapshotWc.current=initialWc;
     lastSnapshotTs.current=Date.now();
+    // Track which comment ids are still active (not resolved/orphaned) so the
+    // save handler can detect when their anchor text gets deleted.
+    loadComments(did).then(function(list){
+      activeCommentIdsRef.current=list.filter(function(c){return !c.resolved&&!c.orphaned;}).map(function(c){return c.id;});
+    });
     q.on('selection-change',function(range){
       if(!range||range.length===0){
         // cursor position — get format at cursor
@@ -412,10 +445,24 @@ function DraftEditor({app}){
         var wordsSinceSnapshot=Math.abs(wc-lastSnapshotWc.current);
         var timeSinceSnapshot=Date.now()-lastSnapshotTs.current;
         if(wordsSinceSnapshot>=VOLUME_SNAPSHOT_WORDS||timeSinceSnapshot>=MIN_SNAPSHOT_INTERVAL_MS){
-          saveSnapshot(did,html,wc,{isManual:false});
+          saveSnapshot(did,html,wc,{isManual:false}).then(function(row){if(row)lastVersionId.current=row.id;});
           lastSnapshotBody.current=html;
           lastSnapshotWc.current=wc;
           lastSnapshotTs.current=Date.now();
+        }
+      }
+      // Orphan detection: if a comment's anchor span is no longer present in
+      // the saved HTML, the text it was attached to was deleted — mark it
+      // orphaned so it grays out in the comments list.
+      if(activeCommentIdsRef.current.length){
+        var stillPresent=[];var toOrphan=[];
+        activeCommentIdsRef.current.forEach(function(cid){
+          if(html.indexOf('data-comment-id="'+cid+'"')>=0)stillPresent.push(cid);
+          else toOrphan.push(cid);
+        });
+        if(toOrphan.length){
+          activeCommentIdsRef.current=stillPresent;
+          markCommentsOrphaned(toOrphan);
         }
       }
       // If a share link is live, keep it in sync
@@ -467,10 +514,29 @@ function DraftEditor({app}){
     if(label===null)return; // cancelled
     var html=quillRef.current.root.innerHTML;
     var wc=countWords(quillRef.current.getText());
-    saveSnapshot(did,html,wc,{isManual:true,label:label.trim()||null});
+    saveSnapshot(did,html,wc,{isManual:true,label:label.trim()||null}).then(function(row){if(row)lastVersionId.current=row.id;});
     lastSnapshotBody.current=html;
     lastSnapshotWc.current=wc;
     lastSnapshotTs.current=Date.now();
+  }
+
+  function handleAddComment(){
+    if(!quillRef.current)return;
+    var range=quillRef.current.getSelection();
+    if(!range||range.length===0){window.alert('Select some text first to attach a comment to.');return;}
+    var text=window.prompt('Add a comment:','');
+    if(text===null||!text.trim())return;
+    var commentId=genId();
+    var anchorText=quillRef.current.getText(range.index,range.length);
+    quillRef.current.formatText(range.index,range.length,'comment',commentId,'user');
+    var html=quillRef.current.root.innerHTML;
+    var wc=countWords(quillRef.current.getText());
+    if(app&&app.updateDraft)app.updateDraft(pid,did,{body:html,wordCount:wc,updatedAt:new Date().toISOString()});
+    var profile=(app&&app.profile)||{};
+    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim()||'You';
+    saveComment(did,{id:commentId,versionId:lastVersionId.current,authorName:authorName,anchorText:anchorText.trim(),body:text.trim()}).then(function(row){
+      if(row)activeCommentIdsRef.current=activeCommentIdsRef.current.concat([commentId]);
+    });
   }
 
   function handleRestoreVersion(body){
@@ -674,6 +740,8 @@ function DraftEditor({app}){
         .nav-collapse { display: flex !important; }
       }
       .ql-bubble .ql-fill { fill: #fdf8f0; }
+      .wv-comment-mark { background: rgba(196,94,40,.16); border-bottom: 2px solid rgba(196,94,40,.55); cursor: pointer; }
+      .wv-comment-mark.wv-comment-resolved { background: rgba(122,90,56,.08); border-bottom-color: rgba(122,90,56,.3); }
     `;
     document.head.appendChild(style);
   },[]);
@@ -695,12 +763,14 @@ function DraftEditor({app}){
       <div className="nav-drawers" style={{display:'flex',alignItems:'center',gap:10}}>
         <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary}/>
         <IconBtn icon="bookmark_add" title="Save version" onClick={handleManualSnapshot}/>
-        <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
-        <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowSpool(false);}} active={showProperties}/>
-        <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowProperties(false);if(showSpool)setStrandDetailId(null);}} active={showSpool}/>
+        <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowComments(false);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
+        <IconBtn icon="add_comment" title="Add comment" onClick={handleAddComment}/>
+        <IconBtn icon="comment" title="Comments" onClick={function(){setShowComments(!showComments);setShowVersions(false);setShowProperties(false);setShowSpool(false);}} active={showComments}/>
+        <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowComments(false);setShowSpool(false);}} active={showProperties}/>
+        <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowComments(false);setShowProperties(false);if(showSpool)setStrandDetailId(null);}} active={showSpool}/>
       </div>
       {/* Mobile collapsed menu */}
-      <NavCollapseMenu branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onVersions={function(){setShowVersions(!showVersions);}} onProperties={function(){setShowProperties(!showProperties);}} onSpool={function(){setShowSpool(!showSpool);}}/>
+      <NavCollapseMenu branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onVersions={function(){setShowVersions(!showVersions);}} onAddComment={handleAddComment} onComments={function(){setShowComments(!showComments);}} onProperties={function(){setShowProperties(!showProperties);}} onSpool={function(){setShowSpool(!showSpool);}}/>
       <ShareDropdown onExportPDF={handleExportPDF} onExportDocx={handleExportDocx} shareLink={shareLink} onGenerateLink={handleGenerateLink} onDepublish={handleDepublish}/>
     </div>
   </nav>
@@ -767,6 +837,9 @@ function DraftEditor({app}){
     )}
     {!flowMode&&showVersions&&(
       <VersionsDrawer draftId={did} variant="inline" onClose={function(){setShowVersions(false);}} onRestore={handleRestoreVersion}/>
+    )}
+    {!flowMode&&showComments&&(
+      <CommentsDrawer draftId={did} variant="inline" onClose={function(){setShowComments(false);}}/>
     )}
   </div>
 
