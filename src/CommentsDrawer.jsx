@@ -13,7 +13,7 @@
 //
 //   <CommentsDrawer draftId={did} variant="inline" onClose={...} />
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Drawer } from './SharedUI';
 import { loadComments, resolveComment, reopenComment } from './utils';
 
@@ -29,8 +29,9 @@ function formatCommentTime(ts) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + time;
 }
 
-export default function CommentsDrawer({ draftId, variant, open, onClose }) {
+export default function CommentsDrawer({ draftId, variant, open, focusCommentId, onClose }) {
   var cs = useState([]); var comments = cs[0]; var setComments = cs[1];
+  var rowRefs = useRef({});
 
   function refresh() {
     loadComments(draftId).then(function (list) { setComments(list); });
@@ -45,6 +46,13 @@ export default function CommentsDrawer({ draftId, variant, open, onClose }) {
     });
     return function () { cancelled = true; };
   }, [draftId, open]);
+
+  // Scroll to and briefly highlight the comment that was clicked on in the draft
+  useEffect(function () {
+    if (!focusCommentId) return;
+    var node = rowRefs.current[focusCommentId];
+    if (node && node.scrollIntoView) node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [focusCommentId, comments]);
 
   function handleResolve(comment) {
     resolveComment(comment.id).then(refresh);
@@ -68,8 +76,14 @@ export default function CommentsDrawer({ draftId, variant, open, onClose }) {
       )}
 
       {active.map(function (c) {
+        var isFocused = c.id === focusCommentId;
         return (
-          <div key={c.id} className="wv-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: '12px 14px' }}>
+          <div
+            key={c.id}
+            ref={function (el) { rowRefs.current[c.id] = el; }}
+            className="wv-row"
+            style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: '12px 14px', background: isFocused ? 'rgba(196,94,40,.08)' : 'transparent', transition: 'background .3s' }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{c.authorName}</div>
               <div style={{ fontSize: 11, color: 'var(--mid)' }}>{formatCommentTime(c.createdAt)}</div>
@@ -97,8 +111,14 @@ export default function CommentsDrawer({ draftId, variant, open, onClose }) {
       )}
 
       {grayed.map(function (c) {
+        var isFocused = c.id === focusCommentId;
         return (
-          <div key={c.id} className="wv-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: '12px 14px', opacity: 0.55 }}>
+          <div
+            key={c.id}
+            ref={function (el) { rowRefs.current[c.id] = el; }}
+            className="wv-row"
+            style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: '12px 14px', opacity: 0.55, background: isFocused ? 'rgba(196,94,40,.08)' : 'transparent', transition: 'background .3s' }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{c.authorName}</div>
               <div style={{ fontSize: 11, color: 'var(--mid)' }}>{formatCommentTime(c.createdAt)}</div>

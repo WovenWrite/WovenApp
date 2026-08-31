@@ -237,7 +237,7 @@ function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepu
 
 
 // ── NavCollapseMenu (mobile ≤720px) ──
-function NavCollapseMenu({branches,activeBranchId,onSwitch,onCreate,onSetPrimary,onVersions,onAddComment,onComments,onProperties,onSpool}){
+function NavCollapseMenu({branches,activeBranchId,onSwitch,onCreate,onSetPrimary,onVersions,onComments,onProperties,onSpool}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
   var ref=useRef(null);
   useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
@@ -245,7 +245,6 @@ function NavCollapseMenu({branches,activeBranchId,onSwitch,onCreate,onSetPrimary
   var items=[
     {icon:'account_tree',label:hasBranches?(branches.length+' strands'):'Create strand',action:function(){onCreate&&onCreate('Strand '+(branches?branches.length+1:2));setOpen(false);}},
     {icon:'history',label:'Versions',action:function(){onVersions();setOpen(false);}},
-    {icon:'add_comment',label:'Add comment',action:function(){onAddComment&&onAddComment();setOpen(false);}},
     {icon:'comment',label:'Comments',action:function(){onComments&&onComments();setOpen(false);}},
     {icon:'settings',label:'Properties',action:function(){onProperties();setOpen(false);}},
     {icon:'gesture',label:'Spools',action:function(){onSpool();setOpen(false);}},
@@ -336,6 +335,9 @@ function DraftEditor({app}){
   var lastSnapshotTs=useRef(0);
   var lastVersionId=useRef(null);
   var activeCommentIdsRef=useRef([]);
+  var pendingCommentRange=useRef(null);
+  var cbp=useState(null);var commentBtnPos=cbp[0];var setCommentBtnPos=cbp[1];
+  var fci=useState(null);var focusCommentId=fci[0];var setFocusCommentId=fci[1];
 
   // Derived font size from zoom
   var baseFontSize=DEFAULT_FONT_SIZE;
@@ -398,12 +400,30 @@ function DraftEditor({app}){
         if(fmt.blockquote)setActiveFormat('quote');
         else if(fmt.header)setActiveFormat(String(fmt.header));
         else setActiveFormat('');
+        pendingCommentRange.current=null;
+        setCommentBtnPos(null);
         return;
       }
       var fmt=q.getFormat(range);
       if(fmt.blockquote)setActiveFormat('quote');
       else if(fmt.header)setActiveFormat(String(fmt.header));
       else setActiveFormat('');
+      // Text is selected — surface the inline "leave a comment" affordance
+      // near the selection instead of a permanent toolbar icon. Stash the
+      // range in a ref (not state) so a click on the button, which can blur
+      // the editor and clear the visual selection, still acts on the right
+      // text.
+      pendingCommentRange.current={index:range.index,length:range.length};
+      var bounds=q.getBounds(range.index,range.length);
+      setCommentBtnPos({top:bounds.top,left:bounds.left+bounds.width/2});
+    });
+    // Clicking an existing comment mark opens the comments panel focused on it
+    q.root.addEventListener('click',function(e){
+      var mark=e.target.closest?e.target.closest('.wv-comment-mark'):null;
+      if(!mark)return;
+      var cid=mark.getAttribute('data-comment-id');
+      setFocusCommentId(cid);
+      setShowComments(true);setShowVersions(false);setShowProperties(false);setShowSpool(false);
     });
     // Also update on text-change (when typing changes format context)
     q.on('editor-change',function(){
@@ -509,22 +529,23 @@ function DraftEditor({app}){
   function toggleFmt(type){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,!cur[type]);}}
 
   function handleManualSnapshot(){
-    if(!quillRef.current)return;
+    if(!quillRef.current)return Promise.resolve();
     var label=window.prompt('Name this version (optional):','');
-    if(label===null)return; // cancelled
+    if(label===null)return Promise.resolve(); // cancelled
     var html=quillRef.current.root.innerHTML;
     var wc=countWords(quillRef.current.getText());
-    saveSnapshot(did,html,wc,{isManual:true,label:label.trim()||null}).then(function(row){if(row)lastVersionId.current=row.id;});
     lastSnapshotBody.current=html;
     lastSnapshotWc.current=wc;
     lastSnapshotTs.current=Date.now();
+    return saveSnapshot(did,html,wc,{isManual:true,label:label.trim()||null}).then(function(row){if(row)lastVersionId.current=row.id;});
   }
 
   function handleAddComment(){
     if(!quillRef.current)return;
-    var range=quillRef.current.getSelection();
+    var range=pendingCommentRange.current||quillRef.current.getSelection();
     if(!range||range.length===0){window.alert('Select some text first to attach a comment to.');return;}
     var text=window.prompt('Add a comment:','');
+    setCommentBtnPos(null);
     if(text===null||!text.trim())return;
     var commentId=genId();
     var anchorText=quillRef.current.getText(range.index,range.length);
@@ -762,15 +783,13 @@ function DraftEditor({app}){
     <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
       <div className="nav-drawers" style={{display:'flex',alignItems:'center',gap:10}}>
         <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary}/>
-        <IconBtn icon="bookmark_add" title="Save version" onClick={handleManualSnapshot}/>
         <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowComments(false);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
-        <IconBtn icon="add_comment" title="Add comment" onClick={handleAddComment}/>
         <IconBtn icon="comment" title="Comments" onClick={function(){setShowComments(!showComments);setShowVersions(false);setShowProperties(false);setShowSpool(false);}} active={showComments}/>
         <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowComments(false);setShowSpool(false);}} active={showProperties}/>
         <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowComments(false);setShowProperties(false);if(showSpool)setStrandDetailId(null);}} active={showSpool}/>
       </div>
       {/* Mobile collapsed menu */}
-      <NavCollapseMenu branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onVersions={function(){setShowVersions(!showVersions);}} onAddComment={handleAddComment} onComments={function(){setShowComments(!showComments);}} onProperties={function(){setShowProperties(!showProperties);}} onSpool={function(){setShowSpool(!showSpool);}}/>
+      <NavCollapseMenu branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onVersions={function(){setShowVersions(!showVersions);}} onComments={function(){setShowComments(!showComments);}} onProperties={function(){setShowProperties(!showProperties);}} onSpool={function(){setShowSpool(!showSpool);}}/>
       <ShareDropdown onExportPDF={handleExportPDF} onExportDocx={handleExportDocx} shareLink={shareLink} onGenerateLink={handleGenerateLink} onDepublish={handleDepublish}/>
     </div>
   </nav>
@@ -822,8 +841,21 @@ function DraftEditor({app}){
 
       {/* Editor scroll area */}
       <div style={{flex:1,overflowY:'scroll',WebkitOverflowScrolling:'touch',paddingTop:48,paddingBottom:20,paddingLeft:40,paddingRight:56,background:T.bodyBg}} className="editor-scroll-area">
-        <div style={{maxWidth:maxWidth+'px',margin:'0 auto',transition:'max-width .2s'}}>
+        <div style={{maxWidth:maxWidth+'px',margin:'0 auto',transition:'max-width .2s',position:'relative'}}>
           <div ref={editorContainerRef} style={editorBodyStyle}/>
+          {commentBtnPos&&(
+            <button
+              onMouseDown={function(e){e.preventDefault();handleAddComment();}}
+              style={{
+                position:'absolute',top:commentBtnPos.top-38,left:commentBtnPos.left,transform:'translateX(-50%)',
+                display:'flex',alignItems:'center',gap:4,padding:'6px 10px',borderRadius:8,border:'none',
+                background:T.textDark,color:'#fdf8f0',fontSize:12,fontFamily:'DM Sans, sans-serif',cursor:'pointer',
+                boxShadow:'0 4px 14px rgba(42,31,16,.22)',zIndex:30,whiteSpace:'nowrap'
+              }}
+            >
+              <span className="mi" style={{fontSize:15}}>add_comment</span>Comment
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -836,10 +868,10 @@ function DraftEditor({app}){
       <StrandsDrawer app={app} draft={draft} variant="inline" strandId={strandDetailId} onOpenStrand={setStrandDetailId} onClose={function(){setShowSpool(false);setStrandDetailId(null);}}/>
     )}
     {!flowMode&&showVersions&&(
-      <VersionsDrawer draftId={did} variant="inline" onClose={function(){setShowVersions(false);}} onRestore={handleRestoreVersion}/>
+      <VersionsDrawer draftId={did} variant="inline" onClose={function(){setShowVersions(false);}} onRestore={handleRestoreVersion} onSaveVersion={handleManualSnapshot}/>
     )}
     {!flowMode&&showComments&&(
-      <CommentsDrawer draftId={did} variant="inline" onClose={function(){setShowComments(false);}}/>
+      <CommentsDrawer draftId={did} variant="inline" focusCommentId={focusCommentId} onClose={function(){setShowComments(false);setFocusCommentId(null);}}/>
     )}
   </div>
 

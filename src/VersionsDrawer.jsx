@@ -19,9 +19,13 @@ function labelFor(snap) {
   return LABELS[snap.label] || snap.label;
 }
 
-export default function VersionsDrawer({ draftId, variant, open, onClose, onRestore }) {
+export default function VersionsDrawer({ draftId, variant, open, onClose, onRestore, onSaveVersion }) {
   var sp = useState(null); var previewId = sp[0]; var setPreviewId = sp[1];
   var ss = useState([]); var snapshots = ss[0]; var setSnapshots = ss[1];
+
+  function refresh() {
+    loadSnapshots(draftId).then(function (result) { setSnapshots(result); });
+  }
 
   // Re-read on open and whenever the draft changes, so the list isn't stale.
   useEffect(function () {
@@ -41,8 +45,20 @@ export default function VersionsDrawer({ draftId, variant, open, onClose, onRest
     }
   }
 
+  function handleSaveVersion() {
+    if (!onSaveVersion) return;
+    var result = onSaveVersion();
+    if (result && result.then) result.then(refresh);
+  }
+
   return (
     <Drawer variant={variant || 'inline'} open={open} title="Version History" onClose={onClose} padded={false}>
+
+      <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+        <PrimaryButton icon="bookmark_add" onClick={handleSaveVersion}>
+          Save this version
+        </PrimaryButton>
+      </div>
 
       {snapshots.length === 0 && (
         <div className="wv-empty" style={{ textAlign: 'center', padding: '28px 18px' }}>
