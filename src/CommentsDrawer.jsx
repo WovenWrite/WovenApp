@@ -29,7 +29,7 @@ function formatCommentTime(ts) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + time;
 }
 
-export default function CommentsDrawer({ draftId, variant, open, focusCommentId, onDismiss, onReopen, onClose }) {
+export default function CommentsDrawer({ draftId, variant, open, focusCommentId, refreshTick, onDismiss, onReopen, onClose }) {
   var cs = useState([]); var comments = cs[0]; var setComments = cs[1];
   var rowRefs = useRef({});
 
@@ -37,7 +37,9 @@ export default function CommentsDrawer({ draftId, variant, open, focusCommentId,
     loadComments(draftId).then(function (list) { setComments(list); });
   }
 
-  // Re-read on open and whenever the draft changes, so the list isn't stale.
+  // Re-read on open, when the draft changes, or when a comment was just
+  // added/dismissed/reopened elsewhere (refreshTick) — without this, an
+  // already-open drawer never learns about a new comment until it remounts.
   useEffect(function () {
     if (open === false) return;
     var cancelled = false;
@@ -45,7 +47,7 @@ export default function CommentsDrawer({ draftId, variant, open, focusCommentId,
       if (!cancelled) setComments(result);
     });
     return function () { cancelled = true; };
-  }, [draftId, open]);
+  }, [draftId, open, refreshTick]);
 
   // Scroll to and briefly highlight the comment that was clicked on in the draft
   useEffect(function () {

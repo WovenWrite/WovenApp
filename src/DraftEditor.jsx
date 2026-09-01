@@ -4,6 +4,7 @@ import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
 import CommentsDrawer from './CommentsDrawer'
 import CompareView from './CompareView'
+import { Popover, Field } from './SharedUI'
 import { saveSnapshot, VOLUME_SNAPSHOT_WORDS, MIN_SNAPSHOT_INTERVAL_MS, loadComments, saveComment, markCommentsOrphaned, resolveComment, reopenComment } from './utils'
 // ── DraftEditor.jsx ──
 // Quill-based draft editor.
@@ -368,8 +369,14 @@ function DraftEditor({app}){
   var activeCommentIdsRef=useRef([]);
   var pendingCommentRange=useRef(null);
   var cbp=useState(null);var commentBtnPos=cbp[0];var setCommentBtnPos=cbp[1];
+  var commentBtnRef=useRef(null);
+  var cco=useState(false);var showCommentComposer=cco[0];var setShowCommentComposer=cco[1];
+  var commentComposerOpenRef=useRef(false);
+  var cdt=useState('');var commentDraftText=cdt[0];var setCommentDraftText=cdt[1];
   var fci=useState(null);var focusCommentId=fci[0];var setFocusCommentId=fci[1];
   var scd=useState(null);var compareData=scd[0];var setCompareData=scd[1];
+  var crt=useState(0);var commentsRefreshTick=crt[0];var setCommentsRefreshTick=crt[1];
+  var pvw=useState(null);var previewVersion=pvw[0];var setPreviewVersion=pvw[1];
 
   // Derived font size from zoom
   var baseFontSize=DEFAULT_FONT_SIZE;
@@ -438,8 +445,14 @@ function DraftEditor({app}){
         if(fmt.blockquote)setActiveFormat('quote');
         else if(fmt.header)setActiveFormat(String(fmt.header));
         else setActiveFormat('');
-        pendingCommentRange.current=null;
-        setCommentBtnPos(null);
+        // Don't drop the pending range/button while the comment composer is
+        // open — losing DOM focus to the composer's textarea fires this same
+        // "empty selection" event, and clearing here would rip the anchor
+        // out from under an in-progress comment.
+        if(!commentComposerOpenRef.current){
+          pendingCommentRange.current=null;
+          setCommentBtnPos(null);
+        }
         return;
       }
       var fmt=q.getFormat(range);
@@ -566,25 +579,39 @@ function DraftEditor({app}){
   function fmt(type,value){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,cur[type]===value?false:value);}}
   function toggleFmt(type){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,!cur[type]);}}
 
-  function handleManualSnapshot(){
+  function handleManualSnapshot(label){
     if(!quillRef.current)return Promise.resolve();
-    var label=window.prompt('Name this version (optional):','');
-    if(label===null)return Promise.resolve(); // cancelled
+    if(!label||!label.trim())return Promise.resolve();
     var html=quillRef.current.root.innerHTML;
     var wc=countWords(quillRef.current.getText());
     lastSnapshotBody.current=html;
     lastSnapshotWc.current=wc;
     lastSnapshotTs.current=Date.now();
-    return saveSnapshot(did,html,wc,{isManual:true,label:label.trim()||null}).then(function(row){if(row)lastVersionId.current=row.id;});
+    return saveSnapshot(did,html,wc,{isManual:true,label:label.trim()}).then(function(row){if(row)lastVersionId.current=row.id;});
   }
 
   function handleAddComment(){
     if(!quillRef.current)return;
     var range=pendingCommentRange.current||quillRef.current.getSelection();
     if(!range||range.length===0){window.alert('Select some text first to attach a comment to.');return;}
-    var text=window.prompt('Add a comment:','');
+    pendingCommentRange.current=range;
+    commentComposerOpenRef.current=true;
+    setCommentDraftText('');
+    setShowCommentComposer(true);
+  }
+
+  function closeCommentComposer(){
+    commentComposerOpenRef.current=false;
+    setShowCommentComposer(false);
+    setCommentDraftText('');
+    pendingCommentRange.current=null;
     setCommentBtnPos(null);
-    if(text===null||!text.trim())return;
+  }
+
+  function submitComment(){
+    if(!quillRef.current||!commentDraftText.trim())return;
+    var range=pendingCommentRange.current;
+    if(!range||range.length===0){closeCommentComposer();return;}
     var commentId=genId();
     var anchorText=quillRef.current.getText(range.index,range.length);
     quillRef.current.formatText(range.index,range.length,'comment',commentId,'user');
@@ -593,9 +620,14 @@ function DraftEditor({app}){
     if(app&&app.updateDraft)app.updateDraft(pid,did,{body:html,wordCount:wc,updatedAt:new Date().toISOString()});
     var profile=(app&&app.profile)||{};
     var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim()||'You';
-    saveComment(did,{id:commentId,versionId:lastVersionId.current,authorName:authorName,anchorText:anchorText.trim(),body:text.trim()}).then(function(row){
-      if(row)activeCommentIdsRef.current=activeCommentIdsRef.current.concat([commentId]);
+    var commentText=commentDraftText.trim();
+    saveComment(did,{id:commentId,versionId:lastVersionId.current,authorName:authorName,anchorText:anchorText.trim(),body:commentText}).then(function(row){
+      if(row){
+        activeCommentIdsRef.current=activeCommentIdsRef.current.concat([commentId]);
+        setCommentsRefreshTick(function(t){return t+1;});
+      }
     });
+    closeCommentComposer();
   }
 
   function handleDismissComment(comment){
@@ -904,23 +936,80 @@ function DraftEditor({app}){
         </div>
       </div>
 
+      {/* Version preview banner */}
+      {previewVersion&&(
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'8px 20px',background:'#7A5A38',color:'#fdf8f0',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,fontFamily:'DM Sans, sans-serif',minWidth:0}}>
+            <span className="mi" style={{fontSize:16}}>visibility</span>
+            <span style={{fontWeight:600}}>{previewVersion.label}</span>
+            <span style={{opacity:.75}}>· {previewVersion.timeLabel} · {previewVersion.wordCount||0}w</span>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+            <button onClick={function(){
+              if(window.confirm('Restore this version? Your current text will be replaced.')){
+                previewVersion.onRestore&&previewVersion.onRestore();
+                setPreviewVersion(null);
+              }
+            }} style={{display:'flex',alignItems:'center',gap:4,padding:'5px 10px',borderRadius:6,border:'1px solid rgba(253,248,240,.4)',background:'transparent',color:'#fdf8f0',fontSize:12,cursor:'pointer',fontFamily:'DM Sans, sans-serif'}}>
+              <span className="mi" style={{fontSize:14}}>restore</span>Restore this version
+            </button>
+            <button onClick={function(){setPreviewVersion(null);}} style={{display:'flex',alignItems:'center',gap:4,padding:'5px 10px',borderRadius:6,border:'none',background:'rgba(253,248,240,.15)',color:'#fdf8f0',fontSize:12,cursor:'pointer',fontFamily:'DM Sans, sans-serif'}}>
+              <span className="mi" style={{fontSize:14}}>close</span>Back to editing
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Editor scroll area */}
       <div style={{flex:1,overflowY:'scroll',WebkitOverflowScrolling:'touch',paddingTop:48,paddingBottom:20,paddingLeft:40,paddingRight:56,background:T.bodyBg}} className="editor-scroll-area">
         <div style={{maxWidth:maxWidth+'px',margin:'0 auto',transition:'max-width .2s',position:'relative'}}>
-          <div ref={editorContainerRef} className={flowMode?'wv-flow-active':''} style={editorBodyStyle}/>
-          {commentBtnPos&&(
+          <div ref={editorContainerRef} className={flowMode?'wv-flow-active':''} style={Object.assign({},editorBodyStyle,previewVersion?{display:'none'}:{})}/>
+          {previewVersion&&(
+            <div
+              style={Object.assign({},editorBodyStyle,{pointerEvents:'none',userSelect:'none',opacity:.85})}
+              dangerouslySetInnerHTML={{__html:previewVersion.body}}
+            />
+          )}
+          {commentBtnPos&&!previewVersion&&(
             <button
+              ref={commentBtnRef}
               onMouseDown={function(e){e.preventDefault();handleAddComment();}}
               style={{
-                position:'absolute',top:commentBtnPos.top-38,left:commentBtnPos.left,transform:'translateX(-50%)',
-                display:'flex',alignItems:'center',gap:4,padding:'6px 10px',borderRadius:8,border:'none',
-                background:T.textDark,color:'#fdf8f0',fontSize:12,fontFamily:'DM Sans, sans-serif',cursor:'pointer',
-                boxShadow:'0 4px 14px rgba(42,31,16,.22)',zIndex:30,whiteSpace:'nowrap'
+                position:'absolute',top:commentBtnPos.top-34,left:commentBtnPos.left,transform:'translateX(-50%)',
+                display:'flex',alignItems:'center',gap:4,padding:'4px 10px',borderRadius:6,border:'none',
+                background:'#7A5A38',color:'#fdf8f0',fontSize:11,fontFamily:'DM Sans, sans-serif',cursor:'pointer',
+                zIndex:30,whiteSpace:'nowrap'
               }}
             >
-              <span className="mi" style={{fontSize:15}}>add_comment</span>Comment
+              <span className="mi" style={{fontSize:13}}>add_comment</span>Comment
             </button>
           )}
+          <Popover
+            anchorRef={commentBtnRef}
+            open={showCommentComposer}
+            onClose={closeCommentComposer}
+            title="Add comment"
+            width={260}
+            footer={
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end',width:'100%'}}>
+                <button className="btn btn-ghost" onClick={closeCommentComposer}>Cancel</button>
+                <button className="btn btn-primary" disabled={!commentDraftText.trim()} onClick={submitComment}>
+                  <span className="mi" style={{fontSize:16}}>add_comment</span>Add
+                </button>
+              </div>
+            }
+          >
+            <Field
+              value={commentDraftText}
+              onChange={function(e){setCommentDraftText(e.target.value);}}
+              placeholder="Write a comment…"
+              autoFocus
+              onKeyDown={function(e){
+                if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitComment();}
+                if(e.key==='Escape'){closeCommentComposer();}
+              }}
+            />
+          </Popover>
         </div>
       </div>
     </div>
@@ -933,10 +1022,10 @@ function DraftEditor({app}){
       <StrandsDrawer app={app} draft={draft} variant="inline" strandId={strandDetailId} onOpenStrand={setStrandDetailId} onClose={function(){setShowSpool(false);setStrandDetailId(null);}}/>
     )}
     {!flowMode&&showVersions&&(
-      <VersionsDrawer draftId={did} variant="inline" onClose={function(){setShowVersions(false);}} onRestore={handleRestoreVersion} onSaveVersion={handleManualSnapshot} onCompare={setCompareData}/>
+      <VersionsDrawer draftId={did} variant="inline" onClose={function(){setShowVersions(false);}} onRestore={handleRestoreVersion} onSaveVersion={handleManualSnapshot} onCompare={setCompareData} onPreview={setPreviewVersion} onExitPreview={function(){setPreviewVersion(null);}}/>
     )}
     {!flowMode&&showComments&&(
-      <CommentsDrawer draftId={did} variant="inline" focusCommentId={focusCommentId} onDismiss={handleDismissComment} onReopen={handleReopenComment} onClose={function(){setShowComments(false);setFocusCommentId(null);}}/>
+      <CommentsDrawer draftId={did} variant="inline" focusCommentId={focusCommentId} refreshTick={commentsRefreshTick} onDismiss={handleDismissComment} onReopen={handleReopenComment} onClose={function(){setShowComments(false);setFocusCommentId(null);}}/>
     )}
   </div>
   <CompareView
