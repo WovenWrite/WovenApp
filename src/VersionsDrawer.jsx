@@ -19,9 +19,10 @@ function labelFor(snap) {
   return LABELS[snap.label] || snap.label;
 }
 
-export default function VersionsDrawer({ draftId, variant, open, onClose, onRestore, onSaveVersion }) {
+export default function VersionsDrawer({ draftId, variant, open, onClose, onRestore, onSaveVersion, onCompare }) {
   var sp = useState(null); var previewId = sp[0]; var setPreviewId = sp[1];
   var ss = useState([]); var snapshots = ss[0]; var setSnapshots = ss[1];
+  var sel = useState([]); var selected = sel[0]; var setSelected = sel[1];
 
   function refresh() {
     loadSnapshots(draftId).then(function (result) { setSnapshots(result); });
@@ -35,6 +36,7 @@ export default function VersionsDrawer({ draftId, variant, open, onClose, onRest
       if (cancelled) return;
       setSnapshots(result);
       setPreviewId(null);
+      setSelected([]);
     });
     return function () { cancelled = true; };
   }, [draftId, open]);
@@ -51,14 +53,44 @@ export default function VersionsDrawer({ draftId, variant, open, onClose, onRest
     if (result && result.then) result.then(refresh);
   }
 
+  function toggleSelect(id, e) {
+    e.stopPropagation();
+    setSelected(function (prev) {
+      if (prev.indexOf(id) >= 0) return prev.filter(function (x) { return x !== id; });
+      if (prev.length >= 2) return [prev[1], id];
+      return prev.concat([id]);
+    });
+  }
+
+  function handleCompare() {
+    if (selected.length !== 2 || !onCompare) return;
+    var a = snapshots.find(function (s) { return s.id === selected[0]; });
+    var b = snapshots.find(function (s) { return s.id === selected[1]; });
+    if (!a || !b) return;
+    var older = a.ts <= b.ts ? a : b;
+    var newer = a.ts <= b.ts ? b : a;
+    onCompare({
+      labelA: formatSnapshotTime(older.ts), bodyA: older.body,
+      labelB: formatSnapshotTime(newer.ts), bodyB: newer.body
+    });
+  }
+
   return (
     <Drawer variant={variant || 'inline'} open={open} title="Version History" onClose={onClose} padded={false}>
 
-      <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8 }}>
         <PrimaryButton icon="bookmark_add" onClick={handleSaveVersion}>
           Save this version
         </PrimaryButton>
       </div>
+
+      {selected.length === 2 && (
+        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', background: 'rgba(196,94,40,.06)' }}>
+          <PrimaryButton icon="difference" onClick={handleCompare}>
+            Compare selected
+          </PrimaryButton>
+        </div>
+      )}
 
       {snapshots.length === 0 && (
         <div className="wv-empty" style={{ textAlign: 'center', padding: '28px 18px' }}>
@@ -76,6 +108,17 @@ export default function VersionsDrawer({ draftId, variant, open, onClose, onRest
               style={{ borderBottom: 'none' }}
               onClick={function () { setPreviewId(isActive ? null : snap.id); }}
             >
+              <div
+                onClick={function (e) { toggleSelect(snap.id, e); }}
+                style={{
+                  width: 16, height: 16, borderRadius: 4, border: '1.5px solid ' + (selected.indexOf(snap.id) >= 0 ? 'var(--indigo)' : 'var(--border)'),
+                  background: selected.indexOf(snap.id) >= 0 ? 'var(--indigo)' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginRight: 10, cursor: 'pointer'
+                }}
+                title="Select to compare"
+              >
+                {selected.indexOf(snap.id) >= 0 && <span className="mi" style={{ fontSize: 12, color: '#fff' }}>check</span>}
+              </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 5 }}>
                   {snap.isManual && <span className="mi" style={{ fontSize: 15, color: 'var(--indigo)' }}>bookmark</span>}

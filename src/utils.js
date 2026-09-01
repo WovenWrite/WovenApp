@@ -2,6 +2,8 @@
 // ── Woven shared utilities ──
 // Extracted from App.jsx. No React, no JSX — safe to import anywhere.
 
+import { diffWordsWithSpace } from 'diff';
+
 // ══════════════════════════════════════════════
 // Constants
 // ══════════════════════════════════════════════
@@ -411,4 +413,63 @@ export function draftMatchesFilter(draft, filterObj) {
     if (!wanted.some(function (id) { return have.indexOf(id) >= 0; })) return false;
   }
   return true;
+}
+
+// ══════════════════════════════════════════════
+// Text comparison (word-level diff)
+// ══════════════════════════════════════════════
+// Client-side only — no table, no fetch. Feed it any two HTML bodies (two
+// draft_versions rows, or the current .body of two branch drafts) and it
+// returns diff segments for inline rendering plus rollup stats for a
+// GitHub-style summary strip. Used by CompareView.jsx.
+
+export function htmlToDiffableText(html) {
+  if (!html) return '';
+  return html
+    .replace(/<\/(p|div|li|h[1-6]|blockquote)>/gi, '\n\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+export function computeWordDiff(htmlA, htmlB) {
+  var textA = htmlToDiffableText(htmlA);
+  var textB = htmlToDiffableText(htmlB);
+  var parts = diffWordsWithSpace(textA, textB);
+  var wordsAdded = 0, wordsRemoved = 0;
+  parts.forEach(function (p) {
+    var wc = (p.value.match(/\S+/g) || []).length;
+    if (p.added) wordsAdded += wc;
+    else if (p.removed) wordsRemoved += wc;
+  });
+  var totalParagraphs = textB.split(/\n\n+/).filter(function (p) { return p.trim(); }).length || 1;
+  // Approximate paragraph-changed count by walking the diff in order and
+  // counting how many paragraph breaks were crossed since the last change.
+  var paragraphsChanged = 0;
+  var sinceBreak = false;
+  parts.forEach(function (p) {
+    if (p.added || p.removed) sinceBreak = true;
+    var breaks = (p.value.match(/\n\n+/g) || []).length;
+    if (breaks > 0) {
+      if (sinceBreak) paragraphsChanged += 1;
+      sinceBreak = false;
+    }
+  });
+  if (sinceBreak) paragraphsChanged += 1;
+  return {
+    parts: parts,
+    stats: {
+      wordsAdded: wordsAdded,
+      wordsRemoved: wordsRemoved,
+      paragraphsChanged: Math.min(paragraphsChanged, totalParagraphs),
+      totalParagraphs: totalParagraphs
+    }
+  };
 }

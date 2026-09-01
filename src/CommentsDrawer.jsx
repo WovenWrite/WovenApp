@@ -15,7 +15,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Drawer } from './SharedUI';
-import { loadComments, resolveComment, reopenComment } from './utils';
+import { loadComments } from './utils';
 
 function formatCommentTime(ts) {
   var d = new Date(ts);
@@ -29,7 +29,7 @@ function formatCommentTime(ts) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + time;
 }
 
-export default function CommentsDrawer({ draftId, variant, open, focusCommentId, onClose }) {
+export default function CommentsDrawer({ draftId, variant, open, focusCommentId, onDismiss, onReopen, onClose }) {
   var cs = useState([]); var comments = cs[0]; var setComments = cs[1];
   var rowRefs = useRef({});
 
@@ -55,11 +55,15 @@ export default function CommentsDrawer({ draftId, variant, open, focusCommentId,
   }, [focusCommentId, comments]);
 
   function handleResolve(comment) {
-    resolveComment(comment.id).then(refresh);
+    if (!onDismiss) return;
+    var result = onDismiss(comment);
+    if (result && result.then) result.then(refresh);
   }
 
   function handleReopen(comment) {
-    reopenComment(comment.id).then(refresh);
+    if (!onReopen) return;
+    var result = onReopen(comment);
+    if (result && result.then) result.then(refresh);
   }
 
   var active = comments.filter(function (c) { return !c.resolved && !c.orphaned; });
