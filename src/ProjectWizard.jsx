@@ -50,7 +50,6 @@ export default function ProjectWizard({ app, onClose }) {
   var st = useState(''); var title = st[0]; var setTitle = st[1];
   var ssyn = useState(''); var synopsis = ssyn[0]; var setSynopsis = ssyn[1];
   var sim = useState(null); var image = sim[0]; var setImage = sim[1];
-  var swc = useState(true); var wantCover = swc[0]; var setWantCover = swc[1];
   var ssc = useState([]); var selectedColls = ssc[0]; var setSelectedColls = ssc[1];
 
   // Structure step — prefilled from the type preset, editable before create
@@ -155,7 +154,7 @@ export default function ProjectWizard({ app, onClose }) {
       type: typeLabel,
       typeId: typeId,
       synopsis: synopsis.trim(),
-      image: (wantCover && image) || null,
+      image: image || null,
       lastEdited: now,
       createdAt: now,
       config: config,
@@ -226,26 +225,12 @@ export default function ProjectWizard({ app, onClose }) {
           {step === 1 && (
             <div>
               <div style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: wantCover ? 10 : 0 }}>
-                  <label className="wv-field-lbl" style={{ marginBottom: 0 }}>Cover image</label>
-                  <Toggle
-                    on={wantCover}
-                    onClick={function () {
-                      var next = !wantCover;
-                      setWantCover(next);
-                      if (!next) setImage(null);
-                    }}
-                  />
-                </div>
-                {wantCover && (
-                  <div style={{ marginTop: 10 }}>
-                    <DraftThumbnailUpload image={image} onUpload={setImage} />
-                    {image && (
-                      <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={function () { setImage(null); }}>
-                        <span className="mi" style={{ fontSize: 14 }}>close</span>Remove
-                      </button>
-                    )}
-                  </div>
+                <label className="wv-field-lbl">Cover image</label>
+                <DraftThumbnailUpload image={image} onUpload={setImage} />
+                {image && (
+                  <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={function () { setImage(null); }}>
+                    <span className="mi" style={{ fontSize: 14 }}>close</span>Remove
+                  </button>
                 )}
               </div>
               <div style={{ marginBottom: 14 }}>
@@ -303,11 +288,10 @@ export default function ProjectWizard({ app, onClose }) {
                   onChange={function (e) { setLabelOne(e.target.value); }}
                   placeholder="Chapter, Blog, Doc, etc."
                 />
-                <HelpText style={{ marginTop: 6 }}>We'll pluralize it automatically.</HelpText>
               </div>
 
               <div style={{ marginBottom: 18 }}>
-                <span className="sect-lbl">How should these be sequenced?</span>
+                <label className="wv-field-lbl">How should these be sequenced?</label>
                 <CardOptionGroup
                   options={SEQ_DISPLAY_ORDER.map(function (id) { return SEQUENCE_MODES.find(function (m) { return m.id === id; }); })}
                   value={seqMode}
@@ -316,17 +300,16 @@ export default function ProjectWizard({ app, onClose }) {
               </div>
 
               <div style={{ marginBottom: 18 }}>
-                <span className="sect-lbl">Cover images</span>
+                <label className="wv-field-lbl">Cover images</label>
                 <Toggle
                   on={thumbnails}
                   onClick={function () { setThumbnails(!thumbnails); }}
                   label="Show a cover image on each storyboard card"
                 />
-                <HelpText style={{ marginTop: 2 }}>Off makes the cards more compact.</HelpText>
               </div>
 
               <div style={{ marginBottom: 18 }}>
-                <span className="sect-lbl">Properties for each {labelOne.trim().toLowerCase() || 'draft'}</span>
+                <label className="wv-field-lbl">Properties for each {labelOne.trim().toLowerCase() || 'draft'}</label>
                 {fields.length === 0 && <HelpText>None yet. Add one below, or skip and add them later.</HelpText>}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {fields.map(function (f, i) {
@@ -400,7 +383,6 @@ export default function ProjectWizard({ app, onClose }) {
                   onChange={function (e) { setDueDate(e.target.value); }}
                   style={{ maxWidth: FIELD_MAX_W }}
                 />
-                <HelpText style={{ marginTop: 6 }}>Nothing happens at the deadline — it's yours to aim at.</HelpText>
               </div>
 
               <div style={{ marginBottom: 18 }}>
