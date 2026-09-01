@@ -105,6 +105,46 @@ function StyledSelect({value,onChange,options,style}){
 </select>);
 }
 
+// ── Colour palettes for text colour / highlight ──
+var TEXT_COLORS=['#2a1f10','#7A5A38','#c45e28','#8b3a3a','#3a5f7a','#3a7a4f','#6b4a9e','#000000'];
+var HIGHLIGHT_COLORS=['#fdf1c8','#f8d9a0','#f4c2c2','#c9e4c5','#c2dcf4','#e0c2f4','#fff2a8','#ffffff'];
+
+// ── Small dark icon button used inside the flow-mode bubble toolbar ──
+function BubbleIcon({icon,title,onClick}){
+  return(
+<button onMouseDown={function(e){e.preventDefault();}} onClick={onClick} title={title} style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:28,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:'#fdf8f0',flexShrink:0}}
+  onMouseOver={function(e){e.currentTarget.style.background='rgba(253,248,240,.14)';}}
+  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  <span className="mi" style={{fontSize:16}}>{icon}</span>
+</button>);
+}
+
+// ── Colour / highlight picker — used in both the pinned toolbar and the flow bubble ──
+function ColorPickerBtn({icon,title,colors,onPick,onClear,dark}){
+  var so=useState(false);var open=so[0];var setOpen=so[1];
+  var ref=useRef(null);
+  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
+  return(
+<div ref={ref} style={{position:'relative'}}>
+  <button onMouseDown={function(e){e.preventDefault();}} onClick={function(){setOpen(!open);}} title={title} style={{display:'flex',alignItems:'center',justifyContent:'center',width:dark?28:32,height:dark?28:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:dark?'#fdf8f0':T.text,flexShrink:0}}
+    onMouseOver={function(e){e.currentTarget.style.background=dark?'rgba(253,248,240,.14)':'rgba(42,31,16,.08)';}}
+    onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+    <span className="mi" style={{fontSize:dark?16:18}}>{icon}</span>
+  </button>
+  {open&&(
+<div style={{position:'absolute',top:'calc(100% + 6px)',left:0,zIndex:700,background:dark?'#2a1f10':T.toolBg,border:'1px solid '+(dark?'rgba(253,248,240,.2)':T.border),borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.2)',padding:8,display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,width:120}}>
+  {colors.map(function(c){return(
+<button key={c} onMouseDown={function(e){e.preventDefault();}} onClick={function(){onPick(c);setOpen(false);}} title={c} style={{width:22,height:22,borderRadius:5,border:'1px solid rgba(0,0,0,.15)',background:c,cursor:'pointer',padding:0}}/>
+  );})}
+  <button onMouseDown={function(e){e.preventDefault();}} onClick={function(){onClear();setOpen(false);}} title="Remove colour" style={{width:22,height:22,borderRadius:5,border:'1px solid '+(dark?'rgba(253,248,240,.3)':T.border),background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
+    <span className="mi" style={{fontSize:14,color:dark?'#fdf8f0':T.text}}>close</span>
+  </button>
+</div>
+  )}
+</div>
+  );
+}
+
 // ── Branch Dropdown ──
 function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary,onCompareTwo}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
@@ -359,6 +399,7 @@ function DraftEditor({app}){
 
   var quillRef=useRef(null);
   var editorContainerRef=useRef(null);
+  var fileInputRef=useRef(null);
   var saveTimer=useRef(null);
   var initialised=useRef(false);
   var sessionStartWc=useRef(draft.wordCount||0);
@@ -579,6 +620,29 @@ function DraftEditor({app}){
   function fmt(type,value){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,cur[type]===value?false:value);}}
   function toggleFmt(type){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,!cur[type]);}}
 
+  // ── Image upload — pushes to Supabase Storage bucket 'woven-images' (must exist & be public), then embeds the public URL ──
+  async function handleImageFile(e){
+    var file=e.target.files&&e.target.files[0];
+    e.target.value='';
+    if(!file||!quillRef.current)return;
+    var r=quillRef.current.getSelection(true);
+    var index=r?r.index:quillRef.current.getLength();
+    var client=window.supabase&&window.supabase.createClient?window.supabase.createClient(
+      'https://mxsdiqrbxlvcwexfdtrj.supabase.co',
+      'sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u'
+    ):null;
+    if(!client)return;
+    var safeName=file.name.replace(/[^a-zA-Z0-9.\-_]/g,'_');
+    var path=(did||'draft')+'/'+genId()+'-'+safeName;
+    var up=await client.storage.from('woven-images').upload(path,file,{cacheControl:'3600',upsert:false});
+    if(up.error){console.error('Image upload error:',up.error);window.alert('Image upload failed: '+up.error.message);return;}
+    var pub=client.storage.from('woven-images').getPublicUrl(path);
+    var url=pub&&pub.data&&pub.data.publicUrl;
+    if(!url)return;
+    quillRef.current.insertEmbed(index,'image',url,'user');
+    quillRef.current.setSelection(index+1,0);
+  }
+
   function handleManualSnapshot(label){
     if(!quillRef.current)return Promise.resolve();
     if(!label||!label.trim())return Promise.resolve();
@@ -768,6 +832,7 @@ function DraftEditor({app}){
     {icon:'format_bold',title:'Bold',action:function(){toggleFmt('bold');}},
     {icon:'format_italic',title:'Italic',action:function(){toggleFmt('italic');}},
     {icon:'format_underlined',title:'Underline',action:function(){toggleFmt('underline');}},
+    {icon:'strikethrough_s',title:'Strikethrough',action:function(){toggleFmt('strike');}},
     {sep:true},
     {icon:'title',title:'Heading 1',cls:'toolbar-secondary',action:function(){var r=quillRef.current&&quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('header',cur.header===1?false:1);}}},
     {icon:'format_h2',title:'Heading 2',cls:'toolbar-secondary',action:function(){var r=quillRef.current&&quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('header',cur.header===2?false:2);}}},
@@ -824,7 +889,8 @@ function DraftEditor({app}){
     style.id=id;
     style.textContent=`
       .ql-editor { padding: 0 !important; outline: none !important; } .ql-editor ::selection { background: rgba(196,94,40,.22); } ::selection { background: rgba(196,94,40,.22); }
-      .ql-editor p { margin-bottom: 15px; margin-top: 0; }
+      .ql-editor p { margin-bottom: 1.4em; margin-top: 0; }
+      .ql-editor img { max-width: 100%; height: auto; border-radius: 6px; margin: 8px 0; display: block; }
       .ql-editor h1 { font-family: 'Crimson Text', serif; font-size: 2em; font-weight: 600; margin-bottom: 12px; color: #2a1f10; }
       .ql-editor h2 { font-family: 'Crimson Text', serif; font-size: 1.5em; font-weight: 600; margin-bottom: 10px; color: #2a1f10; }
       .ql-editor h3 { font-family: 'Crimson Text', serif; font-size: 1.2em; font-weight: 600; margin-bottom: 8px; color: #2a1f10; }
@@ -866,6 +932,8 @@ function DraftEditor({app}){
 
   return(
 <div style={{display:'flex',flexDirection:'column',height:'100vh',background:T.bodyBg,overflow:'hidden'}}>
+
+  <input ref={fileInputRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleImageFile}/>
 
   {/* ── Nav (slides up in flow mode; always full width, never covered by a drawer) ── */}
   <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:T.navBg,padding:'10px 20px',gap:10,borderBottom:'1px solid rgba(42,31,16,.1)',flexShrink:0,transform:flowMode?'translateY(-110%)':'translateY(0)',transition:'transform .3s cubic-bezier(.4,0,.2,1)',pointerEvents:flowMode?'none':'auto',position:flowMode?'absolute':'relative',width:'100%',zIndex:20}}>
@@ -927,6 +995,14 @@ function DraftEditor({app}){
 </button>
               );
             })}
+            <div style={{width:1,height:20,background:T.stroke,margin:'0 4px',flexShrink:0}}/>
+            <ColorPickerBtn icon="format_color_text" title="Text colour" colors={TEXT_COLORS} onPick={function(c){fmt('color',c);}} onClear={function(){fmt('color',false);}}/>
+            <ColorPickerBtn icon="ink_highlighter" title="Highlight" colors={HIGHLIGHT_COLORS} onPick={function(c){fmt('background',c);}} onClear={function(){fmt('background',false);}}/>
+            <button onClick={function(){fileInputRef.current&&fileInputRef.current.click();}} title="Add image" style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,flexShrink:0}}
+              onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.08)';}}
+              onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+              <span className="mi" style={{fontSize:18}}>add_photo_alternate</span>
+            </button>
           </div>
           {/* Right: zoom + flow */}
           <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto'}}>
@@ -983,6 +1059,33 @@ function DraftEditor({app}){
             >
               <span className="mi" style={{fontSize:13}}>add_comment</span>Comment
             </button>
+          )}
+          {/* Flow mode: bubble-style floating format toolbar on text selection.
+              Positioned above the comment button using the same selection bounds
+              — this is a purpose-built bubble UI rather than Quill's own bubble
+              theme, so it works without re-initializing the Quill instance. */}
+          {commentBtnPos&&!previewVersion&&flowMode&&(
+            <div
+              onMouseDown={function(e){e.preventDefault();}}
+              style={{
+                position:'absolute',top:commentBtnPos.top-74,left:commentBtnPos.left,transform:'translateX(-50%)',
+                display:'flex',alignItems:'center',gap:2,padding:'4px 6px',borderRadius:8,
+                background:'#2a1f10',boxShadow:'0 6px 20px rgba(42,31,16,.3)',zIndex:31,whiteSpace:'nowrap'
+              }}
+            >
+              <BubbleIcon icon="format_bold" title="Bold" onClick={function(){toggleFmt('bold');}}/>
+              <BubbleIcon icon="format_italic" title="Italic" onClick={function(){toggleFmt('italic');}}/>
+              <BubbleIcon icon="format_underlined" title="Underline" onClick={function(){toggleFmt('underline');}}/>
+              <BubbleIcon icon="strikethrough_s" title="Strikethrough" onClick={function(){toggleFmt('strike');}}/>
+              <div style={{width:1,height:18,background:'rgba(253,248,240,.25)',margin:'0 2px'}}/>
+              <BubbleIcon icon="title" title="Heading 1" onClick={function(){var r=quillRef.current&&quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('header',cur.header===1?false:1);}}}/>
+              <BubbleIcon icon="format_h2" title="Heading 2" onClick={function(){var r=quillRef.current&&quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('header',cur.header===2?false:2);}}}/>
+              <BubbleIcon icon="format_quote" title="Quote" onClick={function(){var r=quillRef.current&&quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('blockquote',!cur.blockquote);}}}/>
+              <div style={{width:1,height:18,background:'rgba(253,248,240,.25)',margin:'0 2px'}}/>
+              <ColorPickerBtn icon="format_color_text" title="Text colour" colors={TEXT_COLORS} dark onPick={function(c){fmt('color',c);}} onClear={function(){fmt('color',false);}}/>
+              <ColorPickerBtn icon="ink_highlighter" title="Highlight" colors={HIGHLIGHT_COLORS} dark onPick={function(c){fmt('background',c);}} onClear={function(){fmt('background',false);}}/>
+              <BubbleIcon icon="link" title="Insert link" onClick={function(){var url=prompt('URL:');if(url&&quillRef.current){var r=quillRef.current.getSelection();if(r)quillRef.current.format('link',url);}}}/>
+            </div>
           )}
           <Popover
             anchorRef={commentBtnRef}
