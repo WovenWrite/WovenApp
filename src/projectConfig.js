@@ -47,7 +47,15 @@ export function sequenceMode(id) {
 // An ORDERED ARRAY, not an object. `loose_thread` is a system status: it is
 // pinned at index 0, cannot be removed, and its `id` can never change no
 // matter what the label says — every `status === 'loose_thread'` check in the
-// app depends on that id. v1 allows renaming and recolouring only.
+// app depends on that id. Every other status — including the built-in
+// defaults — can be freely renamed, recoloured, reordered, added, or removed
+// (once no drafts are using it).
+//
+// 'thread' ships as a second default, right after loose_thread: the first
+// stage for drafts that ARE in the sequence but are still rough notes, not
+// yet written prose. Unlike loose_thread it has no special-cased behavior
+// anywhere in the app — it's just an ordinary status that happens to be a
+// sensible default starting point.
 
 export var DEFAULT_STATUSES = Object.keys(STATUSES).map(function (id) {
   return {
@@ -58,12 +66,15 @@ export var DEFAULT_STATUSES = Object.keys(STATUSES).map(function (id) {
     locked: id === 'loose_thread'
   };
 });
+DEFAULT_STATUSES.splice(1, 0, { id: 'thread', label: 'Thread', color: '#8a6fd6', system: false, locked: false });
 
 export function isSystemStatus(id) { return id === 'loose_thread'; }
 
-// Normalises a stored status array: drops unknown ids, restores any missing
-// defaults, and forces loose_thread back to index 0 whatever order it arrived
-// in. Cheap insurance against hand-edited or partially-migrated data.
+// Normalises a stored status array: drops malformed entries, restores any
+// missing defaults (so a newly-added default like 'thread' reaches existing
+// projects automatically), and forces loose_thread back to index 0 whatever
+// order it arrived in. Custom (non-default) ids are kept as-is — this is
+// where a writer's own added statuses come through.
 export function normalizeStatuses(stored) {
   if (!Array.isArray(stored) || stored.length === 0) return DEFAULT_STATUSES.slice();
   var seen = {};
@@ -71,15 +82,25 @@ export function normalizeStatuses(stored) {
   stored.forEach(function (s) {
     if (!s || !s.id || seen[s.id]) return;
     var base = DEFAULT_STATUSES.find(function (d) { return d.id === s.id; });
-    if (!base) return; // v1: no custom ids
     seen[s.id] = true;
-    out.push({
-      id: base.id,
-      label: (s.label && String(s.label).trim()) || base.label,
-      color: s.color || base.color,
-      system: base.system,
-      locked: base.locked
-    });
+    if (base) {
+      out.push({
+        id: base.id,
+        label: (s.label && String(s.label).trim()) || base.label,
+        color: s.color || base.color,
+        system: base.system,
+        locked: base.locked
+      });
+    } else {
+      // A custom status the writer added themselves.
+      out.push({
+        id: s.id,
+        label: (s.label && String(s.label).trim()) || 'Status',
+        color: s.color || '#c45e28',
+        system: false,
+        locked: false
+      });
+    }
   });
   DEFAULT_STATUSES.forEach(function (d) { if (!seen[d.id]) out.push(Object.assign({}, d)); });
   var lt = out.filter(function (s) { return isSystemStatus(s.id); });
@@ -176,7 +197,7 @@ export function projStatusMap(proj) {
 
 export function projStatus(proj, id) {
   var map = projStatusMap(proj);
-  return map[id] || map.first_draft || DEFAULT_STATUSES[1];
+  return map[id] || map.first_draft || DEFAULT_STATUSES.find(function (d) { return d.id === 'first_draft'; }) || DEFAULT_STATUSES[0];
 }
 
 export function projSequence(proj) {

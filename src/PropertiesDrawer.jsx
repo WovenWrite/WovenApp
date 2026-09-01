@@ -10,7 +10,7 @@
 
 import { useState } from 'react';
 import { Drawer, Field, StatusSelect, StrandRefPicker, StrandSearchDropdown, DraftThumbnailUpload, Avatar, PrimaryButton, SecondaryButton, TertiaryButton, HelpText, OptionsEditor, Radio } from './SharedUI';
-import { genId, STATUSES, FIELD_TYPES } from './utils';
+import { genId, FIELD_TYPES } from './utils';
 import { projSequence, projStatusMap, draftDateOf } from './projectConfig';
 
 export default function PropertiesDrawer({ app, draft, variant, open, onClose, onOpenStrand }) {

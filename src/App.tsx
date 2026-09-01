@@ -16,12 +16,12 @@ import Dashboard from './Dashboard'
 import TableView from './TableView'
 import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor, Radio } from './SharedUI'
 import {
-  STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
+  FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
   supabase, genId, stripHtml, countWords, initials, todayStr,
   compressImage, uploadImage, deleteStorageImage,
   saveSnapshot
 } from './utils'
-import { PROJ_TYPES, projIsNumbered, projIsManualOrder, projSequence, projThumbnails, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
+import { PROJ_TYPES, projIsNumbered, projIsManualOrder, projSequence, projThumbnails, sortDraftsBySequence, draftDateOf, formatDraftDate, projStatuses, projStatus } from './projectConfig'
 // Snapshot helpers, Supabase client, and env constants now live in ./utils
 
 // ── Storage ──
@@ -588,12 +588,13 @@ export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onAddDr
         <div>
           <span style={sectLbl}>Status</span>
           <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-            {Object.keys(STATUSES).map(function(k){
+            {projStatuses(app.currentProject).map(function(s){
+              var k=s.id;
               var active=(filter.status||[]).indexOf(k)>=0;
               return(
-<span key={k} onClick={function(){toggleStatus(k);}} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:12,fontSize:12,fontWeight:500,cursor:'pointer',background:active?STATUSES[k].color+'22':'var(--bg2)',color:active?STATUSES[k].color:'var(--mid)',border:'1px solid '+(active?STATUSES[k].color+'55':'var(--border)')}}>
-  <span style={{width:7,height:7,borderRadius:'50%',background:STATUSES[k].color,flexShrink:0}}/>
-  {STATUSES[k].label}
+<span key={k} onClick={function(){toggleStatus(k);}} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:12,fontSize:12,fontWeight:500,cursor:'pointer',background:active?s.color+'22':'var(--bg2)',color:active?s.color:'var(--mid)',border:'1px solid '+(active?s.color+'55':'var(--border)')}}>
+  <span style={{width:7,height:7,borderRadius:'50%',background:s.color,flexShrink:0}}/>
+  {s.label}
 </span>
               );
             })}
@@ -954,7 +955,7 @@ function draftMatchesFilter(draft,filterObj){
   }
   return true;
 }
-export function applyFS(drafts,filterObj,sort){
+export function applyFS(drafts,filterObj,sort,proj){
   var hasFilter=filterCriteriaCount(filterObj)>0;
   var d=hasFilter?drafts.filter(function(x){
     var matchSelf=draftMatchesFilter(x,filterObj);
@@ -963,7 +964,10 @@ export function applyFS(drafts,filterObj,sort){
   }):drafts;
   return d.slice().sort(function(a,b){
     if(sort==='title')return (a.title||'').localeCompare(b.title||'');
-    if(sort==='status')return Object.keys(STATUSES).indexOf(a.status)-Object.keys(STATUSES).indexOf(b.status);
+    if(sort==='status'){
+      var order=projStatuses(proj).map(function(s){return s.id;});
+      return order.indexOf(a.status)-order.indexOf(b.status);
+    }
     if(sort==='words')return (b.wordCount||0)-(a.wordCount||0);
     return (a.order||999)-(b.order||999);
   });
@@ -1130,7 +1134,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
     });
   });
 
-  var info=STATUSES[draft.status]||STATUSES.first_draft;
+  var info=projStatus(app.currentProject,draft.status);
 
   function onStatusChange(s){
     if(s==='archive'){setArchiveConfirm(true);return;}
@@ -1306,7 +1310,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
       {!structureMode&&<div/>}
       {/* Right: status dot + word count */}
       <div className="status-dot-wrap" style={{display:'flex',alignItems:'center',gap:8}} onClick={function(e){e.stopPropagation();}}>
-        <StatusDotWithArchive draft={draft} app={app} showLabel={false} dotSize={15}/>
+        <StatusDotWithArchive draft={draft} app={app} showLabel={false} dotSize={15} project={cardProj}/>
         <span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#a88060'}}>{(draft.wordCount||0)}w</span>
       </div>
     </div>
@@ -1510,7 +1514,7 @@ export function LooseThreadsSection({threads,app,view,structureMode,filter}){
 </button>
     )}
     <div style={{display:'flex',alignItems:'center',marginLeft:'auto'}} onClick={function(e){e.stopPropagation();}}>
-      <StatusDotWithArchive draft={d} app={app} showLabel={false} dotSize={13}/>
+      <StatusDotWithArchive draft={d} app={app} showLabel={false} dotSize={13} project={app.currentProject}/>
     </div>
   </div>
 </div>
@@ -1556,7 +1560,7 @@ function CardsView({app}){
   function addDraft(){var nid=genId();app.addDraft(app.projId,{id:nid,projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqDrafts.length+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});app.openDraft(nid);}
   function moveUp(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<=0)return;app.reorderDraft(app.projId,did,sorted[idx-1].order||0);}
   function moveDown(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<0||idx>=sorted.length-1)return;app.reorderDraft(app.projId,did,sorted[idx+1].order||0);}
-  var displayed=(sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort),app.currentProject):applyFS(tree,filter,sort)).filter(function(p){
+  var displayed=(sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort,app.currentProject),app.currentProject):applyFS(tree,filter,sort,app.currentProject)).filter(function(p){
     if(!searchQ.trim())return true;
     var q=searchQ.toLowerCase();
     var matchTitle=(p.title||'').toLowerCase().includes(q);
@@ -1611,7 +1615,7 @@ function TilesView({app}){
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
   function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
-  var displayed=sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort),app.currentProject):applyFS(tree,filter,sort);
+  var displayed=sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort,app.currentProject),app.currentProject):applyFS(tree,filter,sort,app.currentProject);
   return(
 <div className="view-layout">
   <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}}/>
@@ -1620,7 +1624,7 @@ function TilesView({app}){
 <div>
   <div className="tiles-grid">
     {displayed.map(function(parent,i){
-      var info=STATUSES[parent.status]||STATUSES.first_draft;
+      var info=projStatus(app.currentProject,parent.status);
       var isNT=nestTarget===parent.id;var isDO=dragOver===parent.id;
       return(
 <div key={parent.id} className={'tile'+(isDO?' drag-over':'')+(isNT?' nest-target':'')}

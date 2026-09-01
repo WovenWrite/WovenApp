@@ -7,7 +7,7 @@
 //
 //   Layer 1 'main'       — cover, title, synopsis, type, progress, links out
 //   Layer 2 'structure'  — what a draft is called, ordering, cover images
-//   Layer 2 'statuses'   — rename and recolour (loose_thread is locked)
+//   Layer 2 'statuses'   — rename, recolour, reorder, add, remove (loose_thread is locked)
 //   Layer 2 'properties' — draft custom fields
 //   Layer 2 'goals'      — deadline and writing pace
 //
@@ -27,7 +27,7 @@ import {
   PROJ_TYPES, SEQUENCE_MODES, GOAL_MODES, DEFAULT_STATUSES,
   projConfig, projStatuses, projLabel, projGoal, daysUntilDue, isSystemStatus
 } from './projectConfig';
-import { FIELD_TYPES, genId } from './utils';
+import { FIELD_TYPES, PRESET_COLORS, genId } from './utils';
 
 // ── Archive confirmation ──
 function ArchiveConfirm({ proj, onConfirm, onCancel }) {
@@ -192,15 +192,50 @@ export default function ProjectDrawer({ proj, app, variant, open, onClose, topOf
       });
       setConfig({ statuses: next });
     }
+    function statusDraftCount(id) {
+      return drafts.filter(function (d) { return d.status === id; }).length;
+    }
+    function deleteStatus(id) {
+      if (statusDraftCount(id) > 0) return; // guarded in the UI too — belt and suspenders
+      setConfig({ statuses: statuses.filter(function (s) { return s.id !== id; }) });
+    }
+    function moveStatus(id, direction) {
+      var idx = statuses.findIndex(function (s) { return s.id === id; });
+      if (idx < 0) return;
+      var swapIdx = idx + direction;
+      if (swapIdx < 0 || swapIdx >= statuses.length) return;
+      if (isSystemStatus(statuses[idx].id) || isSystemStatus(statuses[swapIdx].id)) return;
+      var next = statuses.slice();
+      var tmp = next[idx]; next[idx] = next[swapIdx]; next[swapIdx] = tmp;
+      setConfig({ statuses: next });
+    }
+    function addStatus() {
+      var ns = { id: genId(), label: 'New Status', color: PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)], system: false, locked: false };
+      setConfig({ statuses: statuses.concat([ns]) });
+    }
     return (
       <Drawer variant={variant || 'overlay'} open={open} title="Statuses" onBack={back} onClose={onClose} topOffset={topOffset}>
-        <HelpText>Rename and recolour these to match how you work. The set itself is fixed for now.</HelpText>
-        {statuses.map(function (s) {
+        <HelpText>Rename, recolour, reorder, add, or remove these to match how you work. A status can't be removed while any {many.toLowerCase()} are still using it.</HelpText>
+        {statuses.map(function (s, i) {
           var isSys = isSystemStatus(s.id);
           var base = DEFAULT_STATUSES.find(function (d) { return d.id === s.id; });
+          var count = statusDraftCount(s.id);
+          var blocked = count > 0;
+          var canMoveUp = !isSys && i > 0 && !isSystemStatus(statuses[i - 1].id);
+          var canMoveDown = !isSys && i < statuses.length - 1 && !isSystemStatus(statuses[i + 1].id);
           return (
             <div key={s.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: 10 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                {!isSys && (
+                  <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+                    <button className="btn-icon" disabled={!canMoveUp} onClick={function () { moveStatus(s.id, -1); }} style={{ padding: 1, opacity: canMoveUp ? 1 : .25, cursor: canMoveUp ? 'pointer' : 'default' }} aria-label="Move up">
+                      <span className="mi" style={{ fontSize: 15 }}>arrow_drop_up</span>
+                    </button>
+                    <button className="btn-icon" disabled={!canMoveDown} onClick={function () { moveStatus(s.id, 1); }} style={{ padding: 1, marginTop: -6, opacity: canMoveDown ? 1 : .25, cursor: canMoveDown ? 'pointer' : 'default' }} aria-label="Move down">
+                      <span className="mi" style={{ fontSize: 15 }}>arrow_drop_down</span>
+                    </button>
+                  </div>
+                )}
                 <span style={{ width: 12, height: 12, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
                 <input
                   key={pid + '-' + s.id}
@@ -212,14 +247,32 @@ export default function ProjectDrawer({ proj, app, variant, open, onClose, topOf
                     updateStatus(s.id, { label: v || (base ? base.label : s.label) });
                   }}
                 />
-                {isSys && (
+                {isSys ? (
                   <span className="mi" style={{ fontSize: 16, color: 'var(--placeholder)' }} title="This status cannot be removed">lock</span>
+                ) : (
+                  <button
+                    className="btn-icon"
+                    disabled={blocked}
+                    title={blocked ? (count + ' ' + (count === 1 ? many.toLowerCase().replace(/s$/, '') + ' is' : many.toLowerCase() + ' are') + ' using this status — move ' + (count === 1 ? 'it' : 'them') + ' first') : 'Remove this status'}
+                    onClick={function () { if (!blocked) deleteStatus(s.id); }}
+                    style={{ opacity: blocked ? .3 : 1, cursor: blocked ? 'not-allowed' : 'pointer' }}
+                    aria-label="Remove status"
+                  >
+                    <span className="mi" style={{ fontSize: 16, color: 'var(--danger)' }}>delete</span>
+                  </button>
                 )}
               </div>
               <CustomColorPicker color={s.color} onSelect={function (c) { updateStatus(s.id, { color: c }); }} />
             </div>
           );
         })}
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ width: '100%', justifyContent: 'center' }}
+          onClick={addStatus}
+        >
+          <span className="mi" style={{ fontSize: 14 }}>add</span> Add status
+        </button>
         <button
           className="btn btn-ghost btn-sm"
           style={{ width: '100%', justifyContent: 'center' }}
