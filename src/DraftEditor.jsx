@@ -112,7 +112,7 @@ var HIGHLIGHT_COLORS=['#fdf1c8','#f8d9a0','#f4c2c2','#c9e4c5','#c2dcf4','#e0c2f4
 // ── Small dark icon button used inside the flow-mode bubble toolbar ──
 function BubbleIcon({icon,title,onClick}){
   return(
-<button onMouseDown={function(e){e.preventDefault();}} onClick={onClick} title={title} style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:28,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:'#fdf8f0',flexShrink:0}}
+<button onMouseDown={function(e){e.preventDefault();}} onClick={onClick} title={title} style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:28,overflow:'hidden',background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:'#fdf8f0',flexShrink:0}}
   onMouseOver={function(e){e.currentTarget.style.background='rgba(253,248,240,.14)';}}
   onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
   <span className="mi" style={{fontSize:16}}>{icon}</span>
@@ -135,7 +135,7 @@ function ColorPickerBtn({icon,title,colors,onPick,onClear,dark}){
   }
   return(
 <div ref={ref} style={{position:'relative',flexShrink:0}}>
-  <button ref={btnRef} onMouseDown={function(e){e.preventDefault();}} onClick={handleToggle} title={title} style={{display:'flex',alignItems:'center',justifyContent:'center',width:dark?28:32,height:dark?28:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:dark?'#fdf8f0':T.text,flexShrink:0}}
+  <button ref={btnRef} onMouseDown={function(e){e.preventDefault();}} onClick={handleToggle} title={title} style={{display:'flex',alignItems:'center',justifyContent:'center',width:dark?28:32,height:dark?28:32,overflow:'hidden',background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:dark?'#fdf8f0':T.text,flexShrink:0}}
     onMouseOver={function(e){e.currentTarget.style.background=dark?'rgba(253,248,240,.14)':'rgba(42,31,16,.08)';}}
     onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
     <span className="mi" style={{fontSize:dark?16:18}}>{icon}</span>
@@ -999,7 +999,7 @@ function DraftEditor({app}){
               if(b.sep)return(<div key={'s'+i} className={b.sepClass||''} style={{width:1,height:20,background:T.stroke,margin:'0 4px',flexShrink:0}}/>);
               var cls=b.cls||'';
               return(
-<button key={b.icon} onClick={b.action} title={b.title} className={cls} style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,minWidth:32,flexShrink:0,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,transition:'background .12s'}}
+<button key={b.icon} onClick={b.action} title={b.title} className={cls} style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,minWidth:32,flexShrink:0,overflow:'hidden',background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,transition:'background .12s'}}
   onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.08)';}}
   onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
   <span className="mi" style={{fontSize:18}}>{b.icon}</span>
@@ -1008,8 +1008,8 @@ function DraftEditor({app}){
             })}
             <div style={{width:1,height:20,background:T.stroke,margin:'0 4px',flexShrink:0}}/>
             <ColorPickerBtn icon="format_color_text" title="Text colour" colors={TEXT_COLORS} onPick={function(c){fmt('color',c);}} onClear={function(){fmt('color',false);}}/>
-            <ColorPickerBtn icon="ink_highlighter" title="Highlight" colors={HIGHLIGHT_COLORS} onPick={function(c){fmt('background',c);}} onClear={function(){fmt('background',false);}}/>
-            <button onClick={function(){fileInputRef.current&&fileInputRef.current.click();}} title="Add image" style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,minWidth:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,flexShrink:0}}
+            <ColorPickerBtn icon="format_color_fill" title="Highlight" colors={HIGHLIGHT_COLORS} onPick={function(c){fmt('background',c);}} onClear={function(){fmt('background',false);}}/>
+            <button onClick={function(){fileInputRef.current&&fileInputRef.current.click();}} title="Add image" style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,minWidth:32,overflow:'hidden',background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,flexShrink:0}}
               onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.08)';}}
               onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
               <span className="mi" style={{fontSize:18}}>add_photo_alternate</span>
@@ -1094,7 +1094,7 @@ function DraftEditor({app}){
               <BubbleIcon icon="format_quote" title="Quote" onClick={function(){var r=quillRef.current&&quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format('blockquote',!cur.blockquote);}}}/>
               <div style={{width:1,height:18,background:'rgba(253,248,240,.25)',margin:'0 2px'}}/>
               <ColorPickerBtn icon="format_color_text" title="Text colour" colors={TEXT_COLORS} dark onPick={function(c){fmt('color',c);}} onClear={function(){fmt('color',false);}}/>
-              <ColorPickerBtn icon="ink_highlighter" title="Highlight" colors={HIGHLIGHT_COLORS} dark onPick={function(c){fmt('background',c);}} onClear={function(){fmt('background',false);}}/>
+              <ColorPickerBtn icon="format_color_fill" title="Highlight" colors={HIGHLIGHT_COLORS} dark onPick={function(c){fmt('background',c);}} onClear={function(){fmt('background',false);}}/>
               <BubbleIcon icon="link" title="Insert link" onClick={function(){var url=prompt('URL:');if(url&&quillRef.current){var r=quillRef.current.getSelection();if(r)quillRef.current.format('link',url);}}}/>
             </div>
           )}
