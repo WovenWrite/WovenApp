@@ -37,13 +37,13 @@ export default function LooseThreadsQuickAccess({app}){
   if(hidden)return null;
 
   return(
-<button onClick={scrollToLooseThreads} style={{position:'fixed',left:16,right:16,bottom:16,zIndex:390,display:'flex',alignItems:'center',gap:8,padding:'14px 20px',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:16,boxShadow:'0 6px 20px rgba(42,31,16,.14)',cursor:'pointer',transition:'background .15s'}}
+<button onClick={scrollToLooseThreads} style={{position:'fixed',left:16,right:16,bottom:16,zIndex:390,display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8,padding:'14px 20px',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:16,boxShadow:'0 6px 20px rgba(42,31,16,.14)',cursor:'pointer',transition:'background .15s'}}
   onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
   onMouseOut={function(e){e.currentTarget.style.background='var(--bg1)';}}>
   <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--teal)'}}>push_pin</span>
   <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,fontWeight:600,color:'#6B4A26'}}>Loose Threads</span>
   {count>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:20,height:20,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{count}</span>}
-  <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--mid)',marginLeft:'auto'}}>arrow_downward</span>
+  <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--mid)'}}>arrow_downward</span>
 </button>
   );
 }
