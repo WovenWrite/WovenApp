@@ -5,7 +5,7 @@ import StrandsDrawer from './StrandsDrawer'
 import { StatusSelect, StrandSearchDropdown, FloatingPanel } from './SharedUI'
 import { genId, stripHtml, initials } from './utils'
 import { projIsNumbered, projSequence, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
-import { buildTree, applyFS, loadFilterState, persistFilterState, ViewHeader, DraftLoadingSpinner, EmptyDrafts, LooseThreadsSection, TaggedSpoolsEditor, saveDB, loadDB } from './App'
+import { buildTree, applyFS, loadFilterState, persistFilterState, ViewHeader, DraftLoadingSpinner, EmptyDrafts, TaggedSpoolsEditor, saveDB, loadDB } from './App'
 
 // ── ExpandingCell ──
 // When the row isn't expanded: clamped to 2 lines. When the row IS
@@ -275,7 +275,6 @@ function TableView({app}){
   }
   var allDrafts=app.allDrafts[app.projId]||[];
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
-  var ltDrafts=allDrafts.filter(function(d){return d.status==='loose_thread'&&!d.archived;});
   var displayed=(sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort),app.currentProject):applyFS(tree,filter,sort)).filter(function(p){
     if(!searchQ.trim())return true;
     var q=searchQ.toLowerCase();
@@ -439,7 +438,6 @@ function TableView({app}){
 </div>
   </FloatingPanel>
   <BindDrawer app={app} open={bindOpen} variant="overlay" topOffset={54} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
-  <LooseThreadsSection threads={ltDrafts} app={app} view="table" filter={filter}/>
   {spoolView&&(
 <StrandsDrawer
   app={app}
