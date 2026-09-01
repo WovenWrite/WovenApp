@@ -172,6 +172,17 @@ function TableView({app}){
   var sf=useState(function(){return loadFilterState(app.projId);});var filter=sf[0];var setFilterRaw=sf[1];
   function setFilter(next){setFilterRaw(next);persistFilterState(app.projId,next);}
   var ss=useState('order');var sort=ss[0];var setSort=ss[1];
+  // Per-column sort (click the up/down arrow on a sortable header). This is
+  // separate from the toolbar's sort dropdown — whichever one the user
+  // touches most recently wins, so the two never fight silently: changing
+  // the toolbar dropdown clears any column-sort, and picking a column
+  // simply overrides display order without touching the dropdown's value.
+  var scs=useState(null);var colSort=scs[0];var setColSort=scs[1]; // {col,dir:'asc'|'desc'} | null
+  var prevSortRef=useRef(sort);
+  useEffect(function(){
+    if(sort!==prevSortRef.current){setColSort(null);prevSortRef.current=sort;}
+  },[sort]);
+  var shc=useState(null);var hoverCol=shc[0];var setHoverCol=shc[1];
   var sb=useState(false);var bindOpen=sb[0];var setBindOpen=sb[1];
   var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
   var so2=useState(null);var dragOver=so2[0];var setDragOver=so2[1];
@@ -223,13 +234,13 @@ function TableView({app}){
     return allAvailCols.map(function(c){return c.id;});
   });
   var colOrder=sco2[0];var setColOrderRaw=sco2[1];
-  function persistColOrder(next){setColOrderRaw(next);saveDB(orderKey,next);}
+  function persistColOrder(next){setColOrderRaw(next);saveDB(orderKey,next);try{localStorage.setItem(orderKey,JSON.stringify(next));}catch(e){}}
   var shs=useState(function(){
     try{var v=localStorage.getItem(hiddenKey);if(v){var p=JSON.parse(v);if(Array.isArray(p))return p;}}catch(e){}
     return [];
   });
   var hiddenCols=shs[0];var setHiddenColsRaw=shs[1];
-  function persistHiddenCols(next){setHiddenColsRaw(next);saveDB(hiddenKey,next);}
+  function persistHiddenCols(next){setHiddenColsRaw(next);saveDB(hiddenKey,next);try{localStorage.setItem(hiddenKey,JSON.stringify(next));}catch(e){}}
   useEffect(function(){
     loadDB(orderKey,null).then(function(v){if(Array.isArray(v))setColOrderRaw(v);});
     loadDB(hiddenKey,null).then(function(v){if(Array.isArray(v))setHiddenColsRaw(v);});
@@ -268,7 +279,7 @@ function TableView({app}){
     resizing.current={col:col,startX:e.clientX,startW:colWidths[col]||160};
     function onMove(e2){if(!resizing.current)return;var diff=e2.clientX-resizing.current.startX;var nw=Math.max(60,resizing.current.startW+diff);setColWidthsRaw(function(prev){var n=Object.assign({},prev);n[resizing.current.col]=nw;return n;});}
     function onUp(){
-      if(resizing.current){setColWidthsRaw(function(prev){saveDB(widthsKey,prev);return prev;});}
+      if(resizing.current){setColWidthsRaw(function(prev){saveDB(widthsKey,prev);try{localStorage.setItem(widthsKey,JSON.stringify(prev));}catch(e){}return prev;});}
       resizing.current=null;document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);
     }
     document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
@@ -280,6 +291,29 @@ function TableView({app}){
     var q=searchQ.toLowerCase();
     return (p.title||'').toLowerCase().includes(q)||(p.synopsis||'').toLowerCase().includes(q)||(p.body?stripHtml(p.body).toLowerCase().includes(q):false);
   });
+  // Sortable columns: only ones with an unambiguous comparable value.
+  // strandTags/branches/custom fields aren't included — "sort by" doesn't
+  // have one obvious meaning for a tag list or a strand-ref, so no arrows
+  // show on those headers.
+  var SORTABLE_COLS={title:'string',status:'string',wordCount:'number',synopsis:'string'};
+  function getSortVal(d,col){
+    if(col==='wordCount')return d.wordCount||0;
+    return (d[col]||'').toString().toLowerCase();
+  }
+  function toggleColSort(col){
+    setColSort(function(prev){
+      if(!prev||prev.col!==col)return {col:col,dir:'asc'};
+      if(prev.dir==='asc')return {col:col,dir:'desc'};
+      return null;
+    });
+  }
+  if(colSort&&SORTABLE_COLS[colSort.col]){
+    displayed=displayed.slice().sort(function(a,b){
+      var av=getSortVal(a,colSort.col),bv=getSortVal(b,colSort.col);
+      var cmp=av<bv?-1:av>bv?1:0;
+      return colSort.dir==='desc'?-cmp:cmp;
+    });
+  }
   function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
   var tblProjStrands=app.allStrands[app.projId]||{};
   var tblProjTemplates=app.allTemplates[app.projId]||[];
@@ -376,25 +410,35 @@ function TableView({app}){
 </tr>
     );
   }
-  var totalTableWidth=28+(tblNumbered?36:0)+(tblByDate?96:0)+visCols.reduce(function(sum,col){var w=colWidths[col]||160;return sum+w+(col==='title'?34:0);},0)+46;
+  var minColW=70;
+  var minTableWidth=28+(tblNumbered?36:0)+(tblByDate?96:0)+visCols.reduce(function(sum,col){return sum+minColW+(col==='title'?34:0);},0)+46;
   return(
 <div className="view-layout">
   <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onBind={function(){setBindOpen(true);}} hideStructure={true} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
   <div className="table-wrap" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto',padding:20}}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>
-  <table className="wt" style={{width:totalTableWidth+'px',minWidth:'100%'}}>
+  <table className="wt" style={{width:'100%',tableLayout:'fixed',minWidth:minTableWidth+'px'}}>
     <thead>
       <tr style={{background:'#E2D0B8'}}>
         <th style={{width:28,background:'#E2D0B8'}}/>
         {tblNumbered&&<th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>}
         {tblByDate&&<th style={{width:96,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>Date</th>}
-        {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});var thEl=(
+        {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});var sortable=!!SORTABLE_COLS[col];var isSorted=colSort&&colSort.col===col;var showArrow=sortable&&(hoverCol===col||isSorted);var thEl=(
 <th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600,userSelect:'none',position:'relative'}} className="resizable"
+  onMouseEnter={function(){if(sortable)setHoverCol(col);}}
+  onMouseLeave={function(){setHoverCol(function(h){return h===col?null:h;});}}
   onDragOver={function(e){e.preventDefault();}}
   onDrop={function(e){e.preventDefault();var fromId=e.dataTransfer.getData('colId');if(!fromId||fromId===col)return;var nc=colOrder.slice();var fromIdx=nc.indexOf(fromId);var toIdx=nc.indexOf(col);if(fromIdx<0||toIdx<0)return;var item=nc.splice(fromIdx,1)[0];nc.splice(toIdx,0,item);persistColOrder(nc);}} >
-  <span draggable={true} onDragStart={function(e){e.dataTransfer.setData('colId',col);}} style={{cursor:'grab',display:'inline-block'}}>
-    {col==='branches'?<span className="mi" style={{fontSize:18,color:'#6B4A26'}}>account_tree</span>:(av?av.label:col)}
+  <span style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}>
+    <span draggable={true} onDragStart={function(e){e.dataTransfer.setData('colId',col);}} style={{cursor:'grab',display:'inline-block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+      {col==='branches'?<span className="mi" style={{fontSize:18,color:'#6B4A26'}}>account_tree</span>:(av?av.label:col)}
+    </span>
+    {showArrow&&(
+    <button onClick={function(e){e.stopPropagation();toggleColSort(col);}} title="Sort" style={{background:'transparent',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',flexShrink:0,color:isSorted?'#C45E28':'#6B4A26'}}>
+      <span className="mi" style={{fontSize:16}}>{isSorted?(colSort.dir==='asc'?'arrow_upward':'arrow_downward'):'unfold_more'}</span>
+    </button>
+    )}
   </span>
   <div className="col-resize-handle" onMouseDown={function(e){e.stopPropagation();startResize(col,e);}}/>
 </th>
