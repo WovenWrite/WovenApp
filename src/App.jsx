@@ -12,27 +12,28 @@ import LooseThreadDrawer from './LooseThreadDrawer'
 import BindDrawer from './BindDrawer'
 import ProjectWizard from './ProjectWizard'
 import ProjectDrawer from './ProjectDrawer'
+import Dashboard from './Dashboard'
 import TableView from './TableView'
-import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, DeleteConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor, Radio, FloatingPanel } from './SharedUI'
+import { StatusDot, StatusDotWithArchive, ArchiveConfirmModal, AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, Popover, Check, Avatar, OptionsEditor, Radio } from './SharedUI'
 import {
   STATUSES, FIELD_TYPES, PRESET_COLORS, SYSTEM_COLORS, COLL_FIELDS, defaultFields,
   supabase, genId, stripHtml, countWords, initials, todayStr,
   compressImage, uploadImage, deleteStorageImage,
   saveSnapshot
 } from './utils'
-import { PROJ_TYPES, projIsNumbered, projIsManualOrder, projSequence, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
+import { PROJ_TYPES, projIsNumbered, projIsManualOrder, projSequence, projThumbnails, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
 // Snapshot helpers, Supabase client, and env constants now live in ./utils
 
 // ── Storage ──
 function saveLS(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
 function loadLS(key,def){return Promise.resolve().then(function(){try{var v=localStorage.getItem(key);return v?JSON.parse(v):def;}catch(e){return def;}});}
-export function saveDB(key,val){
+function saveDB(key,val){
   var uid=window.__wovenUserId;
   if(!uid)return saveLS(key,val);
   saveLS(key,val); // keep local copy too
   supabase.from('wf_data').upsert({key:key,user_id:uid,value:val,updated_at:new Date().toISOString()},{onConflict:'key,user_id'}).then(function(r){if(r.error)console.error('saveDB error:',r.error);});
 }
-export function loadDB(key,def){
+function loadDB(key,def){
   var uid=window.__wovenUserId;
   if(!uid)return loadLS(key,def);
   return supabase.from('wf_data').select('value').eq('key',key).eq('user_id',uid).maybeSingle().then(function(r){
@@ -45,8 +46,6 @@ export function loadDB(key,def){
 // todayStr, initials, STATUSES, PRESET_COLORS, FIELD_TYPES, COLL_FIELDS,
 // defaultFields, SYSTEM_COLORS now live in ./utils
 
-function dayLbl(offset){var days=['Su','Mo','Tu','We','Th','Fr','Sa'];var d=new Date();d.setDate(d.getDate()-offset);return days[d.getDay()];}
-function getGreeting(){var h=new Date().getHours();if(h<12)return 'Good morning';if(h<17)return 'Good afternoon';return 'Good evening';}
 function useIsMobile(){var s=useState(window.innerWidth<768);var isMobile=s[0];var setIsMobile=s[1];useEffect(function(){function onResize(){setIsMobile(window.innerWidth<768);}window.addEventListener('resize',onResize);return function(){window.removeEventListener('resize',onResize);};},[]);return isMobile;}
 
 // ── Constants ──
@@ -253,8 +252,8 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .wt{border-collapse:collapse;width:100%;table-layout:fixed;}
 .wt td{background:#FDF8F0;font-family:'DM Sans',sans-serif;font-size:16px;color:#7A5A38;}
 .wt th{background:#E2D0B8;font-family:'DM Sans',sans-serif;font-size:16px;color:#6B4A26;font-weight:600;border-bottom:2px solid var(--border);padding:9px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;position:sticky;top:0;z-index:2;white-space:nowrap;user-select:none;overflow:hidden;position:relative;}
-.wt th.resizable{overflow:hidden;min-width:60px;}
-.col-resize-handle{position:absolute;right:0;top:0;bottom:0;width:9px;cursor:col-resize;background:transparent;z-index:5;}
+.wt th.resizable{resize:horizontal;overflow:hidden;min-width:60px;}
+.col-resize-handle{position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;background:transparent;z-index:3;}
 .col-resize-handle:hover{background:var(--indigo);opacity:.3;}
 .wt td{padding:9px 12px;border-bottom:1px solid var(--bg2);font-size:13px;vertical-align:middle;color:var(--body-text);}
 .wt tr:hover td{background:rgba(196,94,40,.03);}
@@ -451,23 +450,7 @@ function OverflowTooltip({label,names}){
 
 // StatusDot now lives in ./SharedUI
 
-// ── Panel (full overlay, doesn't cover nav) ──
-function Panel({open,onClose,title,children,footer}){
-  if(!open)return null;
-  return(
-<div className="panel-overlay">
-  <div className="panel-backdrop" onClick={onClose}/>
-  <div className="panel-box">
-    <div className="panel-hdr">
-      <span className="panel-title">{title}</span>
-      <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
-    </div>
-    <div className="panel-body">{children}</div>
-    {footer&&<div className="panel-footer">{footer}</div>}
-  </div>
-</div>
-  );
-}
+// Panel (local full-overlay component) removed — ArchiveDrawer now uses the shared Drawer from ./SharedUI
 
 // ── ViewSwitcher ──
 function ViewSwitcher({view,setView}){
@@ -483,246 +466,10 @@ function ViewSwitcher({view,setView}){
   );
 }
 
-// ── StatsSection ──
-function StatsSection({app,onOpenProfile,greeting}){
-  var sessions=app.sessions;var goal=app.goal;
-  var todayWords=sessions.filter(function(s){return s.date===todayStr();}).reduce(function(sum,s){return sum+(s.words||0);},0);
-  var pct=goal>0?Math.round(todayWords/goal*100):0;
-  var weekData=[];
-  function localDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
-  for(var i=6;i>=0;i--){var dd=new Date();dd.setDate(dd.getDate()-i);var ds=localDateStr(dd);var dw=sessions.filter(function(s){return s.date===ds;}).reduce(function(sum,s){return sum+(s.words||0);},0);weekData.push({date:ds,words:dw,isToday:i===0,label:dayLbl(i)});}
-  var maxW=weekData.reduce(function(m,d){return Math.max(m,d.words);},1);
-  var streak=0;var sd=new Date();
-  for(var j=0;j<60;j++){var sds=localDateStr(sd);if(sessions.filter(function(s){return s.date===sds&&(s.words||0)>0;}).length>0){streak++;sd.setDate(sd.getDate()-1);}else if(j===0){sd.setDate(sd.getDate()-1);}else break;}
-  var weekStart=new Date();weekStart.setDate(weekStart.getDate()-6);weekStart.setHours(0,0,0,0);
-  var weekStartStr=localDateStr(weekStart);
-  var ltCount=0;
-  // Count project loose threads
-  Object.keys(app.allDrafts).forEach(function(pid){(app.allDrafts[pid]||[]).forEach(function(d){
-    if(d.status==='loose_thread'&&!d.archived){
-      var createdStr=(d.createdAt||'').slice(0,10);
-      if(createdStr>=weekStartStr)ltCount++;
-    }
-  });});
-  // Count global loose threads
-  Object.values(app.globalLT||{}).forEach(function(lt){
-    if(!lt.archived){
-      var createdStr=(lt.createdAt||'').slice(0,10);
-      if(createdStr>=weekStartStr)ltCount++;
-    }
-  });
-  return(
-<div>
-  <div className="dash-greeting dash-greeting-mobile">{greeting||''}</div>
-  <div className="dash-subtitle dash-greeting-mobile" style={{marginBottom:10}}>What will you weave today?</div>
-  <div className="stat-cards-mobile">
-    <div className="stat-card">
-      <div className="stat-card-hdr">
-        <span className="stat-card-title">Words Today</span>
-        <div style={{display:'flex',gap:4}}>
-          {todayWords>0&&<button className="btn-icon" style={{padding:2}} title="Reset today's count" onClick={function(){if(window.confirm('Reset today\'s word count to 0?'))app.clearTodaySession();}}><span className="mi" style={{fontSize:16}}>refresh</span></button>}
-          <button className="btn-icon" style={{padding:2}} onClick={function(){onOpenProfile('goal');}}><span className="mi" style={{fontSize:18}}>settings</span></button>
-        </div>
-      </div>
-      <div className="stat-num">{todayWords}</div>
-      <div className="progress-bar-bg"><div className="progress-bar-fill" style={{width:Math.min(100,pct)+'%'}}/></div>
-      <div className="stat-sub">{pct+'% of '+goal}</div>
-    </div>
-    <div className="stat-card">
-      <div className="stat-card-hdr">
-        <span className="stat-card-title">Streak</span>
-        <button className="btn-icon" style={{padding:2}} onClick={function(){onOpenProfile('reminder');}} title="Reminder settings"><span className="mi" style={{fontSize:18}}>notifications</span></button>
-      </div>
-      <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <div className="stat-num">{streak}</div>
-        {streak>7&&<span className="mi" style={{fontSize:24,color:'#f97316'}}>local_fire_department</span>}
-      </div>
-      <div className="stat-sub">{streak===1?'day':'days'}</div>
-    </div>
-  </div>
-  <div className="stat-card stat-hide-mobile">
-    <div className="stat-card-hdr"><span className="stat-card-title">Loose Threads</span></div>
-    <div className="stat-num">{ltCount}</div>
-    <div className="stat-sub">{ltCount===1?'thread this week':'threads this week'}</div>
-  </div>
-  <div className="stat-card stat-hide-mobile">
-    <div className="stat-card-hdr"><span className="stat-card-title">This Week</span></div>
-    <div className="week-chart">
-      {weekData.map(function(d){var barH=maxW>0?Math.max(3,Math.round(d.words/maxW*42)):3;return(
-<div key={d.date} className="week-bar-wrap">
-  <div className="week-bar-tip">{d.words>0?d.words+' words':'No words'}</div>
-  <div className={'week-bar'+(d.isToday?' today':'')} style={{height:barH,cursor:'pointer'}} onMouseOver={function(e){e.currentTarget.style.background='var(--indigoL)';}} onMouseOut={function(e){e.currentTarget.style.background=d.isToday?'var(--indigo)':'var(--bg3)';}}>
-  </div>
-  <div className="week-day-lbl">{d.label}</div>
-</div>
-      );})}
-    </div>
-  </div>
-</div>
-  );
-}
-
 // ── ProjectEditPanel ──
 // Replaced by ProjectDrawer — see ./ProjectDrawer
 
-// ── GlobalLooseThreads ──
-function GlobalLooseThreads({app}){
-  // Global LTs are stored in app.globalLT (keyed by id), not tied to any project
-  var allLT=Object.values(app.globalLT||{}).filter(function(d){return !d.archived;}).sort(function(a,b){return (b.createdAt||'').localeCompare(a.createdAt||'');});
-  var activeProjects=app.projects.filter(function(p){return !p.archived;});
-  var soi=useState(null);var openLTId=soi[0];var setOpenLTId=soi[1];
-  // A newly-created thread stays purely local (never touches app.globalLT)
-  // until it actually has a title or synopsis — closing an empty one leaves
-  // no trace, per "no input means it does not save."
-  var spl=useState(null);var pendingLT=spl[0];var setPendingLT=spl[1];
-  function updateLT(id,changes){app.updateGlobalLT(id,changes);}
-  function moveToProject(ltId,targetPid){
-    if(!targetPid)return;
-    var lt=app.globalLT[ltId];if(!lt)return;
-    app.addDraft(targetPid,{id:genId(),projectId:targetPid,title:lt.title||'',synopsis:lt.synopsis||'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
-    app.updateGlobalLT(ltId,{archived:true});
-  }
-  var ssm=useState(false);var showMore=ssm[0];var setShowMore=ssm[1];
-  // Show one row (approx 3-4 cards) collapsed, rest hidden
-  var visibleLT=showMore?allLT:allLT.slice(0,3);
-  function handleAddLT(){
-    var id=genId();
-    setPendingLT({id:id,title:'',synopsis:'',createdAt:new Date().toISOString(),archived:false});
-    setOpenLTId(id);
-  }
-  var activeLT=pendingLT&&pendingLT.id===openLTId?pendingLT:app.globalLT[openLTId];
-  function handleDrawerUpdate(changes){
-    if(pendingLT&&pendingLT.id===openLTId){
-      var merged=Object.assign({},pendingLT,changes);
-      if((merged.title&&merged.title.trim())||(merged.synopsis&&merged.synopsis.trim())){
-        // First real content — actually create the record now.
-        app.updateGlobalLT(merged.id,merged);
-        setPendingLT(null);
-      } else {
-        setPendingLT(merged);
-      }
-      return;
-    }
-    updateLT(openLTId,changes);
-  }
-  function handleDrawerClose(){
-    setPendingLT(null); // no-op if it was never actually saved
-    setOpenLTId(null);
-  }
-  function handleDrawerDelete(){
-    if(pendingLT&&pendingLT.id===openLTId){handleDrawerClose();return;}
-    updateLT(openLTId,{archived:true});
-    setOpenLTId(null);
-  }
-  return(
-<div style={{marginTop:24}}>
-  <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Loose Threads</div>
-  <div style={{display:"flex",flexWrap:"nowrap",gap:10,overflowX:"auto",paddingBottom:4}}>
-    <div onClick={handleAddLT} style={{background:"transparent",border:"2px dashed #A88060",padding:"10px 15px",borderRadius:15,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,minWidth:120,flexShrink:0,minHeight:80}} onMouseEnter={function(e){e.currentTarget.style.borderColor="#c45e28";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#A88060";}}>
-      <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
-    </div>
-    {visibleLT.map(function(d){return(
-<div key={d.id} style={{background:'#FDF8F0',border:'1px solid #E2D0B8',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:150,maxWidth:150,flexShrink:0,transition:'border-color .2s,box-shadow .2s',outline:'1px solid transparent'}}
-  onClick={function(){setOpenLTId(d.id);}}
-  onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';e.currentTarget.style.boxShadow='0 4px 12px rgba(196,94,40,.12)';}}
-  onMouseLeave={function(e){e.currentTarget.style.borderColor='#E2D0B8';e.currentTarget.style.boxShadow='none';}}>
-  <div style={{fontFamily:'Crimson Text, serif',fontWeight:700,fontSize:16,color:'#2A1F10',lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.title||'Untitled loose thread'}</div>
-  {d.synopsis&&<div style={{fontFamily:'DM Sans, sans-serif',fontSize:14,fontStyle:'italic',color:'#A88060',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.synopsis}</div>}
-</div>
-    );})}
-  </div>
-  {allLT.length>3&&(
-<div style={{marginTop:8,textAlign:'center'}}>
-  <button className="btn btn-ghost btn-sm" onClick={function(){setShowMore(!showMore);}}>
-    {showMore?'Show less':'Show '+( allLT.length-3)+' more'}
-  </button>
-</div>
-  )}
-  <button onClick={handleAddLT} title="Add a loose thread" style={{position:'fixed',bottom:28,right:28,width:52,height:52,borderRadius:'50%',background:'#DF6321',border:'none',boxShadow:'0 4px 14px rgba(42,31,16,.25)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',zIndex:400,transition:'background .15s ease'}}
-    onMouseEnter={function(e){e.currentTarget.style.background='#6B4A26';}}
-    onMouseLeave={function(e){e.currentTarget.style.background='#DF6321';}}>
-    <span className="material-symbols-outlined" style={{fontSize:26,color:'#F5EDE0'}}>add</span>
-  </button>
-  {openLTId&&activeLT&&(
-<LooseThreadDrawer lt={activeLT} activeProjects={activeProjects} open={true} variant="overlay" topOffset={54} onUpdate={handleDrawerUpdate} onMove={function(pid){moveToProject(openLTId,pid);setOpenLTId(null);}} onClose={handleDrawerClose} onDelete={handleDrawerDelete}/>
-  )}
-</div>
-  );
-}
-
-
-// ── LTDrawer ──
-// LTDrawer now lives as LooseThreadDrawer in ./LooseThreadDrawer
-
-// ── Dashboard ──
-function Dashboard({app,onOpenProfile,onNewProject}){
-  var profile=app.profile||{};
-  var firstName=profile.firstName||'';
-  var greeting=getGreeting()+(firstName?', '+firstName:'');
-  var sep=useState(null);var editingProjId=sep[0];var setEditingProjId=sep[1];
-  var sar=useState(false);var archiveOpen=sar[0];var setArchiveOpen=sar[1];
-  var archivedCount=Object.values(app.allDrafts).flat().filter(function(d){return d.archived;}).length+(app.projects.filter(function(p){return p.archived;}).length);
-  function getWC(pid){return(app.allDrafts[pid]||[]).reduce(function(s,d){return s+(d.wordCount||0);},0);}
-  function openProject(pid){app.loadProjectData(pid);app.setProjId(pid);app.setView('cards');}
-  var editProj=editingProjId?app.projects.find(function(p){return p.id===editingProjId;}):null;
-  return(
-<div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
-  <nav className="nav" style={{justifyContent:'space-between'}}>
-    <WovenLogo size={26}/>
-    <div style={{display:'flex',alignItems:'center',gap:8}}>
-      <div className="avatar" onClick={function(){onOpenProfile(null);}}>{profile.headshot?<img src={profile.headshot} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:initials(firstName+' '+(profile.lastName||''))}</div>
-    </div>
-  </nav>
-  <div className="dash-layout">
-    <div className="dash-main dot-grid">
-      <div className="dash-greeting dash-greeting-desktop">{greeting}</div>
-      <div className="dash-subtitle dash-greeting-desktop">What will you weave today?</div>
-      <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Your Projects</div>
-      <div className="proj-grid">
-        {app.projects.filter(function(p){return !p.archived;}).map(function(p){var wc=getWC(p.id);return(
-<div key={p.id} className="proj-card proj-card-hover" style={{position:'relative'}}>
-  <div className="proj-card-band" onClick={function(){openProject(p.id);}}>
-    {p.image?<img src={p.image} alt={p.title} style={{width:'100%',height:'100%',objectFit:'cover',position:'absolute',inset:0}}/>:null}
-    {!p.image&&<span className="mi" style={{position:'relative',zIndex:1,fontSize:28,color:'rgba(42,31,16,.25)'}}>photo_camera</span>}
-  </div>
-  <div className="proj-card-body" onClick={function(){openProject(p.id);}}>
-    <div className="proj-card-title">{p.title||'Untitled'}</div>
-    <div className="proj-card-syn">{p.synopsis||'No synopsis yet.'}</div>
-    <div className="proj-card-footer"><span>{p.type||'Fiction'}</span><span>{wc>0?wc+' words':'Empty'}</span></div>
-  </div>
-  <button className="proj-edit-btn btn-icon" style={{position:'absolute',top:8,right:8,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:6,opacity:0,transition:'opacity .15s',color:'var(--mid)'}} onClick={function(e){e.stopPropagation();setEditingProjId(p.id);}} title="Edit project">
-    <span className="mi" style={{fontSize:16}}>edit</span>
-  </button>
-</div>
-        );})}<div className="add-proj" onClick={onNewProject}>
-          <span className="mi" style={{fontSize:28,color:'var(--mid)'}}>add_circle_outline</span>
-          <div style={{fontSize:13,color:'var(--mid)'}}>New project</div>
-        </div>
-      </div>
-      <GlobalLooseThreads app={app}/>
-      <div style={{marginTop:20,border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'12px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,background:'var(--bg1)',transition:'border-color .15s'}} onClick={function(){setArchiveOpen(true);}}>
-        <span className="mi" style={{fontSize:24,color:'var(--placeholder)',flexShrink:0}}>inventory_2</span>
-        <div style={{flex:1}}>
-          <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>Your Archive</div>
-          <div style={{fontSize:12,color:'var(--mid)'}}>Where shelved ideas stay safe.{archivedCount>0?' '+archivedCount+' item'+(archivedCount!==1?'s':'')+' archived.':''}</div>
-        </div>
-        <span className="mi" style={{fontSize:20,color:'var(--border)'}}>chevron_right</span>
-      </div>
-    </div>
-    <div className="dash-sidebar" style={{display:'flex',flexDirection:'column'}}>
-      <div style={{flex:1}}><StatsSection app={app} onOpenProfile={onOpenProfile} greeting={greeting}/></div>
-      <div style={{paddingTop:16,borderTop:'1px solid var(--border)',marginTop:16}}>
-        <button className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}} onClick={function(){app.signOut();}}>
-          <span className="mi" style={{fontSize:16}}>logout</span>Sign out
-        </button>
-      </div>
-    </div>
-  </div>
-  {editProj&&<ProjectDrawer proj={editProj} app={app} open={true} variant="overlay" topOffset={54} onClose={function(){setEditingProjId(null);}}/>}
-  <ArchiveDrawer app={app} open={archiveOpen} onClose={function(){setArchiveOpen(false);}}/>
-</div>
-  );
-}
+// StatsSection, GlobalLooseThreads, Dashboard, and ArchiveDrawer now live in ./Dashboard
 
 // ── ProjectNav ──
 function ProjectNav({app,onOpenProfile}){
@@ -1239,77 +986,62 @@ function StrandCircle({strand,spoolColor,size}){
 
 
 // ── StrandTagPicker ──
-function StrandTagPicker({draft,app,pid}){
+function StrandTagPicker({draft,app,pid,tagged}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
-  var btnRef=useRef(null);
-  return(
-<div style={{display:'inline-block'}}>
-  <button ref={btnRef} onClick={function(e){e.stopPropagation();setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:12,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',fontSize:11,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>
-    <span className="material-symbols-outlined" style={{fontSize:14,color:'var(--teal)'}}>add</span>
-    Add...
-  </button>
-  <FloatingPanel anchorRef={btnRef} open={open} onClose={function(){setOpen(false);}}>
-    <div onClick={function(e){e.stopPropagation();}} style={{borderRadius:12,overflow:'hidden',boxShadow:'0 8px 28px rgba(42,31,16,.16)'}}>
-      <StrandsDrawer app={app} draft={draft} variant="inline" open={true} onClose={function(){setOpen(false);}}/>
-    </div>
-  </FloatingPanel>
-</div>
-  );
-}
+  var sq=useState('');var q=sq[0];var setQ=sq[1];
+  var ref=useRef(null);
+  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
 
-
-// ── TaggedSpoolsEditor ──
-// Full add/remove strand-tag editor: chips with an "×" to remove (with
-// confirmation) plus the "Tag spool" add button. Computes its own tagged
-// list from draft.strandTags — callers just pass draft/app/pid. Used
-// anywhere a draft's tagged spools need to be fully editable (DraftCard's
-// structure mode, TableView's Strands column).
-export function TaggedSpoolsEditor({draft,app,pid}){
-  var ssc=useState(false);var strandConfirm=ssc[0];var setStrandConfirm=ssc[1];
-  var ssi=useState(null);var strandConfirmId=ssi[0];var setStrandConfirmId=ssi[1];
   var projStrands=app.allStrands[pid]||{};
   var projTemplates=app.allTemplates[pid]||[];
-  var tagged=[];
+  var taggedIds=(draft.strandTags||[]);
+
+  // All strands not yet tagged, optionally filtered by q
+  var available=[];
   Object.keys(projStrands).forEach(function(coll){
     (projStrands[coll]||[]).forEach(function(st){
-      if((draft.strandTags||[]).includes(st.id)){
-        var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
-        tagged.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28',collName:coll}));
-      }
+      if(taggedIds.includes(st.id))return;
+      if(q&&!(st.name||'').toLowerCase().includes(q.toLowerCase()))return;
+      var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
+      available.push(Object.assign({},st,{collName:coll,spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));
     });
   });
-  function removeStrand(strandId){app.updateDraft(pid,draft.id,{strandTags:(draft.strandTags||[]).filter(function(id){return id!==strandId;})});setStrandConfirm(false);setStrandConfirmId(null);}
+
+  function tag(strandId){
+    app.updateDraft(pid,draft.id,{strandTags:taggedIds.concat([strandId])});
+    setQ('');setOpen(false);
+  }
+
   return(
-<div onClick={function(e){e.stopPropagation();}}>
-  <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:tagged.length>0?6:0}}>
-    {tagged.map(function(st){return(
-<div key={st.id} style={{display:'flex',alignItems:'center',gap:5,padding:'3px 8px',borderRadius:12,background:st.spoolColor+'22',border:'1px solid '+st.spoolColor}}>
-  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:11,color:st.spoolColor,fontWeight:600}}>{st.name}</span>
-  <button onClick={function(e){e.stopPropagation();setStrandConfirmId(st.id);setStrandConfirm(true);}} style={{background:'none',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',color:st.spoolColor,opacity:.7}}>
-    <span className="material-symbols-outlined" style={{fontSize:14}}>close</span>
+<div ref={ref} style={{position:'relative',display:'inline-block'}}>
+  <button onClick={function(e){e.stopPropagation();setOpen(!open);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:12,border:'1px dashed var(--border)',background:'transparent',cursor:'pointer',fontSize:11,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>
+    <span className="material-symbols-outlined" style={{fontSize:14,color:'var(--teal)'}}>add</span>
+    Tag spool
   </button>
+  {open&&available.length===0&&!q&&(
+<div style={{position:'absolute',bottom:'calc(100% + 6px)',left:0,zIndex:600,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:8,padding:'10px 12px',fontSize:12,color:'var(--mid)',whiteSpace:'nowrap',boxShadow:'0 4px 16px rgba(42,31,16,.12)'}}>All strands are already tagged.</div>
+  )}
+  {open&&(available.length>0||q)&&(
+<div style={{position:'absolute',bottom:'calc(100% + 6px)',left:0,zIndex:600,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:10,boxShadow:'0 4px 16px rgba(42,31,16,.12)',minWidth:200,overflow:'hidden'}}>
+  <div style={{padding:'6px 8px',borderBottom:'1px solid var(--border)'}}>
+    <input autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search strands…" style={{width:'100%',padding:'4px 8px',fontSize:12,border:'1px solid var(--border)',borderRadius:6,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',boxSizing:'border-box'}}/>
+  </div>
+  <div style={{maxHeight:180,overflowY:'auto'}}>
+    {available.map(function(st){return(
+<div key={st.id} onClick={function(e){e.stopPropagation();tag(st.id);}} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer',borderBottom:'1px solid var(--bg2)'}}
+  onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
+  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  <div style={{width:16,height:16,borderRadius:'50%',background:st.spoolColor,flexShrink:0}}/>
+  <div>
+    <div style={{fontSize:12,fontWeight:600,color:'var(--text)',fontFamily:'DM Sans, sans-serif'}}>{st.name}</div>
+    <div style={{fontSize:10,color:'var(--mid)',fontFamily:'DM Sans, sans-serif'}}>{st.collName}</div>
+  </div>
 </div>
     );})}
-  </div>
-  <StrandTagPicker draft={draft} app={app} pid={pid} tagged={tagged}/>
-  {strandConfirm&&(function(){
-    var confirmSt=tagged.find(function(t){return t.id===strandConfirmId;});
-    var spoolName=confirmSt?confirmSt.collName:'Spool';
-    var strandName=confirmSt?confirmSt.name:'this item';
-    return(
-<div style={{position:'fixed',inset:0,zIndex:600,display:'flex',alignItems:'center',justifyContent:'center'}}>
-  <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={function(){setStrandConfirm(false);}}/>
-  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:12,padding:24,width:300,boxShadow:'0 12px 40px rgba(42,31,16,.15)'}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:8,color:'var(--text)'}}>Remove {strandName} from {spoolName}?</div>
-    <div style={{fontSize:13,color:'var(--mid)',marginBottom:16}}>This removes the tag from this draft. The {strandName} entry in your {spoolName} spool won't be deleted.</div>
-    <div style={{display:'flex',gap:8}}>
-      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={function(){setStrandConfirm(false);}}>Cancel</button>
-      <button className="btn btn-primary" style={{flex:1,justifyContent:'center',background:'var(--danger)'}} onClick={function(){removeStrand(strandConfirmId);}}>Remove</button>
-    </div>
+    {available.length===0&&q&&<div style={{padding:'10px 12px',fontSize:12,color:'var(--mid)'}}>No matches.</div>}
   </div>
 </div>
-    );
-  })()}
+  )}
 </div>
   );
 }
@@ -1323,6 +1055,8 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   var stv=useState(draft.title||'');var titleVal=stv[0];var setTitleVal=stv[1];
   var ssv=useState(draft.synopsis||'');var synVal=ssv[0];var setSynVal=ssv[1];
   var sth=useState(false);var thumbHover=sth[0];var setThumbHover=sth[1];
+  var ssc=useState(false);var strandConfirm=ssc[0];var setStrandConfirm=ssc[1];
+  var ssi=useState(null);var strandConfirmId=ssi[0];var setStrandConfirmId=ssi[1];
   var sdrag=useRef(false);var smouse=useRef({x:0,y:0});
   var fileRef=useRef(null);
   var pid=app.projId;
@@ -1349,6 +1083,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
     app.updateDraft(pid,draft.id,ch);
   }
   function doArchive(){var allDr=app.allDrafts[pid]||[];var children=allDr.filter(function(d){return d.parentId===draft.id&&!d.archived;});app.updateDraft(pid,draft.id,{archived:true});children.forEach(function(c){app.updateDraft(pid,c.id,{archived:true});});setArchiveConfirm(false);}
+  function removeStrand(strandId){app.updateDraft(pid,draft.id,{strandTags:(draft.strandTags||[]).filter(function(id){return id!==strandId;})});setStrandConfirm(false);setStrandConfirmId(null);}
 
   function handleMouseDown(e){smouse.current={x:e.clientX,y:e.clientY};sdrag.current=false;}
   function handleMouseMove(e){var dx=e.clientX-smouse.current.x;var dy=e.clientY-smouse.current.y;if(Math.sqrt(dx*dx+dy*dy)>4)sdrag.current=true;}
@@ -1380,7 +1115,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
 
   return(
 <div
-  style={{width:270,borderRadius:15,overflow:'visible',background:'var(--bg1)',border:'2px solid transparent',display:'flex',flexDirection:'column',cursor:structureMode?'default':'pointer',boxShadow:'0 2px 8px rgba(42,31,16,.06)',transition:'box-shadow .2s,border-color .2s',flexShrink:0,position:'relative',height:structureMode?'auto':400}}
+  style={{width:270,borderRadius:15,overflow:'visible',background:'var(--bg1)',border:'2px solid transparent',display:'flex',flexDirection:'column',cursor:structureMode?'default':'pointer',boxShadow:'0 2px 8px rgba(42,31,16,.06)',transition:'box-shadow .2s,border-color .2s',flexShrink:0,position:'relative',height:structureMode?'auto':(projThumbnails(cardProj)?400:250)}}
   draggable={structureMode}
   onDragStart={structureMode?function(e){e.dataTransfer.setData('draftId',draft.id);}:undefined}
   onDragOver={structureMode?function(e){e.preventDefault();setDragOver(true);}:undefined}
@@ -1393,6 +1128,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   onMouseLeave={function(e){e.currentTarget.style.boxShadow='0 2px 8px rgba(42,31,16,.06)';e.currentTarget.style.borderColor='transparent';}}
 >
   {/* Thumbnail */}
+  {projThumbnails(cardProj)&&(
   <div
     style={{height:150,background:'#E2D0B8',flexShrink:0,backgroundImage:draft.thumbnail?'url('+draft.thumbnail+')':undefined,backgroundSize:'cover',backgroundPosition:'center',position:'relative',borderRadius:'13px 13px 0 0',overflow:'hidden',cursor:structureMode?'pointer':'inherit'}}
     onMouseEnter={function(){if(structureMode)setThumbHover(true);}}
@@ -1412,6 +1148,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
 </div>
     )}
   </div>
+  )}
 
   {/* Content */}
   <div style={{flex:1,background:'#F5EDE0',padding:'10px 15px',display:'flex',flexDirection:'column',gap:10,minHeight:0,borderRadius:'0 0 13px 13px',overflow:'hidden'}}>
@@ -1461,8 +1198,22 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
     )}
 
     {/* Strand chips + tag button — expanded in structure mode */}
-    {structureMode&&<TaggedSpoolsEditor draft={draft} app={app} pid={pid}/>}
-
+    {structureMode&&(
+<div>
+  <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:tagged.length>0?6:0}}>
+    {tagged.map(function(st){return(
+<div key={st.id} style={{display:'flex',alignItems:'center',gap:5,padding:'3px 8px',borderRadius:12,background:st.spoolColor+'22',border:'1px solid '+st.spoolColor}}>
+  <span style={{fontFamily:'DM Sans, sans-serif',fontSize:11,color:st.spoolColor,fontWeight:600}}>{st.name}</span>
+  <button onClick={function(e){e.stopPropagation();setStrandConfirmId(st.id);setStrandConfirm(true);}} style={{background:'none',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',color:st.spoolColor,opacity:.7}}>
+    <span className="material-symbols-outlined" style={{fontSize:14}}>close</span>
+  </button>
+</div>
+    );})}
+  </div>
+  {/* Tag new strand */}
+  <StrandTagPicker draft={draft} app={app} pid={pid} tagged={tagged}/>
+</div>
+    )}
 
     {/* Bottom row */}
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,marginTop:'auto'}}>
@@ -1505,6 +1256,24 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   </div>
 
   {archiveConfirm&&<ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[pid]||[]} onConfirm={doArchive} onCancel={function(){setArchiveConfirm(false);}}/>}
+  {strandConfirm&&(function(){
+    var confirmSt=tagged.find(function(t){return t.id===strandConfirmId;});
+    var spoolName=confirmSt?confirmSt.collName:'Spool';
+    var strandName=confirmSt?confirmSt.name:'this item';
+    return(
+<div style={{position:'fixed',inset:0,zIndex:600,display:'flex',alignItems:'center',justifyContent:'center'}}>
+  <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={function(){setStrandConfirm(false);}}/>
+  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:12,padding:24,width:300,boxShadow:'0 12px 40px rgba(42,31,16,.15)'}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:8,color:'var(--text)'}}>Remove {strandName} from {spoolName}?</div>
+    <div style={{fontSize:13,color:'var(--mid)',marginBottom:16}}>This removes the tag from this draft. The {strandName} entry in your {spoolName} spool won't be deleted.</div>
+    <div style={{display:'flex',gap:8}}>
+      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={function(){setStrandConfirm(false);}}>Cancel</button>
+      <button className="btn btn-primary" style={{flex:1,justifyContent:'center',background:'var(--danger)'}} onClick={function(){removeStrand(strandConfirmId);}}>Remove</button>
+    </div>
+  </div>
+</div>
+    );
+  })()}
 </div>
   );
 }
@@ -2413,13 +2182,18 @@ function StrandsPage({app,allProjects}){
   </div>
   <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:12,color:'var(--text)'}}>Fields</div>
   {deleteCollConfirm&&(
-    <DeleteConfirmModal
-      itemName={activeColl}
-      message={<>This will permanently delete the collection and all <strong>{(app.allStrands[pid]&&app.allStrands[pid][activeColl]?app.allStrands[pid][activeColl].length:0)}</strong> strands inside it.</>}
-      confirmLabel="Delete collection"
-      onConfirm={deleteCollection}
-      onCancel={function(){setDeleteCollConfirm(false);}}
-    />
+<div className="modal-overlay">
+  <div className="modal-backdrop" onClick={function(){setDeleteCollConfirm(false);}}/>
+  <div className="modal-box" style={{maxWidth:400}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,marginBottom:12}}>Delete "{activeColl}"?</div>
+    <div style={{fontSize:14,color:'var(--body-text)',lineHeight:1.6,marginBottom:8}}>This will permanently delete the collection and all <strong>{(app.allStrands[pid]&&app.allStrands[pid][activeColl]?app.allStrands[pid][activeColl].length:0)}</strong> strands inside it.</div>
+    <div style={{fontSize:13,color:'var(--mid)',marginBottom:20}}>This cannot be undone.</div>
+    <div style={{display:'flex',gap:8}}>
+      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={function(){setDeleteCollConfirm(false);}}>Cancel</button>
+      <button className="btn btn-danger" style={{flex:1,justifyContent:'center'}} onClick={deleteCollection}><span className="mi" style={{fontSize:16}}>delete</span>Delete collection</button>
+    </div>
+  </div>
+</div>
   )}
   {editingFields.map(function(f,i){return(
 <div key={f.id} draggable={true}
@@ -2584,118 +2358,13 @@ function StrandsPage({app,allProjects}){
 }
 
 
-// ── ArchiveDrawer ──
-function ArchiveDrawer({app,open,onClose}){
-  var sSelected=useState({});var selected=sSelected[0];var setSelected=sSelected[1];
-  // Collect all archived drafts across all projects
-  var archivedDrafts=[];
-  Object.keys(app.allDrafts).forEach(function(pid){
-    (app.allDrafts[pid]||[]).forEach(function(d){
-      if(d.archived){
-        var proj=app.projects.find(function(p){return p.id===pid;})||null;
-        archivedDrafts.push(Object.assign({},d,{projectTitle:proj?proj.title:'Unknown project',pid:pid}));
-      }
-    });
-  });
-  var archivedProjects=app.projects.filter(function(p){return p.archived;});
-  function toggleDraft(id){setSelected(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;});}
-  function restoreSelected(){
-    Object.keys(selected).forEach(function(did){
-      if(!selected[did]) return;
-      var d=archivedDrafts.find(function(x){return x.id===did;});
-      if(!d) return;
-      app.updateDraft(d.pid,did,{archived:false,status:'loose_thread',order:null,parentId:null});
-    });
-    setSelected({});
-  }
-  var selectedCount=Object.values(selected).filter(Boolean).length;
-  return(
-<Panel open={open} onClose={onClose} title="Your Archive"
-  footer={selectedCount>0?(
-<div style={{display:'flex',gap:8,width:'100%',alignItems:'center'}}>
-  <span style={{fontSize:12,color:'var(--mid)',flex:1}}>{selectedCount} selected</span>
-  <button className="btn btn-primary" style={{justifyContent:'center'}} onClick={restoreSelected}>
-    <span className="mi" style={{fontSize:16}}>unarchive</span>Restore as Loose Thread
-  </button>
-</div>
-  ):null}>
-  {archivedDrafts.length===0&&archivedProjects.length===0&&(
-<div style={{textAlign:'center',padding:'40px 20px',color:'var(--placeholder)'}}>
-  <span className="mi" style={{fontSize:48,display:'block',marginBottom:12}}>inventory_2</span>
-  <div style={{fontFamily:'var(--serif)',fontSize:18,marginBottom:6}}>Your archive is empty</div>
-  <div style={{fontSize:13}}>Archived drafts and projects will appear here.</div>
-</div>
-  )}
-  {archivedDrafts.length>0&&(
-<div style={{marginBottom:20}}>
-  <span className="sect-lbl">Archived Drafts</span>
-  {archivedDrafts.map(function(d){var isSelected=!!selected[d.id];return(
-<div key={d.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderBottom:'1px solid var(--border)',cursor:'pointer'}} onClick={function(){toggleDraft(d.id);}}>
-  <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(isSelected?'var(--indigo)':'var(--border)'),background:isSelected?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:2,transition:'all .15s'}}>
-    {isSelected&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
-  </span>
-  <div style={{flex:1,minWidth:0}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)',marginBottom:2}}>{d.title||'Untitled'}</div>
-    <div style={{fontSize:11,color:'var(--indigo)',marginBottom:3}}>{d.projectTitle}</div>
-    {d.synopsis&&<div style={{fontSize:12,color:'var(--mid)',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.synopsis}</div>}
-  </div>
-</div>
-  );})}
-</div>
-  )}
-  {archivedProjects.length>0&&(
-<div>
-  <span className="sect-lbl">Archived Projects</span>
-  {archivedProjects.map(function(p){return(
-<div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
-  <div style={{flex:1}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)',marginBottom:2}}>{p.title||'Untitled'}</div>
-    {p.synopsis&&<div style={{fontSize:12,color:'var(--mid)'}}>{p.synopsis}</div>}
-  </div>
-  <button className="btn btn-ghost btn-sm" onClick={function(){app.unarchiveProject(p.id);}}>
-    <span className="mi" style={{fontSize:14}}>unarchive</span>Restore
-  </button>
-</div>
-  );})}
-</div>
-  )}
-</Panel>
-  );
-}
-
 // ── Wizard ──
 // ProjectWizard now lives in ./ProjectWizard
 
 // ── Profile Panel ──
 // ProfilePanel moved to its own file — see ./ProfileDrawer
 
-// ── WovenLogo ──
-function WovenLogo({size,color,dark}){
-  var textColor=color||(dark?'var(--text)':'var(--indigo)');var h=size||28;var symH=Math.round(h*0.75);
-  return(
-<div style={{display:'inline-flex',alignItems:'center',gap:7,userSelect:'none',verticalAlign:'middle'}}>
-  <svg width={symH} height={symH} viewBox="0 0 848.94 831.84" xmlns="http://www.w3.org/2000/svg" fill="var(--indigo)">
-    <path d="M564.96,702.91c-53.18,9.44-103.06-5.16-143.76-39.96-38.56,34.9-87.88,49.1-141.72,40.7-4.12-18.08-4.13-45.56-1.92-61.83,2.5-18.43,107.47,6.04,107.44-63.63l-.06-125.7-44.3-1.48c-4.57-.15-8.32-3.69-8.72-8.25-1.68-18.87-1.68-35.22,0-54.09.4-4.55,4.15-8.1,8.72-8.25l44.3-1.48.05-125.71c.03-70.41-105.11-46.18-107.21-62.43-2.48-19.16-1.99-41.94.63-62.5,51.86-8.94,102.06,5.29,142.53,40.15,39.2-35.16,90.01-49.89,142.97-39.93,2.41,19.58,2.82,44.43.84,61.59-2.15,18.69-107.68-9.17-107.62,66.26l.09,122.21,44.46,1.87c4.58.19,8.3,3.78,8.65,8.36,1.37,18.04,1.42,33.28.5,53.08-.22,4.66-3.95,8.4-8.62,8.62l-44.91,2.15-.07,125.52c-.04,72.83,108.96,43.13,108.62,65.59l-.9,59.16Z"/>
-    <rect y="382.8" width="313.51" height="67.4" rx="11.53" ry="11.53"/>
-    <path d="M67.58,128.81h110.06v67.4h-110.06c-5.36,0-9.7-4.35-9.7-9.7v-47.99c0-5.36,4.35-9.7,9.7-9.7Z"/>
-    <path d="M69.24,642.78h108.39v67.4h-108.39c-6.27,0-11.37-5.09-11.37-11.37v-44.66c0-6.27,5.09-11.37,11.37-11.37Z"/>
-    <path d="M426.94,123.67c6.66-5.47,13.63-10.37,20.86-14.69,2.92-1.75,4.7-4.89,4.7-8.29V9.69c0-5.35-4.34-9.69-9.69-9.69h-48.03c-5.35,0-9.69,4.34-9.69,9.69v89.08c0,3.53,1.93,6.76,5.01,8.47,8.54,4.73,16.8,10.24,24.71,16.5,3.55,2.81,8.62,2.8,12.12-.08Z"/>
-    <path d="M426.18,708.18c6.66,5.47,13.63,10.37,20.86,14.69,2.92,1.75,4.7,4.89,4.7,8.29v91c0,5.35-4.34,9.69-9.69,9.69h-48.03c-5.35,0-9.69-4.34-9.69-9.69v-89.08c0-3.53,1.93-6.76,5.01-8.47,8.54-4.73,16.8-10.24,24.71-16.5,3.55-2.81,8.62-2.8,12.12.08Z"/>
-    <rect x="535.43" y="382.8" width="313.51" height="67.4" rx="11.53" ry="11.53" transform="translate(1384.37 833) rotate(-180)"/>
-    <path d="M681,128.81h110.06v67.4h-110.06c-5.36,0-9.7-4.35-9.7-9.7v-47.99c0-5.36,4.35-9.7,9.7-9.7Z" transform="translate(1462.36 325.01) rotate(-180)"/>
-    <path d="M682.67,642.78h108.39v67.4h-108.39c-6.27,0-11.37-5.09-11.37-11.37v-44.66c0-6.27,5.09-11.37,11.37-11.37Z" transform="translate(1462.36 1352.96) rotate(-180)"/>
-    <path d="M657.29,366.94V90.24c0-7.18-5.82-13-13-13h-41.4c-7.18,0-13,5.82-13,13v276.71h67.4Z"/>
-    <rect x="589.89" y="382.8" width="67.4" height="67.4"/>
-    <path d="M589.89,466.06v296.95c0,7.18,5.82,13,13,13h41.4c7.18,0,13-5.82,13-13v-296.95h-67.4Z"/>
-    <path d="M259.04,366.94V90.24c0-7.18-5.82-13-13-13h-41.4c-7.18,0-13,5.82-13,13v276.71h67.4Z"/>
-    <rect x="191.64" y="382.8" width="67.4" height="67.28"/>
-    <path d="M191.64,465.94v297.06c0,7.18,5.82,13,13,13h41.4c7.18,0,13-5.82,13-13v-297.06h-67.4Z"/>
-  </svg>
-  <span style={{fontFamily:'var(--serif)',fontSize:h*0.9,fontWeight:600,color:textColor,lineHeight:1}}>Woven</span>
-</div>
-  );
-}
-
+// ArchiveDrawer and WovenLogo now live in ./Dashboard
 
 // ── App Root ──
 function App(){
@@ -2897,20 +2566,31 @@ function App(){
           setProjId(lastState.projId);
           setDraftId(lastState.draftId);
           setView('editor');
-          loadProjectDataById(lastState.projId);
         } else if(lastState&&lastState.projId){
           setProjId(lastState.projId);
           setView(lastState.view||'cards');
-          loadProjectDataById(lastState.projId);
-        } else {
-          saved.forEach(function(p){loadProjectDataById(p.id);});
         }
+        // Always load every project's drafts/strands/templates, not just the
+        // restored one — otherwise Dashboard word counts and the Archive
+        // drawer show empty for any project until the user opens it.
+        saved.forEach(function(p){loadProjectDataById(p.id);});
         setAuthLoading(false);setDataLoading(false);
       }
     });
   }
 
   function updateDraft(pid,did,changes){setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).map(function(d){return d.id!==did?d:Object.assign({},d,changes);});next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});}
+  function deleteDraftPermanently(pid,did){
+    setAllDrafts(function(prev){
+      var current=(prev[pid]||[]).find(function(d){return d.id===did;});
+      if(current&&current.thumbnail){try{deleteStorageImage(current.thumbnail);}catch(e){console.error('deleteStorageImage failed, continuing anyway:',e);}}
+      var next=Object.assign({},prev);
+      var ds=(next[pid]||[]).filter(function(d){return d.id!==did;});
+      next[pid]=ds;
+      saveDB('woven:drafts:'+pid,ds);
+      return next;
+    });
+  }
   function addDraft(pid,nd){setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).concat([nd]);next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});}
   function duplicateDraft(pid,did){
     setAllDrafts(function(prev){
@@ -3067,7 +2747,7 @@ function App(){
   }
   function updateProjectTitle(pid,newTitle){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{title:newTitle});});saveDB('woven:projects',next);return next;});}
   function updateProjectSynopsis(pid,syn){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{synopsis:syn});});saveDB('woven:projects',next);return next;});}
-  function updateProjectImage(pid,img){setProjects(function(prev){var old=prev.find(function(p){return p.id===pid;});if(old&&old.image&&old.image!==img)deleteStorageImage(old.image);var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{image:img});});saveDB('woven:projects',next);return next;});}
+  function updateProjectImage(pid,img){setProjects(function(prev){var old=prev.find(function(p){return p.id===pid;});if(old&&old.image&&old.image!==img){try{deleteStorageImage(old.image);}catch(e){console.error('deleteStorageImage failed, continuing anyway:',e);}}var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{image:img});});saveDB('woven:projects',next);return next;});}
   function updateProjectConfig(pid,patch){setProjects(function(prev){var next=prev.map(function(p){if(p.id!==pid)return p;var cfg=Object.assign({},p.config||{},patch);return Object.assign({},p,{config:cfg});});saveDB('woven:projects',next);return next;});}
   function updateProjectType(pid,type){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{type:type});});saveDB('woven:projects',next);return next;});}
   function archiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:true});});saveDB('woven:projects',next);return next;});}
@@ -3143,7 +2823,7 @@ function App(){
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,promoteStrand:promoteStrand,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,deleteDraftPermanently:deleteDraftPermanently,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,promoteStrand:promoteStrand,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
 
   function signOut(){
     supabase.auth.signOut().then(function(){
