@@ -227,7 +227,6 @@ function TableView({app}){
     if(!c.id||seenColIds[c.id])return false;
     seenColIds[c.id]=true;return true;
   });
-  console.log('[Woven debug] draftFieldDefs raw:',draftFieldDefs,'allAvailColsRaw ids:',allAvailColsRaw.map(function(c){return c.id;}),'allAvailCols after dedup:',allAvailCols.map(function(c){return c.id;}));
 
   // Persisted via saveDB/loadDB (Supabase-backed) AND localStorage. Once
   // localStorage has a value, it's treated as authoritative for the rest
@@ -255,27 +254,35 @@ function TableView({app}){
   var hiddenCols=shs[0];var setHiddenColsRaw=shs[1];
   function persistHiddenCols(next){setHiddenColsRaw(next);saveDB(hiddenKey,next);try{localStorage.setItem(hiddenKey,JSON.stringify(next));}catch(e){}}
   useEffect(function(){
-    if(!hadLocalOrderRef.current)loadDB(orderKey,null).then(function(v){if(Array.isArray(v))setColOrderRaw(v);});
+    if(!hadLocalOrderRef.current)loadDB(orderKey,null).then(function(v){
+      if(!Array.isArray(v))return;
+      // Merge, don't replace: a Supabase copy saved before a field
+      // existed shouldn't be able to drop that field back out just
+      // because it loaded after the local reconcile already added it.
+      var known={};v.forEach(function(id){known[id]=true;});
+      var withMissing=v.concat(allAvailCols.filter(function(c){return !known[c.id];}).map(function(c){return c.id;}));
+      setColOrderRaw(withMissing);
+    });
     if(!hadLocalHiddenRef.current)loadDB(hiddenKey,null).then(function(v){if(Array.isArray(v))setHiddenColsRaw(v);});
   },[orderKey,hiddenKey]);
   var availIds={};allAvailCols.forEach(function(c){availIds[c.id]=true;});
   // Reconcile: any available column not yet tracked in colOrder gets
-  // appended. Runs off the full column-id list (not just custom fields)
-  // so a built-in column can never permanently vanish either.
+  // appended. Runs off the full column-id list AND colOrder itself (not
+  // just when a field is added) so this self-heals if anything else — a
+  // stale Supabase read, a future bug — ever clobbers colOrder back down
+  // to missing a known field, instead of that field being silently and
+  // permanently stuck out of the column list for the rest of the session.
   useEffect(function(){
     var known={};colOrder.forEach(function(id){known[id]=true;});
     var missing=allAvailCols.filter(function(c){return !known[c.id];}).map(function(c){return c.id;});
-    console.log('[Woven debug] reconcile check — allAvailCols:',allAvailCols.map(function(c){return c.id;}),'colOrder:',colOrder,'missing:',missing);
     if(missing.length>0)persistColOrder(colOrder.concat(missing));
-  },[allAvailCols.map(function(c){return c.id;}).join(',')]);
+  },[allAvailCols.map(function(c){return c.id;}).join(','),colOrder.join(',')]);
   // Title is the row's identifying column and anchors the fixed "open
   // draft" column right after it — it can be reordered but never hidden.
   var visCols=colOrder.filter(function(id){return availIds[id]&&(id==='title'||hiddenCols.indexOf(id)<0);});
-  console.log('[Woven debug] render — colOrder:',colOrder,'hiddenCols:',hiddenCols,'visCols:',visCols);
   function toggleCol(id){
     if(id==='title')return;
     var next=hiddenCols.indexOf(id)>=0?hiddenCols.filter(function(c){return c!==id;}):hiddenCols.concat([id]);
-    console.log('[Woven debug] toggleCol — id:',id,'was hidden:',hiddenCols.indexOf(id)>=0,'next hiddenCols:',next,'is id in colOrder?',colOrder.indexOf(id)>=0);
     persistHiddenCols(next);
   }
 
