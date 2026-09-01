@@ -582,7 +582,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
 
 // ── LooseThreadTile ──
 // Shared by the inline Loose Threads grid and the sticky quick-access panel.
-function LooseThreadTile({d,app,pid,inStructure}){
+export function LooseThreadTile({d,app,pid,inStructure}){
   var bodyPreview=d.body?stripHtml(d.body).slice(0,200):'';
   var projStrands=app.allStrands[pid]||{};
   var projTemplates=app.allTemplates[pid]||[];
@@ -692,22 +692,7 @@ export function LooseThreadsSection({threads,app,view,structureMode,filter}){
 
   var inStructure=view==='cards'&&structureMode;
 
-  // ── Sticky quick-access bar ──
-  // Anchored bottom-left (AddMenuFab owns bottom-right) so loose threads
-  // stay reachable without scrolling all the way down as the sequence
-  // grows. The in-flow section below still shows everything — this is
-  // just a shortcut, not a replacement.
-  var sso=useState(false);var stickyOpen=sso[0];var setStickyOpen=sso[1];
-  var stickyRef=useRef(null);
-  useEffect(function(){
-    if(!stickyOpen)return;
-    function onDown(e){if(stickyRef.current&&!stickyRef.current.contains(e.target))setStickyOpen(false);}
-    document.addEventListener('mousedown',onDown);
-    return function(){document.removeEventListener('mousedown',onDown);};
-  },[stickyOpen]);
-
   return(
-<>
 <div
   style={{background:'#F5EDE0',padding:'16px 16px 24px',marginTop:0}}
   onDragOver={function(e){e.preventDefault();}}
@@ -737,29 +722,6 @@ export function LooseThreadsSection({threads,app,view,structureMode,filter}){
   </div>
   {drawer}
 </div>
-<div ref={stickyRef} style={{position:'fixed',bottom:20,left:16,zIndex:390,display:'flex',flexDirection:'column',alignItems:'flex-start',gap:10}}>
-  {stickyOpen&&(
-<div style={{background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:12,boxShadow:'0 8px 28px rgba(42,31,16,.18)',padding:12,maxHeight:'60vh',overflowY:'auto',width:'min(480px, calc(100vw - 120px))'}}>
-  <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
-    <div onClick={openCreateFlow} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
-      onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';}}
-      onMouseLeave={function(e){e.currentTarget.style.borderColor='#A88060';}}>
-      <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
-    </div>
-    {sortedThreads.map(function(d){return <LooseThreadTile key={'sticky-'+d.id} d={d} app={app} pid={pid} inStructure={false}/>;})}
-  </div>
-</div>
-  )}
-  <button onClick={function(){setStickyOpen(!stickyOpen);}} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:24,boxShadow:'0 4px 14px rgba(42,31,16,.15)',cursor:'pointer'}}
-    onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
-    onMouseOut={function(e){e.currentTarget.style.background='var(--bg1)';}}>
-    <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--teal)'}}>push_pin</span>
-    <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,fontWeight:600,color:'#6B4A26'}}>Loose Threads</span>
-    {filteredThreads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:20,height:20,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{filteredThreads.length}</span>}
-    <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--mid)'}}>{stickyOpen?'expand_more':'expand_less'}</span>
-  </button>
-</div>
-</>
   );
 }
 

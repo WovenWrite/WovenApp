@@ -25,8 +25,11 @@
 import { useState } from 'react';
 import { Drawer, Check, Spinner, PrimaryButton } from './SharedUI';
 import { STATUSES, genId, supabase, doExport, buildShareLink, filterCriteriaCount, draftMatchesFilter } from './utils';
+import { projLabel } from './projectConfig';
 
 export default function BindDrawer({ app, open, onClose, activeFilter, variant, topOffset }) {
+  var draftLabel = projLabel(app.currentProject, 'draft');
+  var draftsLabel = projLabel(app.currentProject, 'drafts');
   var sf = useState('PDF'); var format = sf[0]; var setFormat = sf[1];
   var sn = useState(false); var inclNested = sn[0]; var setInclNested = sn[1];
   var sx = useState({}); var excluded = sx[0]; var setExcluded = sx[1];
@@ -162,7 +165,7 @@ export default function BindDrawer({ app, open, onClose, activeFilter, variant, 
 
   // ── Body ──
   return (
-    <Drawer variant={variant || 'overlay'} open={open} title="Bind your drafts" onClose={onClose} footer={footer} topOffset={topOffset}>
+    <Drawer variant={variant || 'overlay'} open={open} title={'Bind your ' + draftsLabel.toLowerCase()} onClose={onClose} footer={footer} topOffset={topOffset}>
 
       {hasActiveFilter && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, padding: '8px 12px', background: 'var(--bg2)', borderRadius: 'var(--r)', border: '1px solid var(--border)' }}>
@@ -176,7 +179,7 @@ export default function BindDrawer({ app, open, onClose, activeFilter, variant, 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <span className="wv-lbl" style={{ marginBottom: 0 }}>Sequence</span>
         <span style={{ fontSize: 12, color: 'var(--mid)' }}>
-          {filtered.length} draft{filtered.length !== 1 ? 's' : ''} · {totalWords} words
+          {filtered.length} {(filtered.length === 1 ? draftLabel : draftsLabel).toLowerCase()} · {totalWords} words
         </span>
       </div>
 
@@ -208,14 +211,14 @@ export default function BindDrawer({ app, open, onClose, activeFilter, variant, 
             </div>
           );
         })}
-        {parents.length === 0 && <div style={{ padding: 12, fontSize: 13, color: 'var(--mid)' }}>No drafts to bind.</div>}
+        {parents.length === 0 && <div style={{ padding: 12, fontSize: 13, color: 'var(--mid)' }}>No {draftsLabel.toLowerCase()} to bind.</div>}
       </div>
 
       <div style={{ fontSize: 12, color: 'var(--mid)', marginTop: 6 }}>Loose Threads are always excluded.</div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderTop: '1px solid var(--border)', marginTop: 14, cursor: 'pointer' }} onClick={function () { setInclNested(!inclNested); }}>
         <Check on={inclNested} />
-        <span style={{ fontSize: 13, color: 'var(--text)' }}>Include nested drafts</span>
+        <span style={{ fontSize: 13, color: 'var(--text)' }}>Include nested {draftsLabel.toLowerCase()}</span>
       </div>
 
     </Drawer>

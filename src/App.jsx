@@ -16,6 +16,7 @@ import Dashboard from './Dashboard'
 import TableView from './TableView'
 import CardsView, { StrandTagPicker } from './CardsView'
 import AddMenuFab from './AddMenuFab'
+import LooseThreadsQuickAccess from './LooseThreadsQuickAccess'
 export { buildTree, ViewHeader, loadFilterState, persistFilterState, applyFS, LooseThreadsSection, DraftLoadingSpinner, EmptyDrafts } from './CardsView'
 import { AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio } from './SharedUI'
 import {
@@ -2062,7 +2063,7 @@ function App(){
     if(view==='table')vc=<TableView app={app}/>;
     if(view==='strands')vc=<StrandsPage app={app} allProjects={projects}/>;
     var showAddMenuFab=view==='canvas'||view==='cards'||view==='table';
-    inner=<div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}><ProjectNav app={app} onOpenProfile={openProfile}/>{vc}{showAddMenuFab&&<AddMenuFab app={app}/>}</div>;
+    inner=<div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}><ProjectNav app={app} onOpenProfile={openProfile}/>{vc}{showAddMenuFab&&<AddMenuFab app={app}/>}{view==='cards'&&<LooseThreadsQuickAccess app={app}/>}</div>;
   }
   return(
 <div className="woven-root">
