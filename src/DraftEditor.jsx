@@ -122,17 +122,26 @@ function BubbleIcon({icon,title,onClick}){
 // ── Colour / highlight picker — used in both the pinned toolbar and the flow bubble ──
 function ColorPickerBtn({icon,title,colors,onPick,onClear,dark}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
+  var sp=useState(null);var panelPos=sp[0];var setPanelPos=sp[1];
   var ref=useRef(null);
+  var btnRef=useRef(null);
   useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
+  function handleToggle(){
+    if(!open&&btnRef.current){
+      var r=btnRef.current.getBoundingClientRect();
+      setPanelPos({top:r.bottom+6,left:r.left});
+    }
+    setOpen(!open);
+  }
   return(
-<div ref={ref} style={{position:'relative'}}>
-  <button onMouseDown={function(e){e.preventDefault();}} onClick={function(){setOpen(!open);}} title={title} style={{display:'flex',alignItems:'center',justifyContent:'center',width:dark?28:32,height:dark?28:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:dark?'#fdf8f0':T.text,flexShrink:0}}
+<div ref={ref} style={{position:'relative',flexShrink:0}}>
+  <button ref={btnRef} onMouseDown={function(e){e.preventDefault();}} onClick={handleToggle} title={title} style={{display:'flex',alignItems:'center',justifyContent:'center',width:dark?28:32,height:dark?28:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:dark?'#fdf8f0':T.text,flexShrink:0}}
     onMouseOver={function(e){e.currentTarget.style.background=dark?'rgba(253,248,240,.14)':'rgba(42,31,16,.08)';}}
     onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
     <span className="mi" style={{fontSize:dark?16:18}}>{icon}</span>
   </button>
-  {open&&(
-<div style={{position:'absolute',top:'calc(100% + 6px)',left:0,zIndex:700,background:dark?'#2a1f10':T.toolBg,border:'1px solid '+(dark?'rgba(253,248,240,.2)':T.border),borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.2)',padding:8,display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,width:120}}>
+  {open&&panelPos&&(
+<div style={{position:'fixed',top:panelPos.top,left:panelPos.left,zIndex:2000,background:dark?'#2a1f10':T.toolBg,border:'1px solid '+(dark?'rgba(253,248,240,.2)':T.border),borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.2)',padding:8,display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,width:120}}>
   {colors.map(function(c){return(
 <button key={c} onMouseDown={function(e){e.preventDefault();}} onClick={function(){onPick(c);setOpen(false);}} title={c} style={{width:22,height:22,borderRadius:5,border:'1px solid rgba(0,0,0,.15)',background:c,cursor:'pointer',padding:0}}/>
   );})}
@@ -922,6 +931,8 @@ function DraftEditor({app}){
         .nav-drawers { display: none !important; }
         .nav-collapse { display: flex !important; }
       }
+      .toolbar-mid-row { scrollbar-width: none; -ms-overflow-style: none; }
+      .toolbar-mid-row::-webkit-scrollbar { display: none; }
       .ql-bubble .ql-fill { fill: #fdf8f0; }
       .wv-comment-mark { background: rgba(196,94,40,.16); border-bottom: 2px solid rgba(196,94,40,.55); cursor: pointer; }
       .wv-comment-mark.wv-comment-resolved { background: transparent; border-bottom: none; cursor: default; }
@@ -983,12 +994,12 @@ function DraftEditor({app}){
             </select>
           </div>
           {/* Middle: format buttons */}
-          <div style={{display:'flex',alignItems:'center',gap:0,flex:1,justifyContent:'center',minWidth:0,overflow:'hidden'}}>
+          <div style={{display:'flex',alignItems:'center',gap:0,flex:1,justifyContent:'center',minWidth:0,overflowX:'auto',overflowY:'hidden'}} className="toolbar-mid-row">
             {fmtBtns.map(function(b,i){
               if(b.sep)return(<div key={'s'+i} className={b.sepClass||''} style={{width:1,height:20,background:T.stroke,margin:'0 4px',flexShrink:0}}/>);
               var cls=b.cls||'';
               return(
-<button key={b.icon} onClick={b.action} title={b.title} className={cls} style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,transition:'background .12s'}}
+<button key={b.icon} onClick={b.action} title={b.title} className={cls} style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,minWidth:32,flexShrink:0,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,transition:'background .12s'}}
   onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.08)';}}
   onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
   <span className="mi" style={{fontSize:18}}>{b.icon}</span>
@@ -998,7 +1009,7 @@ function DraftEditor({app}){
             <div style={{width:1,height:20,background:T.stroke,margin:'0 4px',flexShrink:0}}/>
             <ColorPickerBtn icon="format_color_text" title="Text colour" colors={TEXT_COLORS} onPick={function(c){fmt('color',c);}} onClear={function(){fmt('color',false);}}/>
             <ColorPickerBtn icon="ink_highlighter" title="Highlight" colors={HIGHLIGHT_COLORS} onPick={function(c){fmt('background',c);}} onClear={function(){fmt('background',false);}}/>
-            <button onClick={function(){fileInputRef.current&&fileInputRef.current.click();}} title="Add image" style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,flexShrink:0}}
+            <button onClick={function(){fileInputRef.current&&fileInputRef.current.click();}} title="Add image" style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,height:32,minWidth:32,background:'transparent',border:'none',borderRadius:6,cursor:'pointer',color:T.text,flexShrink:0}}
               onMouseOver={function(e){e.currentTarget.style.background='rgba(42,31,16,.08)';}}
               onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
               <span className="mi" style={{fontSize:18}}>add_photo_alternate</span>
