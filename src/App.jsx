@@ -2045,10 +2045,42 @@ function App(){
   if(shareId)return(<div className="woven-root"><div id="woven-tt" style={{position:"fixed",display:"none",background:"#7A5A38",color:"#fdf8f0",fontSize:11,padding:"4px 10px",borderRadius:6,pointerEvents:"none",zIndex:99999,transform:"translateX(-50%)",fontFamily:"DM Sans, sans-serif",whiteSpace:"nowrap"}}/><GlobalStyles/><SharedDraftView shareId={shareId}/></div>);
 
   if(authLoading)return(
-<div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg0)',gap:16}}>
-  <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
-  <div style={{width:36,height:36,borderRadius:'50%',border:'3px solid var(--border)',borderTopColor:'var(--indigo)',animation:'spin .8s linear infinite'}}/>
-  <span style={{fontFamily:'var(--serif)',fontSize:18,color:'var(--mid)'}}>Loading Woven…</span>
+<div style={{display:'flex',flexDirection:'column',height:'100vh',background:'var(--bg0)',overflow:'hidden'}}>
+  <style>{'@keyframes skel-shimmer{100%{left:150%;}}.skel-b{position:relative;overflow:hidden;background:var(--bg2);border-radius:var(--rl);}.skel-b::after{content:\'\';position:absolute;top:0;left:-150%;width:150%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);animation:skel-shimmer 1.5s infinite;}'}</style>
+  {/* Top nav bar */}
+  <div style={{height:54,flexShrink:0,borderBottom:'1px solid var(--border)',background:'var(--bg1)',display:'flex',alignItems:'center',padding:'0 20px',gap:12}}>
+    <div className="skel-b" style={{width:28,height:28,borderRadius:8}}/>
+    <div className="skel-b" style={{width:120,height:16}}/>
+    <div style={{marginLeft:'auto',display:'flex',gap:10}}>
+      <div className="skel-b" style={{width:32,height:32,borderRadius:'50%'}}/>
+    </div>
+  </div>
+  {/* Dashboard-shaped body */}
+  <div style={{display:'flex',flex:1,overflow:'hidden',padding:'40px 36px'}}>
+    <div style={{flex:2,minWidth:0,paddingRight:24}}>
+      <div className="skel-b" style={{width:220,height:28,marginBottom:10}}/>
+      <div className="skel-b" style={{width:160,height:14,marginBottom:28}}/>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:16}}>
+        {[0,1,2,3,4,5].map(function(i){return(
+<div key={i} style={{borderRadius:'var(--rl)',overflow:'hidden',border:'1px solid var(--border)'}}>
+  <div className="skel-b" style={{height:64,borderRadius:0}}/>
+  <div style={{padding:'12px 14px',background:'var(--bg1)'}}>
+    <div className="skel-b" style={{height:14,width:'80%',marginBottom:8}}/>
+    <div className="skel-b" style={{height:10,width:'60%'}}/>
+  </div>
+</div>
+        );})}
+      </div>
+    </div>
+    <div style={{flex:1,minWidth:220,maxWidth:280,display:'flex',flexDirection:'column',gap:12}}>
+      {[0,1,2].map(function(i){return(
+<div key={i} style={{background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'14px 16px'}}>
+  <div className="skel-b" style={{height:11,width:'50%',marginBottom:10}}/>
+  <div className="skel-b" style={{height:32,width:'70%'}}/>
+</div>
+      );})}
+    </div>
+  </div>
 </div>
   );
   if(!currentUser)return(<div><GlobalStyles/><AuthScreen onAuth={function(user){window.__wovenUserId=user.id;setCurrentUser(user);loadAllData();}}/></div>);

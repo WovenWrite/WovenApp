@@ -275,7 +275,7 @@ function TableView({app}){
   }
   var allDrafts=app.allDrafts[app.projId]||[];
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
-  var displayed=(sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort),app.currentProject):applyFS(tree,filter,sort)).filter(function(p){
+  var displayed=(sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort,app.currentProject),app.currentProject):applyFS(tree,filter,sort,app.currentProject)).filter(function(p){
     if(!searchQ.trim())return true;
     var q=searchQ.toLowerCase();
     return (p.title||'').toLowerCase().includes(q)||(p.synopsis||'').toLowerCase().includes(q)||(p.body?stripHtml(p.body).toLowerCase().includes(q):false);

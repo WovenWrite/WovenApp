@@ -87,6 +87,15 @@ export function applyFS(drafts,filterObj,sort,proj){
       return order.indexOf(a.status)-order.indexOf(b.status);
     }
     if(sort==='words')return (b.wordCount||0)-(a.wordCount||0);
+    if(sort&&sort.indexOf('cf_')===0){
+      var fid=sort.slice(3);
+      var draftFieldDefs=(proj&&proj.draftFieldDefs)||[];
+      var fieldDef=draftFieldDefs.find(function(f){return f.id===fid;});
+      var av=(a.customFields&&a.customFields[fid])||'';
+      var bv=(b.customFields&&b.customFields[fid])||'';
+      if(fieldDef&&fieldDef.type==='number')return (parseFloat(av)||0)-(parseFloat(bv)||0);
+      return (''+av).localeCompare(''+bv);
+    }
     return (a.order||999)-(b.order||999);
   });
 }
@@ -95,6 +104,8 @@ export function applyFS(drafts,filterObj,sort,proj){
 export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,structureMode,onStructureToggle,searchQ,onSearch,hideStructure,resultCount}){
   var filter=filterProp||emptyFilterState();
   var sf=useState(false);var filterOpen=sf[0];var setFilterOpen=sf[1];
+  var srt=useState(false);var sortOpen=srt[0];var setSortOpen=srt[1];
+  var sortRef=useRef(null);
   var ss=useState(false);var searchOpen=ss[0];var setSearchOpen=ss[1];
   var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
   var st=useState(structureMode||false);var structureOn=st[0];var setStructureOn=st[1];
@@ -106,6 +117,11 @@ export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,
   var refFields=draftFieldDefs.filter(function(f){return f.type==='strand_ref'&&f.refSpool;});
   var boolFields=draftFieldDefs.filter(function(f){return f.type==='boolean';});
   var selectFields=draftFieldDefs.filter(function(f){return f.type==='select'&&(f.options||[]).length>0;});
+  var sortableFieldDefs=draftFieldDefs.filter(function(f){return f.type==='number'||f.type==='date';});
+  var sortOptions=[{id:'order',label:'Sequence'},{id:'title',label:'Alphabetical'}].concat(
+    sortableFieldDefs.map(function(f){return {id:'cf_'+f.id,label:f.label};})
+  );
+  var currentSortLabel=(sortOptions.find(function(o){return o.id===sort;})||sortOptions[0]).label;
   useEffect(function(){if(searchOpen&&searchRef.current)searchRef.current.focus();},[searchOpen]);
   var criteriaCount=filterCriteriaCount(filter);
   var hasFilter=criteriaCount>0;
@@ -251,6 +267,25 @@ export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,
           );
         })}
 
+      </Popover>
+    </div>
+    <div style={{position:'relative'}}>
+      <button ref={sortRef} onClick={function(){setSortOpen(!sortOpen);}} style={{display:'flex',alignItems:'center',gap:7,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer',position:'relative'}}>
+        <span className="material-symbols-outlined" style={{fontSize:20,color:'#6B4A26'}}>sort</span>
+        <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'#7A5A38'}}>{currentSortLabel}</span>
+      </button>
+      <Popover anchorRef={sortRef} open={sortOpen} onClose={function(){setSortOpen(false);}} title="Sort by" width={220}>
+        {sortOptions.map(function(o){
+          var active=sort===o.id;
+          return(
+<div key={o.id} onClick={function(){setSort(o.id);setSortOpen(false);}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',cursor:'pointer',borderRadius:6,background:active?'rgba(196,94,40,.08)':'transparent',color:active?'var(--indigo)':'var(--text)',fontWeight:active?600:400,fontSize:13}}
+  onMouseOver={function(e){if(!active)e.currentTarget.style.background='var(--bg2)';}}
+  onMouseOut={function(e){if(!active)e.currentTarget.style.background='transparent';}}>
+  <span className="material-symbols-outlined" style={{fontSize:16,visibility:active?'visible':'hidden'}}>check</span>
+  {o.label}
+</div>
+          );
+        })}
       </Popover>
     </div>
     {hasFilter&&(
@@ -741,9 +776,22 @@ export function EmptyDrafts({onAdd}){
   );
 }
 
+// Scroll position cache, keyed by project id. CardsView unmounts entirely
+// when the view switches away (e.g. opening a draft in the editor), so a
+// plain module-level object — not component state — is what survives the
+// round trip and lets the scroll position be restored on return.
+var cardsScrollCache={};
+
 // ── CardsView ──
 export default function CardsView({app}){
   var pid=app.projId;
+  var viewAreaRef=useRef(null);
+  useEffect(function(){
+    if(viewAreaRef.current&&cardsScrollCache[pid]!=null){
+      viewAreaRef.current.scrollTop=cardsScrollCache[pid];
+    }
+  },[]);
+  function handleViewAreaScroll(e){cardsScrollCache[pid]=e.target.scrollTop;}
   var sf=useState(function(){return loadFilterState(app.projId);});var filter=sf[0];var setFilterRaw=sf[1];
   function setFilter(next){setFilterRaw(next);persistFilterState(app.projId,next);}
   var ss=useState('order');var sort=ss[0];var setSort=ss[1];
@@ -768,7 +816,7 @@ export default function CardsView({app}){
   return(
 <div className="view-layout">
   <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onBind={function(){setBindOpen(true);}} structureMode={structureMode} onStructureToggle={function(v){setStructureMode(v);}} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
-  <div className="view-area dot-grid">
+  <div className="view-area dot-grid" ref={viewAreaRef} onScroll={handleViewAreaScroll}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div className="cards-grid"
   onDragOver={function(e){e.preventDefault();}}
