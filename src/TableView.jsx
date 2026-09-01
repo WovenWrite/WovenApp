@@ -208,7 +208,7 @@ function TableView({app}){
 
   var project=app.currentProject||{};
   var draftFieldDefs=project.draftFieldDefs||[];
-  var allAvailCols=[
+  var allAvailColsRaw=[
     {id:'title',label:'Title'},
     {id:'branches',label:'Strands'},
     {id:'status',label:'Status'},
@@ -216,6 +216,17 @@ function TableView({app}){
     {id:'synopsis',label:'Synopsis'}
     ,{id:'strandTags',label:'Spools'}
   ].concat(draftFieldDefs.map(function(f){return{id:'cf_'+f.id,label:f.label};}));
+  // Defensive de-dupe: if two field defs ever end up with the same or a
+  // missing id (e.g. a field saved before its id was assigned), they'd
+  // render as two column-picker rows sharing one React key — the second
+  // one silently eats clicks meant for the first, which looks like "the
+  // checkbox won't select." Filtering here can't fix a bad id at the
+  // source, but it stops the symptom and keeps the list sane.
+  var seenColIds={};
+  var allAvailCols=allAvailColsRaw.filter(function(c){
+    if(!c.id||seenColIds[c.id])return false;
+    seenColIds[c.id]=true;return true;
+  });
 
   // Column order + hidden state, stored separately so custom fields are
   // visible by default (and stay visible automatically as new ones are
@@ -242,8 +253,8 @@ function TableView({app}){
   var hiddenCols=shs[0];var setHiddenColsRaw=shs[1];
   function persistHiddenCols(next){setHiddenColsRaw(next);saveDB(hiddenKey,next);try{localStorage.setItem(hiddenKey,JSON.stringify(next));}catch(e){}}
   useEffect(function(){
-    loadDB(orderKey,null).then(function(v){if(Array.isArray(v))setColOrderRaw(v);});
-    loadDB(hiddenKey,null).then(function(v){if(Array.isArray(v))setHiddenColsRaw(v);});
+    loadDB(orderKey,null).then(function(v){if(Array.isArray(v))setColOrderRaw(function(prev){return JSON.stringify(prev)===JSON.stringify(v)?prev:v;});});
+    loadDB(hiddenKey,null).then(function(v){if(Array.isArray(v))setHiddenColsRaw(function(prev){return JSON.stringify(prev)===JSON.stringify(v)?prev:v;});});
   },[orderKey,hiddenKey]);
   var availIds={};allAvailCols.forEach(function(c){availIds[c.id]=true;});
   // Reconcile: any available column not yet tracked in colOrder gets
@@ -271,7 +282,7 @@ function TableView({app}){
   });
   var colWidths=scw[0];var setColWidthsRaw=scw[1];
   useEffect(function(){
-    loadDB(widthsKey,null).then(function(v){if(v&&typeof v==='object')setColWidthsRaw(function(prev){return Object.assign({},widthDefaults,prev,v);});});
+    loadDB(widthsKey,null).then(function(v){if(v&&typeof v==='object')setColWidthsRaw(function(prev){var merged=Object.assign({},widthDefaults,prev,v);return JSON.stringify(merged)===JSON.stringify(prev)?prev:merged;});});
   },[widthsKey]);
   var resizing=useRef(null);
   function startResize(col,e){
@@ -403,7 +414,7 @@ function TableView({app}){
     </div>
   </td>
   )}
-  {visCols.map(function(col){var td=<td key={col} style={{verticalAlign:vAlign,overflow:'hidden'}} onClick={col==='branches'?function(e){e.stopPropagation();}:undefined}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId,rowExpanded:rowExp,branchesOpen:isExpanded,childCount:childCount})}</td>;if(col==='title')return [td,<td key="__arrowcol" style={{verticalAlign:vAlign}} onClick={function(e){e.stopPropagation();}}><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
+  {visCols.map(function(col){var td=<td key={col} style={{verticalAlign:vAlign,overflow:'hidden',maxWidth:colWidths[col]||160,wordBreak:'break-word',overflowWrap:'anywhere'}} onClick={col==='branches'?function(e){e.stopPropagation();}:undefined}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId,rowExpanded:rowExp,branchesOpen:isExpanded,childCount:childCount})}</td>;if(col==='title')return [td,<td key="__arrowcol" style={{verticalAlign:vAlign}} onClick={function(e){e.stopPropagation();}}><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
     <span className="material-symbols-outlined" style={{fontSize:18}}>arrow_forward</span>
   </button></td>];return td;})}
   <td style={{verticalAlign:vAlign}}/>
@@ -425,7 +436,7 @@ function TableView({app}){
         {tblNumbered&&<th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>}
         {tblByDate&&<th style={{width:96,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>Date</th>}
         {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});var sortable=!!SORTABLE_COLS[col];var isSorted=colSort&&colSort.col===col;var showArrow=sortable&&(hoverCol===col||isSorted);var thEl=(
-<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600,userSelect:'none',position:'relative'}} className="resizable"
+<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,overflow:'hidden',background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600,userSelect:'none',position:'relative'}} className="resizable"
   onMouseEnter={function(){if(sortable)setHoverCol(col);}}
   onMouseLeave={function(){setHoverCol(function(h){return h===col?null:h;});}}
   onDragOver={function(e){e.preventDefault();}}
