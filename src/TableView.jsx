@@ -228,33 +228,34 @@ function TableView({app}){
     seenColIds[c.id]=true;return true;
   });
 
-  // Column order + hidden state, stored separately so custom fields are
-  // visible by default (and stay visible automatically as new ones are
-  // added) — hiding a column is an explicit opt-out, not a default.
-  //
-  // Persisted via saveDB/loadDB (Supabase-backed, same as the rest of the
-  // app's durable settings) rather than plain localStorage. localStorage
-  // is still read synchronously on first paint so there's no flicker —
-  // loadDB then corrects it once the real value comes back, which also
-  // covers the case where localStorage doesn't have it yet (new device,
-  // new browser, or a different deploy/preview origin).
+  // Persisted via saveDB/loadDB (Supabase-backed) AND localStorage. Once
+  // localStorage has a value, it's treated as authoritative for the rest
+  // of this session and the Supabase fetch below is skipped — saveDB is
+  // fire-and-forget, so on a fast remount (switching pages) the Supabase
+  // read can resolve with the *previous* value and silently overwrite
+  // whatever was just saved (this was the real cause of both the width
+  // flash and a freshly-added column getting dropped back out of
+  // colOrder). Supabase is only consulted as a first-load fallback for a
+  // browser/device that has no local copy yet — e.g. a new device.
   var orderKey='woven:colorder:'+app.projId;
   var hiddenKey='woven:colhidden:'+app.projId;
+  var hadLocalOrderRef=useRef(false);
+  var hadLocalHiddenRef=useRef(false);
   var sco2=useState(function(){
-    try{var v=localStorage.getItem(orderKey);if(v){var p=JSON.parse(v);if(Array.isArray(p))return p;}}catch(e){}
+    try{var v=localStorage.getItem(orderKey);if(v){var p=JSON.parse(v);if(Array.isArray(p)){hadLocalOrderRef.current=true;return p;}}}catch(e){}
     return allAvailCols.map(function(c){return c.id;});
   });
   var colOrder=sco2[0];var setColOrderRaw=sco2[1];
   function persistColOrder(next){setColOrderRaw(next);saveDB(orderKey,next);try{localStorage.setItem(orderKey,JSON.stringify(next));}catch(e){}}
   var shs=useState(function(){
-    try{var v=localStorage.getItem(hiddenKey);if(v){var p=JSON.parse(v);if(Array.isArray(p))return p;}}catch(e){}
+    try{var v=localStorage.getItem(hiddenKey);if(v){var p=JSON.parse(v);if(Array.isArray(p)){hadLocalHiddenRef.current=true;return p;}}}catch(e){}
     return [];
   });
   var hiddenCols=shs[0];var setHiddenColsRaw=shs[1];
   function persistHiddenCols(next){setHiddenColsRaw(next);saveDB(hiddenKey,next);try{localStorage.setItem(hiddenKey,JSON.stringify(next));}catch(e){}}
   useEffect(function(){
-    loadDB(orderKey,null).then(function(v){if(Array.isArray(v))setColOrderRaw(function(prev){return JSON.stringify(prev)===JSON.stringify(v)?prev:v;});});
-    loadDB(hiddenKey,null).then(function(v){if(Array.isArray(v))setHiddenColsRaw(function(prev){return JSON.stringify(prev)===JSON.stringify(v)?prev:v;});});
+    if(!hadLocalOrderRef.current)loadDB(orderKey,null).then(function(v){if(Array.isArray(v))setColOrderRaw(v);});
+    if(!hadLocalHiddenRef.current)loadDB(hiddenKey,null).then(function(v){if(Array.isArray(v))setHiddenColsRaw(v);});
   },[orderKey,hiddenKey]);
   var availIds={};allAvailCols.forEach(function(c){availIds[c.id]=true;});
   // Reconcile: any available column not yet tracked in colOrder gets
@@ -276,13 +277,15 @@ function TableView({app}){
 
   var widthsKey='woven:colwidths:'+app.projId;
   var widthDefaults={title:160,branches:110,synopsis:260,status:160,strandTags:160,wordCount:64};
+  var hadLocalWidthsRef=useRef(false);
   var scw=useState(function(){
-    try{var v=localStorage.getItem(widthsKey);if(v){var p=JSON.parse(v);if(p&&typeof p==='object')return Object.assign({},widthDefaults,p);}}catch(e){}
+    try{var v=localStorage.getItem(widthsKey);if(v){var p=JSON.parse(v);if(p&&typeof p==='object'){hadLocalWidthsRef.current=true;return Object.assign({},widthDefaults,p);}}}catch(e){}
     return widthDefaults;
   });
   var colWidths=scw[0];var setColWidthsRaw=scw[1];
   useEffect(function(){
-    loadDB(widthsKey,null).then(function(v){if(v&&typeof v==='object')setColWidthsRaw(function(prev){var merged=Object.assign({},widthDefaults,prev,v);return JSON.stringify(merged)===JSON.stringify(prev)?prev:merged;});});
+    if(hadLocalWidthsRef.current)return;
+    loadDB(widthsKey,null).then(function(v){if(v&&typeof v==='object')setColWidthsRaw(function(prev){return Object.assign({},widthDefaults,prev,v);});});
   },[widthsKey]);
   var resizing=useRef(null);
   function startResize(col,e){
