@@ -317,12 +317,24 @@ function TableView({app}){
     return (p.title||'').toLowerCase().includes(q)||(p.synopsis||'').toLowerCase().includes(q)||(p.body?stripHtml(p.body).toLowerCase().includes(q):false);
   });
   // Sortable columns: only ones with an unambiguous comparable value.
-  // strandTags/branches/custom fields aren't included — "sort by" doesn't
-  // have one obvious meaning for a tag list or a strand-ref, so no arrows
-  // show on those headers.
-  var SORTABLE_COLS={title:'string',status:'string',wordCount:'number',synopsis:'string'};
+  // strandTags/branches/text-type custom fields aren't included — "sort
+  // by" doesn't have one obvious meaning for a tag list or free text, so
+  // no arrows show on those headers. Number-type custom fields and the
+  // sequence #/Date column do have an obvious order, so those are added
+  // dynamically. 'seq' is a pseudo-column id for the sequence #/Date
+  // header, which renders outside the visCols loop.
+  var SORTABLE_COLS={title:'string',status:'string',wordCount:'number',synopsis:'string',seq:'number'};
+  draftFieldDefs.forEach(function(f){if(f.type==='number')SORTABLE_COLS['cf_'+f.id]='number';});
   function getSortVal(d,col){
+    if(col==='seq'){
+      if(tblByDate){var dt=draftDateOf(d);return dt?new Date(dt).getTime():-Infinity;}
+      return typeof d.order==='number'?d.order:-Infinity;
+    }
     if(col==='wordCount')return d.wordCount||0;
+    if(col.indexOf('cf_')===0&&SORTABLE_COLS[col]==='number'){
+      var num=parseFloat(d.customFields&&d.customFields[col.slice(3)]);
+      return isNaN(num)?-Infinity:num;
+    }
     return (d[col]||'').toString().toLowerCase();
   }
   function toggleColSort(col){
@@ -447,8 +459,24 @@ function TableView({app}){
     <thead>
       <tr style={{background:'#E2D0B8'}}>
         <th style={{width:28,background:'#E2D0B8'}}/>
-        {tblNumbered&&<th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>}
-        {tblByDate&&<th style={{width:96,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>Date</th>}
+        {(tblNumbered||tblByDate)&&(function(){
+          var seqSorted=colSort&&colSort.col==='seq';
+          var seqShowArrow=hoverCol==='seq'||seqSorted;
+          return(
+<th style={{width:tblNumbered?36:96,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}
+  onMouseEnter={function(){setHoverCol('seq');}}
+  onMouseLeave={function(){setHoverCol(function(h){return h==='seq'?null:h;});}}>
+  <span style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}>
+    <span>{tblNumbered?'#':'Date'}</span>
+    {seqShowArrow&&(
+    <button onClick={function(e){e.stopPropagation();toggleColSort('seq');}} title="Sort" style={{background:'transparent',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',flexShrink:0,color:seqSorted?'#C45E28':'#6B4A26'}}>
+      <span className="mi" style={{fontSize:16}}>{seqSorted?(colSort.dir==='asc'?'arrow_upward':'arrow_downward'):'unfold_more'}</span>
+    </button>
+    )}
+  </span>
+</th>
+          );
+        })()}
         {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});var sortable=!!SORTABLE_COLS[col];var isSorted=colSort&&colSort.col===col;var showArrow=sortable&&(hoverCol===col||isSorted);var thEl=(
 <th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,overflow:'hidden',background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600,userSelect:'none',position:'relative'}} className="resizable"
   onMouseEnter={function(){if(sortable)setHoverCol(col);}}
