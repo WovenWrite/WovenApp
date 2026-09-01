@@ -2,6 +2,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropertiesDrawer from './PropertiesDrawer'
 import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
+import CommentsDrawer from './CommentsDrawer'
+import CompareView from './CompareView'
+import { Popover, Field } from './SharedUI'
+import { saveSnapshot, VOLUME_SNAPSHOT_WORDS, MIN_SNAPSHOT_INTERVAL_MS, loadComments, saveComment, markCommentsOrphaned, resolveComment, reopenComment } from './utils'
 // ── DraftEditor.jsx ──
 // Quill-based draft editor.
 // Requires in index.html:
@@ -102,10 +106,11 @@ function StyledSelect({value,onChange,options,style}){
 }
 
 // ── Branch Dropdown ──
-function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}){
+function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary,onCompareTwo}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
   var sc=useState(false);var creating=sc[0];var setCreating=sc[1];
   var sn=useState('');var newName=sn[0];var setNewName=sn[1];
+  var scb=useState([]);var selectedBranches=scb[0];var setSelectedBranches=scb[1];
   var ref=useRef(null);
   useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
   var hasBranches=branches&&branches.length>1;
@@ -113,6 +118,19 @@ function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}
   var btnLabel=hasBranches?(branches.length+' strands'):'Create strand';
   function handleCreate(){setCreating(true);var num=branches?branches.length+1:2;var draft=activeBranch&&activeBranch.draftTitle||'Draft';setNewName(draft+'_Strand_'+num);}
   function confirmCreate(){if(newName.trim())onCreate(newName.trim());setCreating(false);setNewName('');setOpen(false);}
+  function toggleSelectBranch(id,e){
+    e.stopPropagation();
+    setSelectedBranches(function(prev){
+      if(prev.indexOf(id)>=0)return prev.filter(function(x){return x!==id;});
+      if(prev.length>=2)return [prev[1],id];
+      return prev.concat([id]);
+    });
+  }
+  function handleCompareClick(){
+    if(selectedBranches.length!==2||!onCompareTwo)return;
+    onCompareTwo(selectedBranches[0],selectedBranches[1]);
+    setSelectedBranches([]);setOpen(false);
+  }
   var sorted=branches?[].concat(branches.filter(function(b){return b.id===activeBranchId;}),branches.filter(function(b){return b.id!==activeBranchId;})):[];
   return(
 <div ref={ref} style={{position:'relative'}}>
@@ -139,6 +157,15 @@ function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}
   onClick={function(){if(!isActive){onSwitch(b.id);setOpen(false);}}}
   onMouseOver={function(e){if(!isActive)e.currentTarget.style.background='rgba(42,31,16,.04)';}}
   onMouseOut={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
+  {hasBranches&&(
+  <div
+    onClick={function(e){toggleSelectBranch(b.id,e);}}
+    title="Select to compare"
+    style={{width:14,height:14,borderRadius:4,border:'1.5px solid '+(selectedBranches.indexOf(b.id)>=0?T.amber:T.border),background:selectedBranches.indexOf(b.id)>=0?T.amber:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+  >
+    {selectedBranches.indexOf(b.id)>=0&&<span className="mi" style={{fontSize:10,color:'#fff'}}>check</span>}
+  </div>
+  )}
   <span style={{flex:1,fontSize:13,fontWeight:isActive?600:400,color:isActive?T.amber:T.textDark,fontFamily:'Crimson Text, serif'}}>{b.name}</span>
   <button onClick={function(e){e.stopPropagation();onSetPrimary(b.id);}} style={{background:'none',border:'none',cursor:'pointer',padding:2,display:'flex',alignItems:'center',color:b.isPrimary?T.amber:T.border,transition:'color .15s'}}
     onMouseOver={function(e){e.currentTarget.style.color=T.amber;}}
@@ -147,6 +174,13 @@ function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}
   </button>
 </div>
   );})}
+  {selectedBranches.length===2&&(
+  <div style={{padding:'8px 14px',borderTop:'1px solid '+T.border,background:'rgba(196,94,40,.06)'}}>
+    <button onClick={handleCompareClick} style={{width:'100%',padding:'7px 0',background:T.textDark,color:'#fdf8f0',border:'none',borderRadius:6,fontSize:12,cursor:'pointer',fontFamily:'DM Sans, sans-serif',fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+      <span className="mi" style={{fontSize:14}}>difference</span>Compare selected
+    </button>
+  </div>
+  )}
   <div style={{padding:'8px 14px',borderTop:'1px solid '+T.border}}>
     <button onClick={handleCreate} style={{width:'100%',padding:'7px 0',background:'transparent',border:'1px dashed '+T.border,borderRadius:6,fontSize:12,color:T.text,cursor:'pointer',fontFamily:'DM Sans, sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
       <span className="mi" style={{fontSize:14}}>add</span>New strand
@@ -235,7 +269,7 @@ function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepu
 
 
 // ── NavCollapseMenu (mobile ≤720px) ──
-function NavCollapseMenu({branches,activeBranchId,onSwitch,onCreate,onSetPrimary,onVersions,onProperties,onSpool}){
+function NavCollapseMenu({branches,activeBranchId,onSwitch,onCreate,onSetPrimary,onVersions,onComments,onProperties,onSpool}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
   var ref=useRef(null);
   useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
@@ -243,6 +277,7 @@ function NavCollapseMenu({branches,activeBranchId,onSwitch,onCreate,onSetPrimary
   var items=[
     {icon:'account_tree',label:hasBranches?(branches.length+' strands'):'Create strand',action:function(){onCreate&&onCreate('Strand '+(branches?branches.length+1:2));setOpen(false);}},
     {icon:'history',label:'Versions',action:function(){onVersions();setOpen(false);}},
+    {icon:'comment',label:'Comments',action:function(){onComments&&onComments();setOpen(false);}},
     {icon:'settings',label:'Properties',action:function(){onProperties();setOpen(false);}},
     {icon:'gesture',label:'Spools',action:function(){onSpool();setOpen(false);}},
   ];
@@ -306,6 +341,7 @@ function DraftEditor({app}){
   var slink=useState(null);var shareLink=slink[0];var setShareLink=slink[1];
   var ssid=useState(null);var shareId=ssid[0];var setShareId=ssid[1];
   var spv=useState(false);var showVersions=spv[0];var setShowVersions=spv[1];
+  var spc=useState(false);var showComments=spc[0];var setShowComments=spc[1];
   var spp=useState(false);var showProperties=spp[0];var setShowProperties=spp[1];
   var sps=useState(false);var showSpool=sps[0];var setShowSpool=sps[1];
   var ssd=useState(null);var strandDetailId=ssd[0];var setStrandDetailId=ssd[1];
@@ -326,6 +362,21 @@ function DraftEditor({app}){
   var saveTimer=useRef(null);
   var initialised=useRef(false);
   var sessionStartWc=useRef(draft.wordCount||0);
+  var lastSnapshotBody=useRef('');
+  var lastSnapshotWc=useRef(draft.wordCount||0);
+  var lastSnapshotTs=useRef(0);
+  var lastVersionId=useRef(null);
+  var activeCommentIdsRef=useRef([]);
+  var pendingCommentRange=useRef(null);
+  var cbp=useState(null);var commentBtnPos=cbp[0];var setCommentBtnPos=cbp[1];
+  var commentBtnRef=useRef(null);
+  var cco=useState(false);var showCommentComposer=cco[0];var setShowCommentComposer=cco[1];
+  var commentComposerOpenRef=useRef(false);
+  var cdt=useState('');var commentDraftText=cdt[0];var setCommentDraftText=cdt[1];
+  var fci=useState(null);var focusCommentId=fci[0];var setFocusCommentId=fci[1];
+  var scd=useState(null);var compareData=scd[0];var setCompareData=scd[1];
+  var crt=useState(0);var commentsRefreshTick=crt[0];var setCommentsRefreshTick=crt[1];
+  var pvw=useState(null);var previewVersion=pvw[0];var setPreviewVersion=pvw[1];
 
   // Derived font size from zoom
   var baseFontSize=DEFAULT_FONT_SIZE;
@@ -337,6 +388,28 @@ function DraftEditor({app}){
   useEffect(function(){
     if(initialised.current)return;
     if(!editorContainerRef.current||!window.Quill)return;
+    // Register the comment inline format once globally. Uses class syntax
+    // because Quill's Parchment blots require extending its Inline class —
+    // the rest of this file stays var-style, this is the one exception
+    // the framework itself demands.
+    if(!window.__wovenCommentBlotRegistered){
+      var Inline=window.Quill.import('blots/inline');
+      class CommentBlot extends Inline{
+        static create(commentId){
+          var node=super.create();
+          node.setAttribute('data-comment-id',commentId);
+          node.classList.add('wv-comment-mark');
+          return node;
+        }
+        static formats(node){
+          return node.getAttribute('data-comment-id');
+        }
+      }
+      CommentBlot.blotName='comment';
+      CommentBlot.tagName='span';
+      window.Quill.register(CommentBlot);
+      window.__wovenCommentBlotRegistered=true;
+    }
     var isMobile=window.innerWidth<720;
     var q=new window.Quill(editorContainerRef.current,{
       theme:isMobile?'bubble':'snow',
@@ -351,6 +424,20 @@ function DraftEditor({app}){
     var initialWc=countWords(q.getText());
     setWordCount(initialWc);
     sessionStartWc.current=initialWc;
+    lastSnapshotBody.current=q.root.innerHTML;
+    lastSnapshotWc.current=initialWc;
+    lastSnapshotTs.current=Date.now();
+    // Track which comment ids are still active (not resolved/orphaned) so the
+    // save handler can detect when their anchor text gets deleted.
+    loadComments(did).then(function(list){
+      activeCommentIdsRef.current=list.filter(function(c){return !c.resolved&&!c.orphaned;}).map(function(c){return c.id;});
+      list.forEach(function(c){
+        if(c.resolved){
+          var nodes=q.root.querySelectorAll('[data-comment-id="'+c.id+'"]');
+          nodes.forEach(function(n){n.classList.add('wv-comment-resolved');});
+        }
+      });
+    });
     q.on('selection-change',function(range){
       if(!range||range.length===0){
         // cursor position — get format at cursor
@@ -358,12 +445,36 @@ function DraftEditor({app}){
         if(fmt.blockquote)setActiveFormat('quote');
         else if(fmt.header)setActiveFormat(String(fmt.header));
         else setActiveFormat('');
+        // Don't drop the pending range/button while the comment composer is
+        // open — losing DOM focus to the composer's textarea fires this same
+        // "empty selection" event, and clearing here would rip the anchor
+        // out from under an in-progress comment.
+        if(!commentComposerOpenRef.current){
+          pendingCommentRange.current=null;
+          setCommentBtnPos(null);
+        }
         return;
       }
       var fmt=q.getFormat(range);
       if(fmt.blockquote)setActiveFormat('quote');
       else if(fmt.header)setActiveFormat(String(fmt.header));
       else setActiveFormat('');
+      // Text is selected — surface the inline "leave a comment" affordance
+      // near the selection instead of a permanent toolbar icon. Stash the
+      // range in a ref (not state) so a click on the button, which can blur
+      // the editor and clear the visual selection, still acts on the right
+      // text.
+      pendingCommentRange.current={index:range.index,length:range.length};
+      var bounds=q.getBounds(range.index,range.length);
+      setCommentBtnPos({top:bounds.top,left:bounds.left+bounds.width/2});
+    });
+    // Clicking an existing comment mark opens the comments panel focused on it
+    q.root.addEventListener('click',function(e){
+      var mark=e.target.closest?e.target.closest('.wv-comment-mark'):null;
+      if(!mark)return;
+      var cid=mark.getAttribute('data-comment-id');
+      setFocusCommentId(cid);
+      setShowComments(true);setShowVersions(false);setShowProperties(false);setShowSpool(false);
     });
     // Also update on text-change (when typing changes format context)
     q.on('editor-change',function(){
@@ -396,17 +507,35 @@ function DraftEditor({app}){
         // Word count went down (deletion) — update baseline so future additions are correct
         sessionStartWc.current=wc;
       }
-      // Snapshot every hour (mirrors App.jsx saveSnapshot logic)
-      var snKey='woven:versions:'+did;
-      try{
-        var snaps=JSON.parse(localStorage.getItem(snKey)||'[]');
-        var now2=Date.now();
-        if(!snaps.length||(now2-snaps[0].ts)>60*60*1000){
-          var snap={id:genId(),ts:now2,label:'auto',body:html,wordCount:wc};
-          snaps=[snap].concat(snaps).slice(0,20);
-          localStorage.setItem(snKey,JSON.stringify(snaps));
+      // Activity-based version snapshot: capture whenever enough new writing
+      // has accumulated since the last snapshot (word burst), or enough time
+      // has passed with a real content change (catches heavy revision/rewrites
+      // that don't move the net word count much). Manual saves bypass this
+      // entirely via handleManualSnapshot below.
+      if(html!==lastSnapshotBody.current){
+        var wordsSinceSnapshot=Math.abs(wc-lastSnapshotWc.current);
+        var timeSinceSnapshot=Date.now()-lastSnapshotTs.current;
+        if(wordsSinceSnapshot>=VOLUME_SNAPSHOT_WORDS||timeSinceSnapshot>=MIN_SNAPSHOT_INTERVAL_MS){
+          saveSnapshot(did,html,wc,{isManual:false}).then(function(row){if(row)lastVersionId.current=row.id;});
+          lastSnapshotBody.current=html;
+          lastSnapshotWc.current=wc;
+          lastSnapshotTs.current=Date.now();
         }
-      }catch(e){}
+      }
+      // Orphan detection: if a comment's anchor span is no longer present in
+      // the saved HTML, the text it was attached to was deleted — mark it
+      // orphaned so it grays out in the comments list.
+      if(activeCommentIdsRef.current.length){
+        var stillPresent=[];var toOrphan=[];
+        activeCommentIdsRef.current.forEach(function(cid){
+          if(html.indexOf('data-comment-id="'+cid+'"')>=0)stillPresent.push(cid);
+          else toOrphan.push(cid);
+        });
+        if(toOrphan.length){
+          activeCommentIdsRef.current=stillPresent;
+          markCommentsOrphaned(toOrphan);
+        }
+      }
       // If a share link is live, keep it in sync
       if(shareId){
         var sc=window.supabase&&window.supabase.createClient?window.supabase.createClient('https://mxsdiqrbxlvcwexfdtrj.supabase.co','sb_publishable_0ZKEuX-d6UatKKkSXAz_lA_E84pEW-u'):null;
@@ -449,6 +578,83 @@ function DraftEditor({app}){
 
   function fmt(type,value){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,cur[type]===value?false:value);}}
   function toggleFmt(type){if(!quillRef.current)return;var r=quillRef.current.getSelection();if(r){var cur=quillRef.current.getFormat(r);quillRef.current.format(type,!cur[type]);}}
+
+  function handleManualSnapshot(label){
+    if(!quillRef.current)return Promise.resolve();
+    if(!label||!label.trim())return Promise.resolve();
+    var html=quillRef.current.root.innerHTML;
+    var wc=countWords(quillRef.current.getText());
+    lastSnapshotBody.current=html;
+    lastSnapshotWc.current=wc;
+    lastSnapshotTs.current=Date.now();
+    return saveSnapshot(did,html,wc,{isManual:true,label:label.trim()}).then(function(row){if(row)lastVersionId.current=row.id;});
+  }
+
+  function handleAddComment(){
+    if(!quillRef.current)return;
+    var range=pendingCommentRange.current||quillRef.current.getSelection();
+    if(!range||range.length===0){window.alert('Select some text first to attach a comment to.');return;}
+    pendingCommentRange.current=range;
+    commentComposerOpenRef.current=true;
+    setCommentDraftText('');
+    setShowCommentComposer(true);
+  }
+
+  function closeCommentComposer(){
+    commentComposerOpenRef.current=false;
+    setShowCommentComposer(false);
+    setCommentDraftText('');
+    pendingCommentRange.current=null;
+    setCommentBtnPos(null);
+  }
+
+  function submitComment(){
+    if(!quillRef.current||!commentDraftText.trim())return;
+    var range=pendingCommentRange.current;
+    if(!range||range.length===0){closeCommentComposer();return;}
+    var commentId=genId();
+    var anchorText=quillRef.current.getText(range.index,range.length);
+    quillRef.current.formatText(range.index,range.length,'comment',commentId,'user');
+    var html=quillRef.current.root.innerHTML;
+    var wc=countWords(quillRef.current.getText());
+    if(app&&app.updateDraft)app.updateDraft(pid,did,{body:html,wordCount:wc,updatedAt:new Date().toISOString()});
+    var profile=(app&&app.profile)||{};
+    var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim()||'You';
+    var commentText=commentDraftText.trim();
+    saveComment(did,{id:commentId,versionId:lastVersionId.current,authorName:authorName,anchorText:anchorText.trim(),body:commentText}).then(function(row){
+      if(row){
+        activeCommentIdsRef.current=activeCommentIdsRef.current.concat([commentId]);
+        setCommentsRefreshTick(function(t){return t+1;});
+      }
+    });
+    closeCommentComposer();
+  }
+
+  function handleDismissComment(comment){
+    if(quillRef.current){
+      var nodes=quillRef.current.root.querySelectorAll('[data-comment-id="'+comment.id+'"]');
+      nodes.forEach(function(n){n.classList.add('wv-comment-resolved');});
+    }
+    activeCommentIdsRef.current=activeCommentIdsRef.current.filter(function(id){return id!==comment.id;});
+    return resolveComment(comment.id);
+  }
+
+  function handleReopenComment(comment){
+    if(quillRef.current){
+      var nodes=quillRef.current.root.querySelectorAll('[data-comment-id="'+comment.id+'"]');
+      nodes.forEach(function(n){n.classList.remove('wv-comment-resolved');});
+    }
+    if(activeCommentIdsRef.current.indexOf(comment.id)<0)activeCommentIdsRef.current=activeCommentIdsRef.current.concat([comment.id]);
+    return reopenComment(comment.id);
+  }
+
+  function handleCompareBranches(idA,idB){
+    var all=(app&&app.allDrafts&&app.allDrafts[pid])||[];
+    var a=all.find(function(d){return d.id===idA;});
+    var b=all.find(function(d){return d.id===idB;});
+    if(!a||!b)return;
+    setCompareData({labelA:a.title||'Untitled',bodyA:a.body||'',labelB:b.title||'Untitled',bodyB:b.body||''});
+  }
 
   function handleRestoreVersion(body){
     if(!quillRef.current)return;
@@ -651,6 +857,9 @@ function DraftEditor({app}){
         .nav-collapse { display: flex !important; }
       }
       .ql-bubble .ql-fill { fill: #fdf8f0; }
+      .wv-comment-mark { background: rgba(196,94,40,.16); border-bottom: 2px solid rgba(196,94,40,.55); cursor: pointer; }
+      .wv-comment-mark.wv-comment-resolved { background: transparent; border-bottom: none; cursor: default; }
+      .wv-flow-active .wv-comment-mark { background: transparent; border-bottom: none; }
     `;
     document.head.appendChild(style);
   },[]);
@@ -670,13 +879,14 @@ function DraftEditor({app}){
     </div>
     <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
       <div className="nav-drawers" style={{display:'flex',alignItems:'center',gap:10}}>
-        <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary}/>
-        <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
-        <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowSpool(false);}} active={showProperties}/>
-        <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowProperties(false);if(showSpool)setStrandDetailId(null);}} active={showSpool}/>
+        <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onCompareTwo={handleCompareBranches}/>
+        <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowComments(false);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
+        <IconBtn icon="comment" title="Comments" onClick={function(){setShowComments(!showComments);setShowVersions(false);setShowProperties(false);setShowSpool(false);}} active={showComments}/>
+        <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowComments(false);setShowSpool(false);}} active={showProperties}/>
+        <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowComments(false);setShowProperties(false);if(showSpool)setStrandDetailId(null);}} active={showSpool}/>
       </div>
       {/* Mobile collapsed menu */}
-      <NavCollapseMenu branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onVersions={function(){setShowVersions(!showVersions);}} onProperties={function(){setShowProperties(!showProperties);}} onSpool={function(){setShowSpool(!showSpool);}}/>
+      <NavCollapseMenu branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onVersions={function(){setShowVersions(!showVersions);}} onComments={function(){setShowComments(!showComments);}} onProperties={function(){setShowProperties(!showProperties);}} onSpool={function(){setShowSpool(!showSpool);}}/>
       <ShareDropdown onExportPDF={handleExportPDF} onExportDocx={handleExportDocx} shareLink={shareLink} onGenerateLink={handleGenerateLink} onDepublish={handleDepublish}/>
     </div>
   </nav>
@@ -726,10 +936,80 @@ function DraftEditor({app}){
         </div>
       </div>
 
+      {/* Version preview banner */}
+      {previewVersion&&(
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'8px 20px',background:'#7A5A38',color:'#fdf8f0',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,fontFamily:'DM Sans, sans-serif',minWidth:0}}>
+            <span className="mi" style={{fontSize:16}}>visibility</span>
+            <span style={{fontWeight:600}}>{previewVersion.label}</span>
+            <span style={{opacity:.75}}>· {previewVersion.timeLabel} · {previewVersion.wordCount||0}w</span>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+            <button onClick={function(){
+              if(window.confirm('Restore this version? Your current text will be replaced.')){
+                previewVersion.onRestore&&previewVersion.onRestore();
+                setPreviewVersion(null);
+              }
+            }} style={{display:'flex',alignItems:'center',gap:4,padding:'5px 10px',borderRadius:6,border:'1px solid rgba(253,248,240,.4)',background:'transparent',color:'#fdf8f0',fontSize:12,cursor:'pointer',fontFamily:'DM Sans, sans-serif'}}>
+              <span className="mi" style={{fontSize:14}}>restore</span>Restore this version
+            </button>
+            <button onClick={function(){setPreviewVersion(null);}} style={{display:'flex',alignItems:'center',gap:4,padding:'5px 10px',borderRadius:6,border:'none',background:'rgba(253,248,240,.15)',color:'#fdf8f0',fontSize:12,cursor:'pointer',fontFamily:'DM Sans, sans-serif'}}>
+              <span className="mi" style={{fontSize:14}}>close</span>Back to editing
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Editor scroll area */}
       <div style={{flex:1,overflowY:'scroll',WebkitOverflowScrolling:'touch',paddingTop:48,paddingBottom:20,paddingLeft:40,paddingRight:56,background:T.bodyBg}} className="editor-scroll-area">
-        <div style={{maxWidth:maxWidth+'px',margin:'0 auto',transition:'max-width .2s'}}>
-          <div ref={editorContainerRef} style={editorBodyStyle}/>
+        <div style={{maxWidth:maxWidth+'px',margin:'0 auto',transition:'max-width .2s',position:'relative'}}>
+          <div ref={editorContainerRef} className={flowMode?'wv-flow-active':''} style={Object.assign({},editorBodyStyle,previewVersion?{display:'none'}:{})}/>
+          {previewVersion&&(
+            <div
+              style={Object.assign({},editorBodyStyle,{pointerEvents:'none',userSelect:'none',opacity:.85})}
+              dangerouslySetInnerHTML={{__html:previewVersion.body}}
+            />
+          )}
+          {commentBtnPos&&!previewVersion&&(
+            <button
+              ref={commentBtnRef}
+              onMouseDown={function(e){e.preventDefault();handleAddComment();}}
+              style={{
+                position:'absolute',top:commentBtnPos.top-34,left:commentBtnPos.left,transform:'translateX(-50%)',
+                display:'flex',alignItems:'center',gap:4,padding:'4px 10px',borderRadius:6,border:'none',
+                background:'#7A5A38',color:'#fdf8f0',fontSize:11,fontFamily:'DM Sans, sans-serif',cursor:'pointer',
+                zIndex:30,whiteSpace:'nowrap'
+              }}
+            >
+              <span className="mi" style={{fontSize:13}}>add_comment</span>Comment
+            </button>
+          )}
+          <Popover
+            anchorRef={commentBtnRef}
+            open={showCommentComposer}
+            onClose={closeCommentComposer}
+            title="Add comment"
+            width={260}
+            footer={
+              <div style={{display:'flex',gap:8,justifyContent:'flex-end',width:'100%'}}>
+                <button className="btn btn-ghost" onClick={closeCommentComposer}>Cancel</button>
+                <button className="btn btn-primary" disabled={!commentDraftText.trim()} onClick={submitComment}>
+                  <span className="mi" style={{fontSize:16}}>add_comment</span>Add
+                </button>
+              </div>
+            }
+          >
+            <Field
+              value={commentDraftText}
+              onChange={function(e){setCommentDraftText(e.target.value);}}
+              placeholder="Write a comment…"
+              autoFocus
+              onKeyDown={function(e){
+                if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitComment();}
+                if(e.key==='Escape'){closeCommentComposer();}
+              }}
+            />
+          </Popover>
         </div>
       </div>
     </div>
@@ -742,9 +1022,20 @@ function DraftEditor({app}){
       <StrandsDrawer app={app} draft={draft} variant="inline" strandId={strandDetailId} onOpenStrand={setStrandDetailId} onClose={function(){setShowSpool(false);setStrandDetailId(null);}}/>
     )}
     {!flowMode&&showVersions&&(
-      <VersionsDrawer draftId={did} variant="inline" onClose={function(){setShowVersions(false);}} onRestore={handleRestoreVersion}/>
+      <VersionsDrawer draftId={did} variant="inline" onClose={function(){setShowVersions(false);}} onRestore={handleRestoreVersion} onSaveVersion={handleManualSnapshot} onCompare={setCompareData} onPreview={setPreviewVersion} onExitPreview={function(){setPreviewVersion(null);}}/>
+    )}
+    {!flowMode&&showComments&&(
+      <CommentsDrawer draftId={did} variant="inline" focusCommentId={focusCommentId} refreshTick={commentsRefreshTick} onDismiss={handleDismissComment} onReopen={handleReopenComment} onClose={function(){setShowComments(false);setFocusCommentId(null);}}/>
     )}
   </div>
+  <CompareView
+    open={!!compareData}
+    labelA={compareData&&compareData.labelA}
+    bodyA={compareData&&compareData.bodyA}
+    labelB={compareData&&compareData.labelB}
+    bodyB={compareData&&compareData.bodyB}
+    onClose={function(){setCompareData(null);}}
+  />
 
 </div>
   );

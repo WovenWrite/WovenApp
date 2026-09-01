@@ -5,8 +5,8 @@
 // identically inside App.jsx, DraftEditor.jsx and ExploreCanvas.jsx.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { STATUSES, FIELD_TYPES, SYSTEM_COLORS, PRESET_COLORS, initials, uploadImage } from './utils';
-import { projStatusMap } from './projectConfig';
+import { FIELD_TYPES, SYSTEM_COLORS, PRESET_COLORS, initials, uploadImage } from './utils';
+import { projStatusMap, projStatus } from './projectConfig';
 
 // ══════════════════════════════════════════════
 // Styles — injected once, idempotent
@@ -606,6 +606,22 @@ export function FloatingPanel({ anchorRef, open, onClose, children, minWidth, ga
   );
 }
 
+// Reads the per-project spool tab order saved from the Spools page
+// (StrandsPage in App.tsx writes this same key on drag-reorder) so any
+// collection list here matches what the user arranged, rather than raw
+// object key order — which isn't guaranteed to round-trip through storage
+// unchanged.
+function orderedCollNames(pid, rawNames) {
+  var saved = null;
+  try {
+    var s = localStorage.getItem('woven:collOrder:' + pid);
+    if (s) saved = JSON.parse(s);
+  } catch (e) {}
+  if (!saved) return rawNames;
+  return saved.filter(function (c) { return rawNames.indexOf(c) >= 0; })
+    .concat(rawNames.filter(function (c) { return saved.indexOf(c) < 0; }));
+}
+
 export function StrandSearchDropdown({ app, pid, collection, excludeIds, onPick, onClose, style }) {
   var sq = useState(''); var query = sq[0]; var setQuery = sq[1];
   var ref = useRef(null);
@@ -625,7 +641,7 @@ export function StrandSearchDropdown({ app, pid, collection, excludeIds, onPick,
 
   var excl = excludeIds || [];
   var all = [];
-  var collNames = collection ? [collection] : Object.keys(projStrands);
+  var collNames = collection ? [collection] : orderedCollNames(pid, Object.keys(projStrands));
   collNames.forEach(function (coll) {
     (projStrands[coll] || []).forEach(function (st) {
       if (excl.indexOf(st.id) < 0) all.push(Object.assign({}, st, { collectionName: coll }));
@@ -665,7 +681,7 @@ export function StrandRefPicker({ app, pid, collection, value, onChange, placeho
     return (t && t.icon) || 'auto_stories';
   }
   var all = [];
-  var collNames = collection ? [collection] : Object.keys(projStrands);
+  var collNames = collection ? [collection] : orderedCollNames(pid, Object.keys(projStrands));
   collNames.forEach(function (coll) {
     (projStrands[coll] || []).forEach(function (st) {
       all.push(Object.assign({}, st, { collectionName: coll }));
@@ -920,11 +936,12 @@ export function DeleteConfirmModal({ title, itemName, message, note, confirmLabe
 // StatusDot / StatusDotWithArchive
 // ══════════════════════════════════════════════
 
-export function StatusDot({ status, onChange, size }) {
+export function StatusDot({ status, onChange, size, project }) {
   var s = useState(false); var open = s[0]; var setOpen = s[1];
   var p = useState({ top: 0, left: 0 }); var pos = p[0]; var setPos = p[1];
   var ref = useRef(null);
-  var info = STATUSES[status] || STATUSES.first_draft;
+  var statusMap = projStatusMap(project);
+  var info = projStatus(project, status);
   var sz = size || 10;
   useEffect(function () {
     if (!open) return;
@@ -943,8 +960,8 @@ export function StatusDot({ status, onChange, size }) {
       <div style={{ width: sz, height: sz, borderRadius: '50%', background: info.color, cursor: 'pointer', flexShrink: 0 }} onClick={handleClick} title={info.label} />
       {open && (
         <div style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', boxShadow: '0 8px 22px rgba(0,0,0,.5)', minWidth: 170 }}>
-          {Object.keys(STATUSES).map(function (k) {
-            var si = STATUSES[k];
+          {Object.keys(statusMap).map(function (k) {
+            var si = statusMap[k];
             return (
               <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', background: k === status ? 'var(--bg3)' : 'transparent', fontSize: 14 }} onClick={function () { onChange(k); setOpen(false); }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: si.color, flexShrink: 0 }} />
@@ -963,9 +980,9 @@ export function StatusDot({ status, onChange, size }) {
   );
 }
 
-export function StatusDotWithArchive({ draft, app, showLabel, dotSize }) {
+export function StatusDotWithArchive({ draft, app, showLabel, dotSize, project }) {
   var sac = useState(false); var showConfirm = sac[0]; var setShowConfirm = sac[1];
-  var info = STATUSES[draft.status] || STATUSES.first_draft;
+  var info = projStatus(project, draft.status);
   function handleChange(s) {
     if (s === 'archive') { setShowConfirm(true); return; }
     var ch = { status: s };
@@ -985,7 +1002,7 @@ export function StatusDotWithArchive({ draft, app, showLabel, dotSize }) {
   }
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <StatusDot status={draft.status} onChange={handleChange} size={dotSize} />
+      <StatusDot status={draft.status} onChange={handleChange} size={dotSize} project={project} />
       {showLabel && <span style={{ fontSize: 13, color: info.color }}>{info.label}</span>}
       {showConfirm && <ArchiveConfirmModal draft={draft} allDrafts={app.allDrafts[app.projId] || []} onConfirm={doArchive} onCancel={function () { setShowConfirm(false); }} />}
     </div>

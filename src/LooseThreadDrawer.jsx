@@ -17,6 +17,18 @@
 
 import { useState } from 'react';
 import { Drawer, Field, HelpText, CategoryLink, StrandResultRow } from './SharedUI';
+import { stripHtml, countWords } from './utils';
+
+// Plain text -> simple paragraph HTML, matching how draft bodies are stored
+// elsewhere (e.g. seed data's <p>...</p> blocks). Blank lines start a new
+// paragraph; single line breaks become <br>.
+function textToHtml(text) {
+  var t = (text || '').trim();
+  if (!t) return '';
+  return t.split(/\n{2,}/).map(function (para) {
+    return '<p>' + para.split('\n').join('<br>') + '</p>';
+  }).join('');
+}
 
 export default function LooseThreadDrawer({ lt, activeProjects, mode, app, pid, variant, open, onUpdate, onMove, onClose, onDelete, topOffset }) {
   var sv = useState('info'); var view = sv[0]; var setView = sv[1]; // 'info' | 'category'
@@ -98,13 +110,26 @@ export default function LooseThreadDrawer({ lt, activeProjects, mode, app, pid, 
         onBlur={function (e) { onUpdate({ title: e.target.value }); }}
       />
 
-      <Field
-        label="Notes"
-        key={lt.id + '-s'}
-        defaultValue={lt.synopsis || ''}
-        placeholder="Write freely — capture the idea, explore it, let it breathe..."
-        onBlur={function (e) { onUpdate({ synopsis: e.target.value }); }}
-      />
+      {isProject ? (
+        <Field
+          label="Content"
+          key={lt.id + '-b'}
+          defaultValue={lt.body ? stripHtml(lt.body) : ''}
+          placeholder="Write freely — capture the idea, explore it, let it breathe..."
+          onBlur={function (e) {
+            var text = e.target.value;
+            onUpdate({ body: textToHtml(text), wordCount: countWords(text) });
+          }}
+        />
+      ) : (
+        <Field
+          label="Content"
+          key={lt.id + '-s'}
+          defaultValue={lt.synopsis || ''}
+          placeholder="Write freely — capture the idea, explore it, let it breathe..."
+          onBlur={function (e) { onUpdate({ synopsis: e.target.value }); }}
+        />
+      )}
 
       {!isProject && projects.length > 0 && (
         <div>

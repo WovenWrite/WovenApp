@@ -2,6 +2,8 @@
 // ── Woven shared utilities ──
 // Extracted from App.jsx. No React, no JSX — safe to import anywhere.
 
+import { diffWordsWithSpace } from 'diff';
+
 // ══════════════════════════════════════════════
 // Constants
 // ══════════════════════════════════════════════
@@ -162,37 +164,183 @@ export function deleteStorageImage(url) {
 }
 
 // ══════════════════════════════════════════════
-// Version snapshots (localStorage)
+// Version snapshots (Supabase — draft_versions table)
 // ══════════════════════════════════════════════
+// Snapshots are rows in `draft_versions`, not a localStorage blob, so history
+// survives a cleared cache and follows the user across devices.
+//
+// Autosave cadence is activity-based rather than clock-based: DraftEditor
+// calls saveSnapshot() whenever enough writing has accumulated since the
+// last snapshot (word delta) or enough time has passed with a real content
+// change (time floor), using the constants below. Manual saves (opts.isManual)
+// always write immediately and are never pruned.
 
-export var MAX_SNAPSHOTS = 20;
-export var SNAPSHOT_INTERVAL_MS = 60 * 60 * 1000;
+export var VOLUME_SNAPSHOT_WORDS = 300;      // burst trigger: snapshot after ~this many words change
+export var MIN_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000; // time floor: snapshot at least this often if content changed (catches heavy revision with low net word delta)
 
-export function getSnapshotKey(draftId) { return 'woven:versions:' + draftId; }
-
-export function loadSnapshots(draftId) {
-  try {
-    var v = localStorage.getItem(getSnapshotKey(draftId));
-    return v ? JSON.parse(v) : [];
-  } catch (e) { return []; }
+export async function loadSnapshots(draftId) {
+  var client = getSupabase();
+  if (!client) return [];
+  var res = await client
+    .from('draft_versions')
+    .select('*')
+    .eq('draft_id', draftId)
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (res.error) { console.error('loadSnapshots error:', res.error); return []; }
+  return (res.data || []).map(function (row) {
+    return {
+      id: row.id,
+      ts: new Date(row.created_at).getTime(),
+      body: row.body,
+      wordCount: row.word_count,
+      isManual: !!row.is_manual,
+      label: row.label || null
+    };
+  });
 }
 
-export function saveSnapshot(draftId, body, wordCount, label) {
-  if (!body || !body.trim()) return;
-  var snapshots = loadSnapshots(draftId);
-  var now = Date.now();
-  var last = snapshots[0];
-  if (label === 'auto' && last && (now - last.ts) < SNAPSHOT_INTERVAL_MS) return;
-  var snap = { id: genId(), ts: now, label: label || 'auto', body: body, wordCount: wordCount || 0 };
-  var updated = [snap].concat(snapshots).slice(0, MAX_SNAPSHOTS);
-  try { localStorage.setItem(getSnapshotKey(draftId), JSON.stringify(updated)); } catch (e) {}
+export async function saveSnapshot(draftId, body, wordCount, opts) {
+  if (!body || !body.trim()) return null;
+  var client = getSupabase();
+  if (!client) return null;
   var uid = window.__wovenUserId;
-  if (uid) {
-    supabase.from('wf_data').upsert(
-      { key: getSnapshotKey(draftId), user_id: uid, value: updated, updated_at: new Date().toISOString() },
-      { onConflict: 'key,user_id' }
-    ).then(function () {});
-  }
+  if (!uid) return null;
+  opts = opts || {};
+  var row = {
+    id: genId(),
+    draft_id: draftId,
+    user_id: uid,
+    body: body,
+    word_count: wordCount || 0,
+    is_manual: !!opts.isManual,
+    label: opts.label || null,
+    created_at: new Date().toISOString()
+  };
+  var res = await client.from('draft_versions').insert(row);
+  if (res.error) { console.error('saveSnapshot error:', res.error); return null; }
+  // Occasionally thin old autosaves so the table doesn't grow unbounded.
+  // Manual saves are exempt and this never runs synchronously on the save path.
+  if (!opts.isManual && Math.random() < 0.2) pruneSnapshots(draftId);
+  return row;
+}
+
+export async function pruneSnapshots(draftId) {
+  var client = getSupabase();
+  if (!client) return;
+  var res = await client
+    .from('draft_versions')
+    .select('id,created_at,is_manual')
+    .eq('draft_id', draftId)
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (res.error || !res.data) return;
+  var now = Date.now();
+  var HOUR = 60 * 60 * 1000;
+  var keepIds = {};
+  var seenBuckets = {};
+  res.data.forEach(function (row) {
+    if (row.is_manual) { keepIds[row.id] = true; return; }
+    var createdMs = new Date(row.created_at).getTime();
+    var age = now - createdMs;
+    if (age < 2 * HOUR) { keepIds[row.id] = true; return; } // keep everything from the last 2 hours
+    var bucketMs = age < 48 * HOUR ? 30 * 60 * 1000 : 3 * HOUR; // 1 per 30min up to 48h, then 1 per 3h
+    var bucketKey = Math.floor(createdMs / bucketMs);
+    if (!seenBuckets[bucketKey]) { seenBuckets[bucketKey] = true; keepIds[row.id] = true; }
+  });
+  var toDelete = res.data.filter(function (row) { return !keepIds[row.id]; }).map(function (row) { return row.id; });
+  if (toDelete.length === 0) return;
+  var del = await client.from('draft_versions').delete().in('id', toDelete);
+  if (del.error) console.error('pruneSnapshots delete error:', del.error);
+}
+
+// ══════════════════════════════════════════════
+// Comments (Supabase — draft_comments table)
+// ══════════════════════════════════════════════
+// Author-only for now (no reader/share-link commenting yet). A comment is
+// anchored to a range of text via a Quill inline format (see DraftEditor.jsx's
+// CommentBlot) carrying the comment's id in a data-comment-id attribute, so
+// the anchor survives edits the same way bold/italic formatting does.
+//
+// version_id is provenance only ("this was written against version X") — it
+// is NOT a staleness trigger. A comment only grays out when the author
+// dismisses it (resolved) or when its anchor text is deleted from the draft
+// (orphaned, detected by DraftEditor scanning saved HTML for the marker).
+
+export async function loadComments(draftId) {
+  var client = getSupabase();
+  if (!client) return [];
+  var res = await client
+    .from('draft_comments')
+    .select('*')
+    .eq('draft_id', draftId)
+    .order('created_at', { ascending: false });
+  if (res.error) { console.error('loadComments error:', res.error); return []; }
+  return (res.data || []).map(function (row) {
+    return {
+      id: row.id,
+      draftId: row.draft_id,
+      versionId: row.version_id,
+      authorName: row.author_name,
+      anchorText: row.anchor_text,
+      body: row.body,
+      resolved: !!row.resolved,
+      orphaned: !!row.orphaned,
+      createdAt: row.created_at,
+      resolvedAt: row.resolved_at
+    };
+  });
+}
+
+export async function saveComment(draftId, opts) {
+  var client = getSupabase();
+  if (!client) return null;
+  var uid = window.__wovenUserId;
+  if (!uid) return null;
+  opts = opts || {};
+  var row = {
+    id: opts.id || genId(),
+    draft_id: draftId,
+    version_id: opts.versionId || null,
+    user_id: uid,
+    author_name: opts.authorName || 'You',
+    anchor_text: opts.anchorText || '',
+    body: opts.body,
+    resolved: false,
+    orphaned: false,
+    created_at: new Date().toISOString()
+  };
+  var res = await client.from('draft_comments').insert(row);
+  if (res.error) { console.error('saveComment error:', res.error); return null; }
+  return row;
+}
+
+export async function resolveComment(commentId) {
+  var client = getSupabase();
+  if (!client) return;
+  var res = await client
+    .from('draft_comments')
+    .update({ resolved: true, resolved_at: new Date().toISOString() })
+    .eq('id', commentId);
+  if (res.error) console.error('resolveComment error:', res.error);
+}
+
+export async function reopenComment(commentId) {
+  var client = getSupabase();
+  if (!client) return;
+  var res = await client
+    .from('draft_comments')
+    .update({ resolved: false, resolved_at: null })
+    .eq('id', commentId);
+  if (res.error) console.error('reopenComment error:', res.error);
+}
+
+export async function markCommentsOrphaned(commentIds) {
+  if (!commentIds || !commentIds.length) return;
+  var client = getSupabase();
+  if (!client) return;
+  var res = await client.from('draft_comments').update({ orphaned: true }).in('id', commentIds);
+  if (res.error) console.error('markCommentsOrphaned error:', res.error);
 }
 
 export function formatSnapshotTime(ts) {
@@ -265,4 +413,63 @@ export function draftMatchesFilter(draft, filterObj) {
     if (!wanted.some(function (id) { return have.indexOf(id) >= 0; })) return false;
   }
   return true;
+}
+
+// ══════════════════════════════════════════════
+// Text comparison (word-level diff)
+// ══════════════════════════════════════════════
+// Client-side only — no table, no fetch. Feed it any two HTML bodies (two
+// draft_versions rows, or the current .body of two branch drafts) and it
+// returns diff segments for inline rendering plus rollup stats for a
+// GitHub-style summary strip. Used by CompareView.jsx.
+
+export function htmlToDiffableText(html) {
+  if (!html) return '';
+  return html
+    .replace(/<\/(p|div|li|h[1-6]|blockquote)>/gi, '\n\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+export function computeWordDiff(htmlA, htmlB) {
+  var textA = htmlToDiffableText(htmlA);
+  var textB = htmlToDiffableText(htmlB);
+  var parts = diffWordsWithSpace(textA, textB);
+  var wordsAdded = 0, wordsRemoved = 0;
+  parts.forEach(function (p) {
+    var wc = (p.value.match(/\S+/g) || []).length;
+    if (p.added) wordsAdded += wc;
+    else if (p.removed) wordsRemoved += wc;
+  });
+  var totalParagraphs = textB.split(/\n\n+/).filter(function (p) { return p.trim(); }).length || 1;
+  // Approximate paragraph-changed count by walking the diff in order and
+  // counting how many paragraph breaks were crossed since the last change.
+  var paragraphsChanged = 0;
+  var sinceBreak = false;
+  parts.forEach(function (p) {
+    if (p.added || p.removed) sinceBreak = true;
+    var breaks = (p.value.match(/\n\n+/g) || []).length;
+    if (breaks > 0) {
+      if (sinceBreak) paragraphsChanged += 1;
+      sinceBreak = false;
+    }
+  });
+  if (sinceBreak) paragraphsChanged += 1;
+  return {
+    parts: parts,
+    stats: {
+      wordsAdded: wordsAdded,
+      wordsRemoved: wordsRemoved,
+      paragraphsChanged: Math.min(paragraphsChanged, totalParagraphs),
+      totalParagraphs: totalParagraphs
+    }
+  };
 }
