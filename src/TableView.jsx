@@ -379,7 +379,7 @@ function TableView({app}){
   var totalTableWidth=28+(tblNumbered?36:0)+(tblByDate?96:0)+visCols.reduce(function(sum,col){var w=colWidths[col]||160;return sum+w+(col==='title'?34:0);},0)+46;
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} hideStructure={true} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onBind={function(){setBindOpen(true);}} hideStructure={true} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
   <div className="table-wrap" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto',padding:20}}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>

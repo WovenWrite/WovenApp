@@ -11,7 +11,7 @@ import BindDrawer from './BindDrawer'
 import LooseThreadDrawer from './LooseThreadDrawer'
 import { Popover, Check, Avatar, StatusDotWithArchive, ArchiveConfirmModal } from './SharedUI'
 import { genId, stripHtml, initials, uploadImage } from './utils'
-import { sortDraftsBySequence, projIsNumbered, projIsManualOrder, projSequence, projThumbnails, draftDateOf, formatDraftDate, projStatuses, projStatus } from './projectConfig'
+import { sortDraftsBySequence, projIsNumbered, projIsManualOrder, projSequence, projThumbnails, draftDateOf, formatDraftDate, projStatuses, projStatus, projLabel } from './projectConfig'
 
 // ── Draft tree helpers ──
 export function buildTree(drafts){
@@ -92,7 +92,7 @@ export function applyFS(drafts,filterObj,sort,proj){
 }
 
 // ── ViewHeader ──
-export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onAddDraft,onBind,structureMode,onStructureToggle,searchQ,onSearch,hideStructure,resultCount}){
+export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,structureMode,onStructureToggle,searchQ,onSearch,hideStructure,resultCount}){
   var filter=filterProp||emptyFilterState();
   var sf=useState(false);var filterOpen=sf[0];var setFilterOpen=sf[1];
   var ss=useState(false);var searchOpen=ss[0];var setSearchOpen=ss[1];
@@ -277,15 +277,10 @@ export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onAddDr
     </div>
   </div>
   <div style={{display:'flex',alignItems:'center',gap:8}}>
-    <button onClick={onBind} title="Bind" style={{display:'flex',alignItems:'center',justifyContent:'center',width:38,height:38,borderRadius:8,background:'transparent',border:'1px solid var(--border)',cursor:'pointer',color:'var(--mid)',transition:'all .15s'}}
-      onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';e.currentTarget.style.color='var(--text)';}}
-      onMouseOut={function(e){e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--mid)';}}>
-      <span className="material-symbols-outlined" style={{fontSize:20}}>collections_bookmark</span>
-    </button>
-    <button onClick={onAddDraft} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:'var(--indigo)',color:'#fff',border:'none',borderRadius:8,fontSize:14,fontFamily:'DM Sans, sans-serif',fontWeight:600,cursor:'pointer',transition:'background .15s'}}
+    <button onClick={onBind} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:'var(--indigo)',color:'#fff',border:'none',borderRadius:8,fontSize:14,fontFamily:'DM Sans, sans-serif',fontWeight:600,cursor:'pointer',transition:'background .15s'}}
       onMouseOver={function(e){e.currentTarget.style.background='#2A1F10';}}
       onMouseOut={function(e){e.currentTarget.style.background='var(--indigo)';}}>
-      <span className="material-symbols-outlined" style={{fontSize:18}}>add</span>New draft
+      <span className="material-symbols-outlined" style={{fontSize:18}}>collections_bookmark</span>Bind {projLabel(app.currentProject,'drafts')}
     </button>
   </div>
 </div>
@@ -585,99 +580,25 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   );
 }
 
-// ── LooseThreadsSection ──
-export function LooseThreadsSection({threads,app,view,structureMode,filter}){
-  var hasActiveFilter=filterCriteriaCount(filter)>0;
-  var filteredThreads=hasActiveFilter?threads.filter(function(t){return draftMatchesFilter(t,filter);}):threads;
-  var sortedThreads=filteredThreads.slice().sort(function(a,b){return (b.createdAt||'').localeCompare(a.createdAt||'');});
-  var sex=useState(false);var expanded=sex[0];var setExpanded=sex[1];
-  var pid=app.projId;
-
-  // Deferred creation — mirrors GlobalLooseThreads: nothing is persisted
-  // until the drawer actually has a title, notes, or a tagged spool.
-  var soi=useState(null);var openLTId=soi[0];var setOpenLTId=soi[1];
-  var spl=useState(null);var pendingLT=spl[0];var setPendingLT=spl[1];
-  function openCreateFlow(){
-    var id=genId();
-    setPendingLT({id:id,projectId:pid,title:'',synopsis:'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
-    setOpenLTId(id);
-  }
-  var activeLT=pendingLT&&pendingLT.id===openLTId?pendingLT:threads.find(function(d){return d.id===openLTId;});
-  function handleDrawerUpdate(changes){
-    if(pendingLT&&pendingLT.id===openLTId){
-      var merged=Object.assign({},pendingLT,changes);
-      var hasContent=(merged.title&&merged.title.trim())||(merged.synopsis&&merged.synopsis.trim())||(merged.strandTags&&merged.strandTags.length>0);
-      if(hasContent){
-        app.addDraft(pid,merged);
-        setPendingLT(null);
-      } else {
-        setPendingLT(merged);
+// ── LooseThreadTile ──
+// Shared by the inline Loose Threads grid and the sticky quick-access panel.
+function LooseThreadTile({d,app,pid,inStructure}){
+  var bodyPreview=d.body?stripHtml(d.body).slice(0,200):'';
+  var projStrands=app.allStrands[pid]||{};
+  var projTemplates=app.allTemplates[pid]||[];
+  var tagged=[];
+  Object.keys(projStrands).forEach(function(coll){
+    (projStrands[coll]||[]).forEach(function(st){
+      if((d.strandTags||[]).includes(st.id)){
+        var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
+        tagged.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));
       }
-      return;
-    }
-    app.updateDraft(pid,openLTId,changes);
-  }
-  function handleDrawerClose(){setPendingLT(null);setOpenLTId(null);}
-  function handleDrawerDelete(){
-    if(pendingLT&&pendingLT.id===openLTId){handleDrawerClose();return;}
-    app.updateDraft(pid,openLTId,{archived:true});
-    setOpenLTId(null);
-  }
-
-  var drawer=openLTId&&activeLT&&(
-<LooseThreadDrawer lt={activeLT} mode="project" app={app} pid={pid} open={true} variant="overlay" topOffset={54} onUpdate={handleDrawerUpdate} onClose={handleDrawerClose} onDelete={handleDrawerDelete}/>
-  );
-
-  // How many tiles fit in one row (approx based on tile width 220+10gap)
-  // Approximate how many 230px tiles fit in the section (minus ~32px padding each side)
-  var ONE_ROW=Math.max(3,Math.floor((window.innerWidth-64)/(230+10)));
-  var displayedThreads=expanded?sortedThreads:sortedThreads.slice(0,ONE_ROW);
-  var inStructure=view==='cards'&&structureMode;
-
+    });
+  });
+  function showTt(e,name){var tt=document.getElementById('woven-tt');if(tt){var r=e.currentTarget.getBoundingClientRect();tt.textContent=name;tt.style.display='block';tt.style.left=(r.left+r.width/2)+'px';tt.style.top=(r.bottom+6)+'px';}}
+  function hideTt(){var tt=document.getElementById('woven-tt');if(tt)tt.style.display='none';}
   return(
-<div
-  style={{background:'#F5EDE0',padding:'16px 16px 24px',marginTop:0}}
-  onDragOver={function(e){e.preventDefault();}}
-  onDrop={function(e){
-    e.preventDefault();var fromId=e.dataTransfer.getData('draftId');if(!fromId)return;
-    var allDr=app.allDrafts[app.projId]||[];var fromDraft=allDr.find(function(d){return d.id===fromId;});
-    if(fromDraft&&fromDraft.status!=='loose_thread')app.updateDraft(app.projId,fromId,{status:'loose_thread',order:null,parentId:null});
-  }}>
-  {/* Section header */}
-  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
-    <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'var(--text)'}}>Loose Threads</span>
-    {filteredThreads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:22,height:22,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{filteredThreads.length}</span>}
-    {filteredThreads.length>ONE_ROW&&(
-<button onClick={function(){setExpanded(!expanded);}} title={expanded?'Collapse':'Expand all'} style={{marginLeft:'auto',display:'flex',alignItems:'center',background:'transparent',border:'none',cursor:'pointer',color:'var(--mid)',padding:4}}>
-  <span className="material-symbols-outlined" style={{fontSize:22}}>{expanded?'collapse_all':'expand_all'}</span>
-</button>
-    )}
-  </div>
-  {/* Tile grid */}
-  <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
-    {/* Ghost add tile */}
-    <div onClick={openCreateFlow} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
-      onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';}}
-      onMouseLeave={function(e){e.currentTarget.style.borderColor='#A88060';}}>
-      <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
-    </div>
-    {displayedThreads.map(function(d){
-      var bodyPreview=d.body?stripHtml(d.body).slice(0,200):'';
-      var projStrands=app.allStrands[pid]||{};
-      var projTemplates=app.allTemplates[pid]||[];
-      var tagged=[];
-      Object.keys(projStrands).forEach(function(coll){
-        (projStrands[coll]||[]).forEach(function(st){
-          if((d.strandTags||[]).includes(st.id)){
-            var tpl=projTemplates.find(function(t){return t.name===coll||t.id===st.templateId;});
-            tagged.push(Object.assign({},st,{spoolColor:tpl&&tpl.color?tpl.color:'#c45e28'}));
-          }
-        });
-      });
-      function showTt(e,name){var tt=document.getElementById('woven-tt');if(tt){var r=e.currentTarget.getBoundingClientRect();tt.textContent=name;tt.style.display='block';tt.style.left=(r.left+r.width/2)+'px';tt.style.top=(r.bottom+6)+'px';}}
-      function hideTt(){var tt=document.getElementById('woven-tt');if(tt)tt.style.display='none';}
-      return(
-<div key={d.id} style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:inStructure?'grab':'pointer',display:'flex',flexDirection:'column',gap:8,width:220,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
+<div style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:inStructure?'grab':'pointer',display:'flex',flexDirection:'column',gap:8,width:220,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
   draggable={true}
   onDragStart={function(e){e.dataTransfer.setData('draftId',d.id);}}
   onClick={function(){if(!inStructure)app.openDraft(d.id);}}
@@ -724,14 +645,121 @@ export function LooseThreadsSection({threads,app,view,structureMode,filter}){
     </div>
   </div>
 </div>
-      );
-    })}
+  );
+}
+
+// ── LooseThreadsSection ──
+export function LooseThreadsSection({threads,app,view,structureMode,filter}){
+  var hasActiveFilter=filterCriteriaCount(filter)>0;
+  var filteredThreads=hasActiveFilter?threads.filter(function(t){return draftMatchesFilter(t,filter);}):threads;
+  var sortedThreads=filteredThreads.slice().sort(function(a,b){return (b.createdAt||'').localeCompare(a.createdAt||'');});
+  var pid=app.projId;
+
+  // Deferred creation — mirrors GlobalLooseThreads: nothing is persisted
+  // until the drawer actually has a title, notes, or a tagged spool.
+  var soi=useState(null);var openLTId=soi[0];var setOpenLTId=soi[1];
+  var spl=useState(null);var pendingLT=spl[0];var setPendingLT=spl[1];
+  function openCreateFlow(){
+    var id=genId();
+    setPendingLT({id:id,projectId:pid,title:'',synopsis:'',status:'loose_thread',order:null,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+    setOpenLTId(id);
+  }
+  var activeLT=pendingLT&&pendingLT.id===openLTId?pendingLT:threads.find(function(d){return d.id===openLTId;});
+  function handleDrawerUpdate(changes){
+    if(pendingLT&&pendingLT.id===openLTId){
+      var merged=Object.assign({},pendingLT,changes);
+      var hasContent=(merged.title&&merged.title.trim())||(merged.synopsis&&merged.synopsis.trim())||(merged.strandTags&&merged.strandTags.length>0);
+      if(hasContent){
+        app.addDraft(pid,merged);
+        setPendingLT(null);
+      } else {
+        setPendingLT(merged);
+      }
+      return;
+    }
+    app.updateDraft(pid,openLTId,changes);
+  }
+  function handleDrawerClose(){setPendingLT(null);setOpenLTId(null);}
+  function handleDrawerDelete(){
+    if(pendingLT&&pendingLT.id===openLTId){handleDrawerClose();return;}
+    app.updateDraft(pid,openLTId,{archived:true});
+    setOpenLTId(null);
+  }
+
+  var drawer=openLTId&&activeLT&&(
+<LooseThreadDrawer lt={activeLT} mode="project" app={app} pid={pid} open={true} variant="overlay" topOffset={54} onUpdate={handleDrawerUpdate} onClose={handleDrawerClose} onDelete={handleDrawerDelete}/>
+  );
+
+  var inStructure=view==='cards'&&structureMode;
+
+  // ── Sticky quick-access bar ──
+  // Anchored bottom-left (AddMenuFab owns bottom-right) so loose threads
+  // stay reachable without scrolling all the way down as the sequence
+  // grows. The in-flow section below still shows everything — this is
+  // just a shortcut, not a replacement.
+  var sso=useState(false);var stickyOpen=sso[0];var setStickyOpen=sso[1];
+  var stickyRef=useRef(null);
+  useEffect(function(){
+    if(!stickyOpen)return;
+    function onDown(e){if(stickyRef.current&&!stickyRef.current.contains(e.target))setStickyOpen(false);}
+    document.addEventListener('mousedown',onDown);
+    return function(){document.removeEventListener('mousedown',onDown);};
+  },[stickyOpen]);
+
+  return(
+<>
+<div
+  style={{background:'#F5EDE0',padding:'16px 16px 24px',marginTop:0}}
+  onDragOver={function(e){e.preventDefault();}}
+  onDrop={function(e){
+    e.preventDefault();var fromId=e.dataTransfer.getData('draftId');if(!fromId)return;
+    var allDr=app.allDrafts[app.projId]||[];var fromDraft=allDr.find(function(d){return d.id===fromId;});
+    if(fromDraft&&fromDraft.status!=='loose_thread')app.updateDraft(app.projId,fromId,{status:'loose_thread',order:null,parentId:null});
+  }}>
+  {/* Section header */}
+  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
+    <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'var(--text)'}}>Loose Threads</span>
+    {filteredThreads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:22,height:22,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{filteredThreads.length}</span>}
+  </div>
+  {/* Tile grid — always shows everything; this is the "scrolled all the
+      way down" destination, so there's no point hiding anything here. */}
+  <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
+    {/* Ghost add tile */}
+    <div onClick={openCreateFlow} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
+      onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';}}
+      onMouseLeave={function(e){e.currentTarget.style.borderColor='#A88060';}}>
+      <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
+    </div>
+    {sortedThreads.map(function(d){return <LooseThreadTile key={d.id} d={d} app={app} pid={pid} inStructure={inStructure}/>;})}
     {sortedThreads.length===0&&(
 <div style={{fontSize:13,color:'var(--placeholder)',fontStyle:'italic',padding:'8px 0'}}>No loose threads yet. Drag a draft here or click + to add one.</div>
     )}
   </div>
   {drawer}
 </div>
+<div ref={stickyRef} style={{position:'fixed',bottom:20,left:16,zIndex:390,display:'flex',flexDirection:'column',alignItems:'flex-start',gap:10}}>
+  {stickyOpen&&(
+<div style={{background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:12,boxShadow:'0 8px 28px rgba(42,31,16,.18)',padding:12,maxHeight:'60vh',overflowY:'auto',width:'min(480px, calc(100vw - 120px))'}}>
+  <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
+    <div onClick={openCreateFlow} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
+      onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';}}
+      onMouseLeave={function(e){e.currentTarget.style.borderColor='#A88060';}}>
+      <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
+    </div>
+    {sortedThreads.map(function(d){return <LooseThreadTile key={'sticky-'+d.id} d={d} app={app} pid={pid} inStructure={false}/>;})}
+  </div>
+</div>
+  )}
+  <button onClick={function(){setStickyOpen(!stickyOpen);}} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:24,boxShadow:'0 4px 14px rgba(42,31,16,.15)',cursor:'pointer'}}
+    onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
+    onMouseOut={function(e){e.currentTarget.style.background='var(--bg1)';}}>
+    <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--teal)'}}>push_pin</span>
+    <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,fontWeight:600,color:'#6B4A26'}}>Loose Threads</span>
+    {filteredThreads.length>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:20,height:20,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{filteredThreads.length}</span>}
+    <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--mid)'}}>{stickyOpen?'expand_more':'expand_less'}</span>
+  </button>
+</div>
+</>
   );
 }
 
@@ -776,7 +804,7 @@ export default function CardsView({app}){
   });
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} structureMode={structureMode} onStructureToggle={function(v){setStructureMode(v);}} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onBind={function(){setBindOpen(true);}} structureMode={structureMode} onStructureToggle={function(v){setStructureMode(v);}} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
   <div className="view-area dot-grid">
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div className="cards-grid"
