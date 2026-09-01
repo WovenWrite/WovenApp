@@ -227,6 +227,7 @@ function TableView({app}){
     if(!c.id||seenColIds[c.id])return false;
     seenColIds[c.id]=true;return true;
   });
+  console.log('[Woven debug] draftFieldDefs raw:',draftFieldDefs,'allAvailColsRaw ids:',allAvailColsRaw.map(function(c){return c.id;}),'allAvailCols after dedup:',allAvailCols.map(function(c){return c.id;}));
 
   // Persisted via saveDB/loadDB (Supabase-backed) AND localStorage. Once
   // localStorage has a value, it's treated as authoritative for the rest
@@ -264,14 +265,17 @@ function TableView({app}){
   useEffect(function(){
     var known={};colOrder.forEach(function(id){known[id]=true;});
     var missing=allAvailCols.filter(function(c){return !known[c.id];}).map(function(c){return c.id;});
+    console.log('[Woven debug] reconcile check — allAvailCols:',allAvailCols.map(function(c){return c.id;}),'colOrder:',colOrder,'missing:',missing);
     if(missing.length>0)persistColOrder(colOrder.concat(missing));
   },[allAvailCols.map(function(c){return c.id;}).join(',')]);
   // Title is the row's identifying column and anchors the fixed "open
   // draft" column right after it — it can be reordered but never hidden.
   var visCols=colOrder.filter(function(id){return availIds[id]&&(id==='title'||hiddenCols.indexOf(id)<0);});
+  console.log('[Woven debug] render — colOrder:',colOrder,'hiddenCols:',hiddenCols,'visCols:',visCols);
   function toggleCol(id){
     if(id==='title')return;
     var next=hiddenCols.indexOf(id)>=0?hiddenCols.filter(function(c){return c!==id;}):hiddenCols.concat([id]);
+    console.log('[Woven debug] toggleCol — id:',id,'was hidden:',hiddenCols.indexOf(id)>=0,'next hiddenCols:',next,'is id in colOrder?',colOrder.indexOf(id)>=0);
     persistHiddenCols(next);
   }
 
