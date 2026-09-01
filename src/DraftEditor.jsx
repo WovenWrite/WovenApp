@@ -3,7 +3,8 @@ import PropertiesDrawer from './PropertiesDrawer'
 import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
 import CommentsDrawer from './CommentsDrawer'
-import { saveSnapshot, VOLUME_SNAPSHOT_WORDS, MIN_SNAPSHOT_INTERVAL_MS, loadComments, saveComment, markCommentsOrphaned } from './utils'
+import CompareView from './CompareView'
+import { saveSnapshot, VOLUME_SNAPSHOT_WORDS, MIN_SNAPSHOT_INTERVAL_MS, loadComments, saveComment, markCommentsOrphaned, resolveComment, reopenComment } from './utils'
 // ── DraftEditor.jsx ──
 // Quill-based draft editor.
 // Requires in index.html:
@@ -104,10 +105,11 @@ function StyledSelect({value,onChange,options,style}){
 }
 
 // ── Branch Dropdown ──
-function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}){
+function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary,onCompareTwo}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
   var sc=useState(false);var creating=sc[0];var setCreating=sc[1];
   var sn=useState('');var newName=sn[0];var setNewName=sn[1];
+  var scb=useState([]);var selectedBranches=scb[0];var setSelectedBranches=scb[1];
   var ref=useRef(null);
   useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
   var hasBranches=branches&&branches.length>1;
@@ -115,6 +117,19 @@ function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}
   var btnLabel=hasBranches?(branches.length+' strands'):'Create strand';
   function handleCreate(){setCreating(true);var num=branches?branches.length+1:2;var draft=activeBranch&&activeBranch.draftTitle||'Draft';setNewName(draft+'_Strand_'+num);}
   function confirmCreate(){if(newName.trim())onCreate(newName.trim());setCreating(false);setNewName('');setOpen(false);}
+  function toggleSelectBranch(id,e){
+    e.stopPropagation();
+    setSelectedBranches(function(prev){
+      if(prev.indexOf(id)>=0)return prev.filter(function(x){return x!==id;});
+      if(prev.length>=2)return [prev[1],id];
+      return prev.concat([id]);
+    });
+  }
+  function handleCompareClick(){
+    if(selectedBranches.length!==2||!onCompareTwo)return;
+    onCompareTwo(selectedBranches[0],selectedBranches[1]);
+    setSelectedBranches([]);setOpen(false);
+  }
   var sorted=branches?[].concat(branches.filter(function(b){return b.id===activeBranchId;}),branches.filter(function(b){return b.id!==activeBranchId;})):[];
   return(
 <div ref={ref} style={{position:'relative'}}>
@@ -141,6 +156,15 @@ function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}
   onClick={function(){if(!isActive){onSwitch(b.id);setOpen(false);}}}
   onMouseOver={function(e){if(!isActive)e.currentTarget.style.background='rgba(42,31,16,.04)';}}
   onMouseOut={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
+  {hasBranches&&(
+  <div
+    onClick={function(e){toggleSelectBranch(b.id,e);}}
+    title="Select to compare"
+    style={{width:14,height:14,borderRadius:4,border:'1.5px solid '+(selectedBranches.indexOf(b.id)>=0?T.amber:T.border),background:selectedBranches.indexOf(b.id)>=0?T.amber:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+  >
+    {selectedBranches.indexOf(b.id)>=0&&<span className="mi" style={{fontSize:10,color:'#fff'}}>check</span>}
+  </div>
+  )}
   <span style={{flex:1,fontSize:13,fontWeight:isActive?600:400,color:isActive?T.amber:T.textDark,fontFamily:'Crimson Text, serif'}}>{b.name}</span>
   <button onClick={function(e){e.stopPropagation();onSetPrimary(b.id);}} style={{background:'none',border:'none',cursor:'pointer',padding:2,display:'flex',alignItems:'center',color:b.isPrimary?T.amber:T.border,transition:'color .15s'}}
     onMouseOver={function(e){e.currentTarget.style.color=T.amber;}}
@@ -149,6 +173,13 @@ function BranchDropdown({branches,activeBranchId,onSwitch,onCreate,onSetPrimary}
   </button>
 </div>
   );})}
+  {selectedBranches.length===2&&(
+  <div style={{padding:'8px 14px',borderTop:'1px solid '+T.border,background:'rgba(196,94,40,.06)'}}>
+    <button onClick={handleCompareClick} style={{width:'100%',padding:'7px 0',background:T.textDark,color:'#fdf8f0',border:'none',borderRadius:6,fontSize:12,cursor:'pointer',fontFamily:'DM Sans, sans-serif',fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+      <span className="mi" style={{fontSize:14}}>difference</span>Compare selected
+    </button>
+  </div>
+  )}
   <div style={{padding:'8px 14px',borderTop:'1px solid '+T.border}}>
     <button onClick={handleCreate} style={{width:'100%',padding:'7px 0',background:'transparent',border:'1px dashed '+T.border,borderRadius:6,fontSize:12,color:T.text,cursor:'pointer',fontFamily:'DM Sans, sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
       <span className="mi" style={{fontSize:14}}>add</span>New strand
@@ -338,6 +369,7 @@ function DraftEditor({app}){
   var pendingCommentRange=useRef(null);
   var cbp=useState(null);var commentBtnPos=cbp[0];var setCommentBtnPos=cbp[1];
   var fci=useState(null);var focusCommentId=fci[0];var setFocusCommentId=fci[1];
+  var scd=useState(null);var compareData=scd[0];var setCompareData=scd[1];
 
   // Derived font size from zoom
   var baseFontSize=DEFAULT_FONT_SIZE;
@@ -392,6 +424,12 @@ function DraftEditor({app}){
     // save handler can detect when their anchor text gets deleted.
     loadComments(did).then(function(list){
       activeCommentIdsRef.current=list.filter(function(c){return !c.resolved&&!c.orphaned;}).map(function(c){return c.id;});
+      list.forEach(function(c){
+        if(c.resolved){
+          var nodes=q.root.querySelectorAll('[data-comment-id="'+c.id+'"]');
+          nodes.forEach(function(n){n.classList.add('wv-comment-resolved');});
+        }
+      });
     });
     q.on('selection-change',function(range){
       if(!range||range.length===0){
@@ -558,6 +596,32 @@ function DraftEditor({app}){
     saveComment(did,{id:commentId,versionId:lastVersionId.current,authorName:authorName,anchorText:anchorText.trim(),body:text.trim()}).then(function(row){
       if(row)activeCommentIdsRef.current=activeCommentIdsRef.current.concat([commentId]);
     });
+  }
+
+  function handleDismissComment(comment){
+    if(quillRef.current){
+      var nodes=quillRef.current.root.querySelectorAll('[data-comment-id="'+comment.id+'"]');
+      nodes.forEach(function(n){n.classList.add('wv-comment-resolved');});
+    }
+    activeCommentIdsRef.current=activeCommentIdsRef.current.filter(function(id){return id!==comment.id;});
+    return resolveComment(comment.id);
+  }
+
+  function handleReopenComment(comment){
+    if(quillRef.current){
+      var nodes=quillRef.current.root.querySelectorAll('[data-comment-id="'+comment.id+'"]');
+      nodes.forEach(function(n){n.classList.remove('wv-comment-resolved');});
+    }
+    if(activeCommentIdsRef.current.indexOf(comment.id)<0)activeCommentIdsRef.current=activeCommentIdsRef.current.concat([comment.id]);
+    return reopenComment(comment.id);
+  }
+
+  function handleCompareBranches(idA,idB){
+    var all=(app&&app.allDrafts&&app.allDrafts[pid])||[];
+    var a=all.find(function(d){return d.id===idA;});
+    var b=all.find(function(d){return d.id===idB;});
+    if(!a||!b)return;
+    setCompareData({labelA:a.title||'Untitled',bodyA:a.body||'',labelB:b.title||'Untitled',bodyB:b.body||''});
   }
 
   function handleRestoreVersion(body){
@@ -762,7 +826,8 @@ function DraftEditor({app}){
       }
       .ql-bubble .ql-fill { fill: #fdf8f0; }
       .wv-comment-mark { background: rgba(196,94,40,.16); border-bottom: 2px solid rgba(196,94,40,.55); cursor: pointer; }
-      .wv-comment-mark.wv-comment-resolved { background: rgba(122,90,56,.08); border-bottom-color: rgba(122,90,56,.3); }
+      .wv-comment-mark.wv-comment-resolved { background: transparent; border-bottom: none; cursor: default; }
+      .wv-flow-active .wv-comment-mark { background: transparent; border-bottom: none; }
     `;
     document.head.appendChild(style);
   },[]);
@@ -782,7 +847,7 @@ function DraftEditor({app}){
     </div>
     <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
       <div className="nav-drawers" style={{display:'flex',alignItems:'center',gap:10}}>
-        <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary}/>
+        <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onCompareTwo={handleCompareBranches}/>
         <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowComments(false);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
         <IconBtn icon="comment" title="Comments" onClick={function(){setShowComments(!showComments);setShowVersions(false);setShowProperties(false);setShowSpool(false);}} active={showComments}/>
         <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowComments(false);setShowSpool(false);}} active={showProperties}/>
@@ -842,7 +907,7 @@ function DraftEditor({app}){
       {/* Editor scroll area */}
       <div style={{flex:1,overflowY:'scroll',WebkitOverflowScrolling:'touch',paddingTop:48,paddingBottom:20,paddingLeft:40,paddingRight:56,background:T.bodyBg}} className="editor-scroll-area">
         <div style={{maxWidth:maxWidth+'px',margin:'0 auto',transition:'max-width .2s',position:'relative'}}>
-          <div ref={editorContainerRef} style={editorBodyStyle}/>
+          <div ref={editorContainerRef} className={flowMode?'wv-flow-active':''} style={editorBodyStyle}/>
           {commentBtnPos&&(
             <button
               onMouseDown={function(e){e.preventDefault();handleAddComment();}}
@@ -868,12 +933,20 @@ function DraftEditor({app}){
       <StrandsDrawer app={app} draft={draft} variant="inline" strandId={strandDetailId} onOpenStrand={setStrandDetailId} onClose={function(){setShowSpool(false);setStrandDetailId(null);}}/>
     )}
     {!flowMode&&showVersions&&(
-      <VersionsDrawer draftId={did} variant="inline" onClose={function(){setShowVersions(false);}} onRestore={handleRestoreVersion} onSaveVersion={handleManualSnapshot}/>
+      <VersionsDrawer draftId={did} variant="inline" onClose={function(){setShowVersions(false);}} onRestore={handleRestoreVersion} onSaveVersion={handleManualSnapshot} onCompare={setCompareData}/>
     )}
     {!flowMode&&showComments&&(
-      <CommentsDrawer draftId={did} variant="inline" focusCommentId={focusCommentId} onClose={function(){setShowComments(false);setFocusCommentId(null);}}/>
+      <CommentsDrawer draftId={did} variant="inline" focusCommentId={focusCommentId} onDismiss={handleDismissComment} onReopen={handleReopenComment} onClose={function(){setShowComments(false);setFocusCommentId(null);}}/>
     )}
   </div>
+  <CompareView
+    open={!!compareData}
+    labelA={compareData&&compareData.labelA}
+    bodyA={compareData&&compareData.bodyA}
+    labelB={compareData&&compareData.labelB}
+    bodyB={compareData&&compareData.bodyB}
+    onClose={function(){setCompareData(null);}}
+  />
 
 </div>
   );
