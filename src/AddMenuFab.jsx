@@ -24,6 +24,10 @@ import { projLabel } from './projectConfig'
 
 export default function AddMenuFab({app}){
   var pid=app.projId;
+  // Storyboard's Loose Threads bar now sits full-width flush against the
+  // bottom of the viewport, so the FAB needs to sit above it there.
+  // Canvas and Table don't have that bar, so they keep the normal offset.
+  var fabBottom=app.view==='cards'?90:28;
   var so=useState(false);var open=so[0];var setOpen=so[1];
   var ref=useRef(null);
   useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
@@ -84,7 +88,7 @@ export default function AddMenuFab({app}){
 
   return(
 <>
-  <div ref={ref} style={{position:'fixed',bottom:28,right:28,zIndex:400,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:10}}>
+  <div ref={ref} style={{position:'fixed',bottom:fabBottom,right:28,zIndex:400,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:10}}>
     {open&&(
 <div style={{background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:12,boxShadow:'0 8px 28px rgba(42,31,16,.18)',overflow:'hidden',minWidth:200}}>
   {menuItems.map(function(item,i){return(
