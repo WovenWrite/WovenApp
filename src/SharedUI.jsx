@@ -207,6 +207,39 @@ var DRAWER_CSS = `
 .wv-draft-thumb-empty{width:100%;height:100%;display:flex;align-items:center;
   justify-content:center;color:#A88060;}
 
+/* Toggle switch — labeled on/off control, e.g. "show cover image" */
+.wv-toggle-row{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;padding:2px 0;}
+.wv-toggle{width:36px;height:20px;border-radius:10px;flex-shrink:0;position:relative;
+  background:var(--bg3);transition:background .15s;}
+.wv-toggle.on{background:var(--indigo);}
+.wv-toggle-knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
+  background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(42,31,16,.25);}
+.wv-toggle.on .wv-toggle-knob{left:18px;}
+.wv-toggle-label{font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);}
+
+/* Card-style selectable options — richer alternative to a Radio group when
+   each option needs an icon + description (e.g. sequence mode). */
+.wv-card-opt-group{display:flex;flex-direction:column;gap:8px;}
+.wv-card-opt{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;
+  border:1.5px solid #E2D0B8;border-radius:10px;cursor:pointer;background:rgba(255,252,248,.4);
+  transition:border-color .12s ease,background .12s ease;}
+.wv-card-opt:hover{border-color:#C45E28;}
+.wv-card-opt.sel{border-color:#C45E28;background:rgba(196,94,40,.06);}
+.wv-card-opt-icon{font-size:20px;color:#A88060;flex-shrink:0;margin-top:1px;}
+.wv-card-opt.sel .wv-card-opt-icon{color:#C45E28;}
+.wv-card-opt-body{min-width:0;}
+.wv-card-opt-label{font-family:'DM Sans',sans-serif;font-weight:600;font-size:14px;color:#6B4A26;}
+.wv-card-opt-desc{font-size:12px;color:var(--mid);margin-top:2px;}
+
+/* Spool suggestion chips — Project Builder "add context" step */
+.pw-spool-chips{display:flex;flex-wrap:wrap;gap:8px;}
+.pw-spool-chip{display:inline-flex;align-items:center;padding:7px 14px;border-radius:20px;
+  font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:#6B4A26;
+  background:rgba(255,252,248,.5);border:1.5px solid #E2D0B8;cursor:pointer;
+  transition:border-color .12s ease,background .12s ease,color .12s ease;}
+.pw-spool-chip:hover{border-color:#C45E28;}
+.pw-spool-chip.sel{background:#C45E28;border-color:#C45E28;color:#fff;}
+
 /* Mobile — inline drawers become full-screen sheets */
 @media(max-width:768px){
   .wv-drawer--inline{position:fixed;top:54px;bottom:0;left:0;right:0;z-index:50;
@@ -216,7 +249,7 @@ var DRAWER_CSS = `
 `;
 
 var styleInjected = false;
-function useDrawerStyles() {
+export function useDrawerStyles() {
   useEffect(function () {
     if (styleInjected) return;
     if (document.getElementById('wv-drawer-styles')) { styleInjected = true; return; }
@@ -427,6 +460,110 @@ export function Field({ label, wrap, className, style, innerRef, resizeMode, row
     <div className="wv-field-wrap">
       {label && <label className="wv-field-lbl">{label}</label>}
       {box}
+    </div>
+  );
+}
+
+// A labeled single-line input — the <input>-tag sibling to Field, for cases
+// that need a native input type (date, number) or need to avoid Field's
+// auto-growing textarea (e.g. a title field with Enter-to-advance). Same
+// label-above-box visual language as Field so the two are interchangeable
+// depending on whether the content is single-line/native or free-text.
+export function InputField({ label, wrap, className, style, innerRef, ...rest }) {
+  var box = (
+    <input
+      ref={innerRef}
+      className={'wv-field-box' + (className ? ' ' + className : '')}
+      style={style}
+      {...rest}
+    />
+  );
+  if (wrap === false) {
+    return (
+      <>
+        {label && <label className="wv-field-lbl">{label}</label>}
+        {box}
+      </>
+    );
+  }
+  return (
+    <div className="wv-field-wrap">
+      {label && <label className="wv-field-lbl">{label}</label>}
+      {box}
+    </div>
+  );
+}
+
+// A labeled dropdown — the <select>-tag sibling to Field/InputField, for a
+// standard "choose one of these options" control (e.g. goal type). Pass
+// <option> children as usual.
+export function SelectField({ label, wrap, className, style, innerRef, children, ...rest }) {
+  var box = (
+    <select
+      ref={innerRef}
+      className={'wv-field-box' + (className ? ' ' + className : '')}
+      style={style}
+      {...rest}
+    >
+      {children}
+    </select>
+  );
+  if (wrap === false) {
+    return (
+      <>
+        {label && <label className="wv-field-lbl">{label}</label>}
+        {box}
+      </>
+    );
+  }
+  return (
+    <div className="wv-field-wrap">
+      {label && <label className="wv-field-lbl">{label}</label>}
+      {box}
+    </div>
+  );
+}
+
+// A labeled on/off switch. Pass `label` for an inline description next to
+// the switch itself (e.g. "Show a cover image on each storyboard card"), or
+// omit it when the field's own label is already shown elsewhere (e.g. next
+// to a thumbnail upload) and the switch just needs to sit beside it.
+export function Toggle({ on, onClick, label, help }) {
+  return (
+    <div>
+      <div className="wv-toggle-row" onClick={onClick}>
+        <span className={'wv-toggle' + (on ? ' on' : '')}>
+          <span className="wv-toggle-knob" />
+        </span>
+        {label && <span className="wv-toggle-label">{label}</span>}
+      </div>
+      {help && <HelpText style={{ marginTop: 2 }}>{help}</HelpText>}
+    </div>
+  );
+}
+
+// A vertical stack of selectable cards — each with an optional icon, a
+// label, and a short description. Use in place of a Radio group whenever
+// the description matters enough to want more visual weight per option
+// (e.g. sequence mode). `options` is [{ id, label, desc, icon }].
+export function CardOptionGroup({ options, value, onChange }) {
+  return (
+    <div className="wv-card-opt-group">
+      {(options || []).map(function (o) {
+        return (
+          <div
+            key={o.id}
+            className={'wv-card-opt' + (value === o.id ? ' sel' : '')}
+            onClick={function () { onChange(o.id); }}
+          >
+            {o.icon && <span className="mi wv-card-opt-icon">{o.icon}</span>}
+            <div className="wv-card-opt-body">
+              <div className="wv-card-opt-label">{o.label}</div>
+              {o.desc && <div className="wv-card-opt-desc">{o.desc}</div>}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

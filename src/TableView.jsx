@@ -5,7 +5,7 @@ import StrandsDrawer from './StrandsDrawer'
 import { StatusSelect, StrandSearchDropdown, FloatingPanel } from './SharedUI'
 import { genId, stripHtml, initials } from './utils'
 import { projIsNumbered, projSequence, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
-import { buildTree, applyFS, loadFilterState, persistFilterState, ViewHeader, DraftLoadingSpinner, EmptyDrafts, LooseThreadsSection, TaggedSpoolsEditor, saveDB, loadDB } from './App'
+import { buildTree, applyFS, loadFilterState, persistFilterState, ViewHeader, DraftLoadingSpinner, EmptyDrafts, TaggedSpoolsEditor, saveDB, loadDB } from './App'
 
 // ── ExpandingCell ──
 // When the row isn't expanded: clamped to 2 lines. When the row IS
@@ -172,6 +172,17 @@ function TableView({app}){
   var sf=useState(function(){return loadFilterState(app.projId);});var filter=sf[0];var setFilterRaw=sf[1];
   function setFilter(next){setFilterRaw(next);persistFilterState(app.projId,next);}
   var ss=useState('order');var sort=ss[0];var setSort=ss[1];
+  // Per-column sort (click the up/down arrow on a sortable header). This is
+  // separate from the toolbar's sort dropdown — whichever one the user
+  // touches most recently wins, so the two never fight silently: changing
+  // the toolbar dropdown clears any column-sort, and picking a column
+  // simply overrides display order without touching the dropdown's value.
+  var scs=useState(null);var colSort=scs[0];var setColSort=scs[1]; // {col,dir:'asc'|'desc'} | null
+  var prevSortRef=useRef(sort);
+  useEffect(function(){
+    if(sort!==prevSortRef.current){setColSort(null);prevSortRef.current=sort;}
+  },[sort]);
+  var shc=useState(null);var hoverCol=shc[0];var setHoverCol=shc[1];
   var sb=useState(false);var bindOpen=sb[0];var setBindOpen=sb[1];
   var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
   var so2=useState(null);var dragOver=so2[0];var setDragOver=so2[1];
@@ -197,7 +208,7 @@ function TableView({app}){
 
   var project=app.currentProject||{};
   var draftFieldDefs=project.draftFieldDefs||[];
-  var allAvailCols=[
+  var allAvailColsRaw=[
     {id:'title',label:'Title'},
     {id:'branches',label:'Strands'},
     {id:'status',label:'Status'},
@@ -205,44 +216,67 @@ function TableView({app}){
     {id:'synopsis',label:'Synopsis'}
     ,{id:'strandTags',label:'Spools'}
   ].concat(draftFieldDefs.map(function(f){return{id:'cf_'+f.id,label:f.label};}));
+  // Defensive de-dupe: if two field defs ever end up with the same or a
+  // missing id (e.g. a field saved before its id was assigned), they'd
+  // render as two column-picker rows sharing one React key — the second
+  // one silently eats clicks meant for the first, which looks like "the
+  // checkbox won't select." Filtering here can't fix a bad id at the
+  // source, but it stops the symptom and keeps the list sane.
+  var seenColIds={};
+  var allAvailCols=allAvailColsRaw.filter(function(c){
+    if(!c.id||seenColIds[c.id])return false;
+    seenColIds[c.id]=true;return true;
+  });
 
-  // Column order + hidden state, stored separately so custom fields are
-  // visible by default (and stay visible automatically as new ones are
-  // added) — hiding a column is an explicit opt-out, not a default.
-  //
-  // Persisted via saveDB/loadDB (Supabase-backed, same as the rest of the
-  // app's durable settings) rather than plain localStorage. localStorage
-  // is still read synchronously on first paint so there's no flicker —
-  // loadDB then corrects it once the real value comes back, which also
-  // covers the case where localStorage doesn't have it yet (new device,
-  // new browser, or a different deploy/preview origin).
+  // Persisted via saveDB/loadDB (Supabase-backed) AND localStorage. Once
+  // localStorage has a value, it's treated as authoritative for the rest
+  // of this session and the Supabase fetch below is skipped — saveDB is
+  // fire-and-forget, so on a fast remount (switching pages) the Supabase
+  // read can resolve with the *previous* value and silently overwrite
+  // whatever was just saved (this was the real cause of both the width
+  // flash and a freshly-added column getting dropped back out of
+  // colOrder). Supabase is only consulted as a first-load fallback for a
+  // browser/device that has no local copy yet — e.g. a new device.
   var orderKey='woven:colorder:'+app.projId;
   var hiddenKey='woven:colhidden:'+app.projId;
+  var hadLocalOrderRef=useRef(false);
+  var hadLocalHiddenRef=useRef(false);
   var sco2=useState(function(){
-    try{var v=localStorage.getItem(orderKey);if(v){var p=JSON.parse(v);if(Array.isArray(p))return p;}}catch(e){}
+    try{var v=localStorage.getItem(orderKey);if(v){var p=JSON.parse(v);if(Array.isArray(p)){hadLocalOrderRef.current=true;return p;}}}catch(e){}
     return allAvailCols.map(function(c){return c.id;});
   });
   var colOrder=sco2[0];var setColOrderRaw=sco2[1];
-  function persistColOrder(next){setColOrderRaw(next);saveDB(orderKey,next);}
+  function persistColOrder(next){setColOrderRaw(next);saveDB(orderKey,next);try{localStorage.setItem(orderKey,JSON.stringify(next));}catch(e){}}
   var shs=useState(function(){
-    try{var v=localStorage.getItem(hiddenKey);if(v){var p=JSON.parse(v);if(Array.isArray(p))return p;}}catch(e){}
+    try{var v=localStorage.getItem(hiddenKey);if(v){var p=JSON.parse(v);if(Array.isArray(p)){hadLocalHiddenRef.current=true;return p;}}}catch(e){}
     return [];
   });
   var hiddenCols=shs[0];var setHiddenColsRaw=shs[1];
-  function persistHiddenCols(next){setHiddenColsRaw(next);saveDB(hiddenKey,next);}
+  function persistHiddenCols(next){setHiddenColsRaw(next);saveDB(hiddenKey,next);try{localStorage.setItem(hiddenKey,JSON.stringify(next));}catch(e){}}
   useEffect(function(){
-    loadDB(orderKey,null).then(function(v){if(Array.isArray(v))setColOrderRaw(v);});
-    loadDB(hiddenKey,null).then(function(v){if(Array.isArray(v))setHiddenColsRaw(v);});
+    if(!hadLocalOrderRef.current)loadDB(orderKey,null).then(function(v){
+      if(!Array.isArray(v))return;
+      // Merge, don't replace: a Supabase copy saved before a field
+      // existed shouldn't be able to drop that field back out just
+      // because it loaded after the local reconcile already added it.
+      var known={};v.forEach(function(id){known[id]=true;});
+      var withMissing=v.concat(allAvailCols.filter(function(c){return !known[c.id];}).map(function(c){return c.id;}));
+      setColOrderRaw(withMissing);
+    });
+    if(!hadLocalHiddenRef.current)loadDB(hiddenKey,null).then(function(v){if(Array.isArray(v))setHiddenColsRaw(v);});
   },[orderKey,hiddenKey]);
   var availIds={};allAvailCols.forEach(function(c){availIds[c.id]=true;});
   // Reconcile: any available column not yet tracked in colOrder gets
-  // appended. Runs off the full column-id list (not just custom fields)
-  // so a built-in column can never permanently vanish either.
+  // appended. Runs off the full column-id list AND colOrder itself (not
+  // just when a field is added) so this self-heals if anything else — a
+  // stale Supabase read, a future bug — ever clobbers colOrder back down
+  // to missing a known field, instead of that field being silently and
+  // permanently stuck out of the column list for the rest of the session.
   useEffect(function(){
     var known={};colOrder.forEach(function(id){known[id]=true;});
     var missing=allAvailCols.filter(function(c){return !known[c.id];}).map(function(c){return c.id;});
     if(missing.length>0)persistColOrder(colOrder.concat(missing));
-  },[allAvailCols.map(function(c){return c.id;}).join(',')]);
+  },[allAvailCols.map(function(c){return c.id;}).join(','),colOrder.join(',')]);
   // Title is the row's identifying column and anchors the fixed "open
   // draft" column right after it — it can be reordered but never hidden.
   var visCols=colOrder.filter(function(id){return availIds[id]&&(id==='title'||hiddenCols.indexOf(id)<0);});
@@ -254,12 +288,14 @@ function TableView({app}){
 
   var widthsKey='woven:colwidths:'+app.projId;
   var widthDefaults={title:160,branches:110,synopsis:260,status:160,strandTags:160,wordCount:64};
+  var hadLocalWidthsRef=useRef(false);
   var scw=useState(function(){
-    try{var v=localStorage.getItem(widthsKey);if(v){var p=JSON.parse(v);if(p&&typeof p==='object')return Object.assign({},widthDefaults,p);}}catch(e){}
+    try{var v=localStorage.getItem(widthsKey);if(v){var p=JSON.parse(v);if(p&&typeof p==='object'){hadLocalWidthsRef.current=true;return Object.assign({},widthDefaults,p);}}}catch(e){}
     return widthDefaults;
   });
   var colWidths=scw[0];var setColWidthsRaw=scw[1];
   useEffect(function(){
+    if(hadLocalWidthsRef.current)return;
     loadDB(widthsKey,null).then(function(v){if(v&&typeof v==='object')setColWidthsRaw(function(prev){return Object.assign({},widthDefaults,prev,v);});});
   },[widthsKey]);
   var resizing=useRef(null);
@@ -268,19 +304,53 @@ function TableView({app}){
     resizing.current={col:col,startX:e.clientX,startW:colWidths[col]||160};
     function onMove(e2){if(!resizing.current)return;var diff=e2.clientX-resizing.current.startX;var nw=Math.max(60,resizing.current.startW+diff);setColWidthsRaw(function(prev){var n=Object.assign({},prev);n[resizing.current.col]=nw;return n;});}
     function onUp(){
-      if(resizing.current){setColWidthsRaw(function(prev){saveDB(widthsKey,prev);return prev;});}
+      if(resizing.current){setColWidthsRaw(function(prev){saveDB(widthsKey,prev);try{localStorage.setItem(widthsKey,JSON.stringify(prev));}catch(e){}return prev;});}
       resizing.current=null;document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);
     }
     document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
   }
   var allDrafts=app.allDrafts[app.projId]||[];
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
-  var ltDrafts=allDrafts.filter(function(d){return d.status==='loose_thread'&&!d.archived;});
-  var displayed=(sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort),app.currentProject):applyFS(tree,filter,sort)).filter(function(p){
+  var displayed=(sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort,app.currentProject),app.currentProject):applyFS(tree,filter,sort,app.currentProject)).filter(function(p){
     if(!searchQ.trim())return true;
     var q=searchQ.toLowerCase();
     return (p.title||'').toLowerCase().includes(q)||(p.synopsis||'').toLowerCase().includes(q)||(p.body?stripHtml(p.body).toLowerCase().includes(q):false);
   });
+  // Sortable columns: only ones with an unambiguous comparable value.
+  // strandTags/branches/text-type custom fields aren't included — "sort
+  // by" doesn't have one obvious meaning for a tag list or free text, so
+  // no arrows show on those headers. Number-type custom fields and the
+  // sequence #/Date column do have an obvious order, so those are added
+  // dynamically. 'seq' is a pseudo-column id for the sequence #/Date
+  // header, which renders outside the visCols loop.
+  var SORTABLE_COLS={title:'string',status:'string',wordCount:'number',synopsis:'string',seq:'number'};
+  draftFieldDefs.forEach(function(f){if(f.type==='number')SORTABLE_COLS['cf_'+f.id]='number';});
+  function getSortVal(d,col){
+    if(col==='seq'){
+      if(tblByDate){var dt=draftDateOf(d);return dt?new Date(dt).getTime():-Infinity;}
+      return typeof d.order==='number'?d.order:-Infinity;
+    }
+    if(col==='wordCount')return d.wordCount||0;
+    if(col.indexOf('cf_')===0&&SORTABLE_COLS[col]==='number'){
+      var num=parseFloat(d.customFields&&d.customFields[col.slice(3)]);
+      return isNaN(num)?-Infinity:num;
+    }
+    return (d[col]||'').toString().toLowerCase();
+  }
+  function toggleColSort(col){
+    setColSort(function(prev){
+      if(!prev||prev.col!==col)return {col:col,dir:'asc'};
+      if(prev.dir==='asc')return {col:col,dir:'desc'};
+      return null;
+    });
+  }
+  if(colSort&&SORTABLE_COLS[colSort.col]){
+    displayed=displayed.slice().sort(function(a,b){
+      var av=getSortVal(a,colSort.col),bv=getSortVal(b,colSort.col);
+      var cmp=av<bv?-1:av>bv?1:0;
+      return colSort.dir==='desc'?-cmp:cmp;
+    });
+  }
   function addDraft(){var seqCount=allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.parentId;}).length;app.addDraft(app.projId,{id:genId(),projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqCount+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});}
   var tblProjStrands=app.allStrands[app.projId]||{};
   var tblProjTemplates=app.allTemplates[app.projId]||[];
@@ -370,32 +440,58 @@ function TableView({app}){
     </div>
   </td>
   )}
-  {visCols.map(function(col){var td=<td key={col} style={{verticalAlign:vAlign,overflow:'hidden'}} onClick={col==='branches'?function(e){e.stopPropagation();}:undefined}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId,rowExpanded:rowExp,branchesOpen:isExpanded,childCount:childCount})}</td>;if(col==='title')return [td,<td key="__arrowcol" style={{verticalAlign:vAlign}} onClick={function(e){e.stopPropagation();}}><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
+  {visCols.map(function(col){var td=<td key={col} style={{verticalAlign:vAlign,overflow:'hidden',maxWidth:colWidths[col]||160,wordBreak:'break-word',overflowWrap:'anywhere'}} onClick={col==='branches'?function(e){e.stopPropagation();}:undefined}>{renderCell(col,draft,{isNested:isNested,hasChildren:hasChildren,parentId:parentId,rowExpanded:rowExp,branchesOpen:isExpanded,childCount:childCount})}</td>;if(col==='title')return [td,<td key="__arrowcol" style={{verticalAlign:vAlign}} onClick={function(e){e.stopPropagation();}}><button onClick={function(){app.openDraft(draft.id);}} title="Open draft" style={{background:'transparent',border:'none',cursor:'pointer',padding:4,display:'flex',alignItems:'center',color:'var(--mid)',transition:'color .15s'}} onMouseOver={function(e){e.currentTarget.style.color='var(--indigo)';}} onMouseOut={function(e){e.currentTarget.style.color='var(--mid)';}}>
     <span className="material-symbols-outlined" style={{fontSize:18}}>arrow_forward</span>
   </button></td>];return td;})}
   <td style={{verticalAlign:vAlign}}/>
 </tr>
     );
   }
-  var totalTableWidth=28+(tblNumbered?36:0)+(tblByDate?96:0)+visCols.reduce(function(sum,col){var w=colWidths[col]||160;return sum+w+(col==='title'?34:0);},0)+46;
+  var minColW=70;
+  var minTableWidth=28+(tblNumbered?36:0)+(tblByDate?96:0)+visCols.reduce(function(sum,col){return sum+minColW+(col==='title'?34:0);},0)+46;
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onAddDraft={addDraft} onBind={function(){setBindOpen(true);}} hideStructure={true} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onBind={function(){setBindOpen(true);}} hideStructure={true} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
   <div className="table-wrap" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto',padding:20}}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>
-  <table className="wt" style={{width:totalTableWidth+'px',minWidth:'100%'}}>
+  <table className="wt" style={{width:'100%',tableLayout:'fixed',minWidth:minTableWidth+'px'}}>
     <thead>
       <tr style={{background:'#E2D0B8'}}>
         <th style={{width:28,background:'#E2D0B8'}}/>
-        {tblNumbered&&<th style={{width:36,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>#</th>}
-        {tblByDate&&<th style={{width:96,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}>Date</th>}
-        {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});var thEl=(
-<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600,userSelect:'none',position:'relative'}} className="resizable"
+        {(tblNumbered||tblByDate)&&(function(){
+          var seqSorted=colSort&&colSort.col==='seq';
+          var seqShowArrow=hoverCol==='seq'||seqSorted;
+          return(
+<th style={{width:tblNumbered?36:96,background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600}}
+  onMouseEnter={function(){setHoverCol('seq');}}
+  onMouseLeave={function(){setHoverCol(function(h){return h==='seq'?null:h;});}}>
+  <span style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}>
+    <span>{tblNumbered?'#':'Date'}</span>
+    {seqShowArrow&&(
+    <button onClick={function(e){e.stopPropagation();toggleColSort('seq');}} title="Sort" style={{background:'transparent',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',flexShrink:0,color:seqSorted?'#C45E28':'#6B4A26'}}>
+      <span className="mi" style={{fontSize:16}}>{seqSorted?(colSort.dir==='asc'?'arrow_upward':'arrow_downward'):'unfold_more'}</span>
+    </button>
+    )}
+  </span>
+</th>
+          );
+        })()}
+        {visCols.map(function(col){var av=allAvailCols.find(function(c){return c.id===col;});var sortable=!!SORTABLE_COLS[col];var isSorted=colSort&&colSort.col===col;var showArrow=sortable&&(hoverCol===col||isSorted);var thEl=(
+<th key={col} style={{width:colWidths[col]||160,maxWidth:colWidths[col]||160,overflow:'hidden',background:'#E2D0B8',fontFamily:'DM Sans, sans-serif',fontSize:14,color:'#6B4A26',fontWeight:600,userSelect:'none',position:'relative'}} className="resizable"
+  onMouseEnter={function(){if(sortable)setHoverCol(col);}}
+  onMouseLeave={function(){setHoverCol(function(h){return h===col?null:h;});}}
   onDragOver={function(e){e.preventDefault();}}
   onDrop={function(e){e.preventDefault();var fromId=e.dataTransfer.getData('colId');if(!fromId||fromId===col)return;var nc=colOrder.slice();var fromIdx=nc.indexOf(fromId);var toIdx=nc.indexOf(col);if(fromIdx<0||toIdx<0)return;var item=nc.splice(fromIdx,1)[0];nc.splice(toIdx,0,item);persistColOrder(nc);}} >
-  <span draggable={true} onDragStart={function(e){e.dataTransfer.setData('colId',col);}} style={{cursor:'grab',display:'inline-block'}}>
-    {col==='branches'?<span className="mi" style={{fontSize:18,color:'#6B4A26'}}>account_tree</span>:(av?av.label:col)}
+  <span style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}>
+    <span draggable={true} onDragStart={function(e){e.dataTransfer.setData('colId',col);}} style={{cursor:'grab',display:'inline-block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+      {col==='branches'?<span className="mi" style={{fontSize:18,color:'#6B4A26'}}>account_tree</span>:(av?av.label:col)}
+    </span>
+    {showArrow&&(
+    <button onClick={function(e){e.stopPropagation();toggleColSort(col);}} title="Sort" style={{background:'transparent',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',flexShrink:0,color:isSorted?'#C45E28':'#6B4A26'}}>
+      <span className="mi" style={{fontSize:16}}>{isSorted?(colSort.dir==='asc'?'arrow_upward':'arrow_downward'):'unfold_more'}</span>
+    </button>
+    )}
   </span>
   <div className="col-resize-handle" onMouseDown={function(e){e.stopPropagation();startResize(col,e);}}/>
 </th>
@@ -439,7 +535,6 @@ function TableView({app}){
 </div>
   </FloatingPanel>
   <BindDrawer app={app} open={bindOpen} variant="overlay" topOffset={54} onClose={function(){setBindOpen(false);}} activeFilter={filter}/>
-  <LooseThreadsSection threads={ltDrafts} app={app} view="table" filter={filter}/>
   {spoolView&&(
 <StrandsDrawer
   app={app}

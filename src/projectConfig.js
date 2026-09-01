@@ -31,9 +31,9 @@ import { STATUSES, defaultFields } from './utils';
 // number. Only 'date' changes the sort and disables move up/down.
 
 export var SEQUENCE_MODES = [
-  { id: 'numeric', label: 'Numbered',   desc: 'Chapters, parts, sections — ordered and numbered.', icon: 'format_list_numbered', manual: true,  numbered: true  },
-  { id: 'date',    label: 'By date',    desc: 'Newest first, like a blog or journal.',             icon: 'calendar_month',       manual: false, numbered: false },
-  { id: 'none',    label: 'Unordered',  desc: 'Rearrange freely. No numbering.',                   icon: 'drag_indicator',       manual: true,  numbered: false }
+  { id: 'numeric', label: 'By number',  desc: 'Like chapters or sections.',        icon: 'format_list_numbered', manual: true,  numbered: true  },
+  { id: 'date',    label: 'By date',    desc: 'Like a publish or due date.',       icon: 'calendar_month',       manual: false, numbered: false },
+  { id: 'none',    label: 'Freely',     desc: 'Rearrange at will.',                icon: 'drag_indicator',       manual: true,  numbered: false }
 ];
 
 export function sequenceMode(id) {

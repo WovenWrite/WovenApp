@@ -1,6 +1,6 @@
 // @ts-nocheck
 // ── ProjectWizard ──
-// Four steps: type → name → spools → structure.
+// Five steps: type → name → spools → structure → goals.
 //
 // The type chosen in step 0 seeds everything downstream: the spool
 // collections, the sequence mode, the thumbnail setting, what a single piece
@@ -11,7 +11,10 @@
 //   <ProjectWizard app={app} onClose={fn} />
 
 import { useState, useEffect, useRef } from 'react';
-import { Radio, HelpText, DraftThumbnailUpload, OptionsEditor } from './SharedUI';
+import {
+  HelpText, DraftThumbnailUpload, OptionsEditor,
+  InputField, Field, SelectField, Toggle, CardOptionGroup, useDrawerStyles
+} from './SharedUI';
 import {
   PROJ_TYPES, SEQUENCE_MODES, GOAL_MODES, presetFor, buildConfig, presetDraftFields, defaultFields
 } from './projectConfig';
@@ -22,17 +25,28 @@ var ALL_COLLS = [
   'Subjects', 'Scenes', 'Plot Threads', 'Topics', 'Audience Notes', 'Reports'
 ];
 
+// Display order for the sequence-mode cards on the Structure step. Kept
+// separate from SEQUENCE_MODES' own array order, which must stay
+// numeric-first — sequenceMode()'s fallback and DEFAULT_CONFIG both assume
+// index 0 is 'numeric'.
+var SEQ_DISPLAY_ORDER = ['date', 'numeric', 'none'];
+
 var STEP_TITLES = [
   'What are you writing?',
   'Name your project',
-  'Your spools',
+  'Add context to your project',
   'How it is structured',
   'Deadline and pace'
 ];
 
+var FIELD_MAX_W = 220;
+
 export default function ProjectWizard({ app, onClose }) {
+  useDrawerStyles();
+
   var ss = useState(0); var step = ss[0]; var setStep = ss[1];
   var spt = useState(null); var projType = spt[0]; var setProjType = spt[1];
+  var son = useState(''); var otherName = son[0]; var setOtherName = son[1];
   var st = useState(''); var title = st[0]; var setTitle = st[1];
   var ssyn = useState(''); var synopsis = ssyn[0]; var setSynopsis = ssyn[1];
   var sim = useState(null); var image = sim[0]; var setImage = sim[1];
@@ -42,7 +56,6 @@ export default function ProjectWizard({ app, onClose }) {
   var ssq = useState('numeric'); var seqMode = ssq[0]; var setSeqMode = ssq[1];
   var sth = useState(true); var thumbnails = sth[0]; var setThumbnails = sth[1];
   var sls = useState('Draft'); var labelOne = sls[0]; var setLabelOne = sls[1];
-  var slp = useState('Drafts'); var labelMany = slp[0]; var setLabelMany = slp[1];
   var sfd = useState([]); var fields = sfd[0]; var setFields = sfd[1];
 
   // Goals step
@@ -51,35 +64,42 @@ export default function ProjectWizard({ app, onClose }) {
   var sgw = useState(''); var goalWords = sgw[0]; var setGoalWords = sgw[1];
 
   var titleRef = useRef(null);
+  var otherRef = useRef(null);
   useEffect(function () { if (step === 1 && titleRef.current) titleRef.current.focus(); }, [step]);
+  useEffect(function () { if (projType && projType.id === 'other' && otherRef.current) otherRef.current.focus(); }, [projType]);
+
+  // Step titles — step 1 is dynamic ("Set up your Fiction Project" / "Set up
+  // your Poetry Collection"), everything else is static.
+  function stepTitle() {
+    if (step === 1) {
+      var label = projType
+        ? (projType.id === 'other' ? (otherName.trim() || 'project') : projType.label)
+        : 'project';
+      return 'Set up your ' + label;
+    }
+    return STEP_TITLES[step];
+  }
 
   function selectType(t) {
     var preset = presetFor(t.id);
     var cfg = preset.config || {};
     var labels = cfg.labels || {};
     setProjType(t);
+    setOtherName('');
     setSelectedColls(t.colls || []);
     setSeqMode(cfg.sequenceMode || 'numeric');
     setThumbnails(cfg.draftThumbnails === undefined ? true : !!cfg.draftThumbnails);
     setLabelOne(labels.draft || 'Draft');
-    setLabelMany(labels.drafts || 'Drafts');
     setFields(presetDraftFields(t.id));
-    setStep(1);
+    // "Other" needs a name before it can proceed — stay on step 0 and show
+    // the inline prompt instead of advancing immediately.
+    if (t.id !== 'other') setStep(1);
   }
 
   function toggleColl(c) {
     setSelectedColls(function (sc) {
       return sc.includes(c) ? sc.filter(function (x) { return x !== c; }) : sc.concat([c]);
     });
-  }
-
-  // Typing a singular keeps the plural in step unless the user has edited it
-  // themselves — avoids "Chapter / Drafts" while still allowing "Entry /
-  // Entries" to be corrected by hand.
-  var pluralTouched = useRef(false);
-  function onLabelOneChange(v) {
-    setLabelOne(v);
-    if (!pluralTouched.current) setLabelMany(v.trim() ? v.trim() + 's' : '');
   }
 
   // ── Draft properties (step 3) ──
@@ -108,8 +128,8 @@ export default function ProjectWizard({ app, onClose }) {
     var now = new Date().toISOString();
 
     var one = labelOne.trim() || 'Draft';
-    var many = labelMany.trim() || (one + 's');
-    var labels = (one === 'Draft' && many === 'Drafts') ? {} : { draft: one, drafts: many };
+    var many = one + 's';
+    var labels = (one === 'Draft') ? {} : { draft: one, drafts: many };
 
     var words = parseInt(goalWords, 10);
     if (!(words > 0)) words = 0;
@@ -124,10 +144,14 @@ export default function ProjectWizard({ app, onClose }) {
       goalWords: words
     });
 
+    var typeLabel = (typeId === 'other' && otherName.trim())
+      ? otherName.trim()
+      : (projType ? projType.label : 'Other');
+
     var proj = {
       id: pid,
       title: title.trim(),
-      type: projType ? projType.label : 'Other',
+      type: typeLabel,
       typeId: typeId,
       synopsis: synopsis.trim(),
       image: image || null,
@@ -154,31 +178,54 @@ export default function ProjectWizard({ app, onClose }) {
     <div className="modal-overlay">
       <div className="modal-backdrop" onClick={onClose} />
       <div className="modal-box">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>{STEP_TITLES[step]}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: step === 4 ? 4 : 20 }}>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>{stepTitle()}</div>
           <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
         </div>
+        {step === 4 && (
+          <div style={{ fontSize: 13, color: 'var(--mid)', marginBottom: 18 }}>
+            Both are completely optional.
+          </div>
+        )}
 
         <div style={{ minHeight: 220 }}>
 
           {step === 0 && (
-            <div className="wizard-type-grid">
-              {PROJ_TYPES.map(function (t) {
-                return (
-                  <div key={t.id} className={'wizard-type-card' + (projType && projType.id === t.id ? ' sel' : '')} onClick={function () { selectType(t); }}>
-                    <div style={{ marginBottom: 8 }}><span className="mi" style={{ fontSize: 26, color: 'var(--indigoL)' }}>{t.icon}</span></div>
-                    <div style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 600, marginBottom: 3 }}>{t.label}</div>
-                    <div style={{ fontSize: 12, color: 'var(--mid)' }}>{t.desc}</div>
+            <div>
+              <div className="wizard-type-grid">
+                {PROJ_TYPES.map(function (t) {
+                  return (
+                    <div key={t.id} className={'wizard-type-card' + (projType && projType.id === t.id ? ' sel' : '')} onClick={function () { selectType(t); }}>
+                      <div style={{ marginBottom: 8 }}><span className="mi" style={{ fontSize: 26, color: 'var(--indigoL)' }}>{t.icon}</span></div>
+                      <div style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 600, marginBottom: 3 }}>{t.label}</div>
+                      <div style={{ fontSize: 12, color: 'var(--mid)' }}>{t.desc}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              {projType && projType.id === 'other' && (
+                <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
+                  <InputField
+                    innerRef={otherRef}
+                    label="What are you writing?"
+                    value={otherName}
+                    onChange={function (e) { setOtherName(e.target.value); }}
+                    placeholder="Poetry collection, screenplay treatment..."
+                    onKeyDown={function (e) { if (e.key === 'Enter' && otherName.trim()) setStep(1); }}
+                  />
+                  <HelpText style={{ marginTop: 6 }}>Give it a name so Woven knows what to call this kind of project.</HelpText>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+                    <button className="btn btn-primary" disabled={!otherName.trim()} onClick={function () { setStep(1); }}>Continue</button>
                   </div>
-                );
-              })}
+                </div>
+              )}
             </div>
           )}
 
           {step === 1 && (
             <div>
               <div style={{ marginBottom: 14 }}>
-                <span className="wv-field-lbl">Cover image</span>
+                <label className="wv-field-lbl">Cover image</label>
                 <DraftThumbnailUpload image={image} onUpload={setImage} />
                 {image && (
                   <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={function () { setImage(null); }}>
@@ -186,21 +233,26 @@ export default function ProjectWizard({ app, onClose }) {
                   </button>
                 )}
               </div>
-              <input
-                ref={titleRef}
-                style={{ fontSize: 18, padding: '12px 14px', background: 'var(--bg2)', border: '2px solid var(--border)', borderRadius: 10, width: '100%', marginBottom: 14, color: 'var(--text)', fontFamily: 'var(--serif)', fontWeight: 600 }}
-                value={title}
-                onChange={function (e) { setTitle(e.target.value); }}
-                placeholder="Working title..."
-                onKeyDown={function (e) { if (e.key === 'Enter' && title.trim()) setStep(2); }}
-              />
-              <textarea
-                style={{ fontSize: 14, padding: '10px 14px', background: 'var(--bg2)', border: '2px solid var(--border)', borderRadius: 10, width: '100%', color: 'var(--text)', marginBottom: 14 }}
-                value={synopsis}
-                onChange={function (e) { setSynopsis(e.target.value); }}
-                placeholder="What is this about? (optional)"
-                rows={3}
-              />
+              <div style={{ marginBottom: 14 }}>
+                <InputField
+                  innerRef={titleRef}
+                  label="Project title"
+                  value={title}
+                  onChange={function (e) { setTitle(e.target.value); }}
+                  placeholder="Working title..."
+                  onKeyDown={function (e) { if (e.key === 'Enter' && title.trim()) setStep(2); }}
+                  style={{ fontSize: 18, fontWeight: 600, fontFamily: 'var(--serif)' }}
+                />
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <Field
+                  label="Describe your project"
+                  value={synopsis}
+                  onChange={function (e) { setSynopsis(e.target.value); }}
+                  placeholder="Optional — a line or two on what this is about"
+                  rows={3}
+                />
+              </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
                 <button className="btn btn-ghost" onClick={function () { setStep(0); }}>Back</button>
                 <button className="btn btn-primary" onClick={function () { setStep(2); }} disabled={!title.trim()}>Next</button>
@@ -211,12 +263,12 @@ export default function ProjectWizard({ app, onClose }) {
           {step === 2 && (
             <div>
               <div style={{ fontSize: 14, color: 'var(--mid)', marginBottom: 14 }}>
-                Spools hold the things your story keeps coming back to. Add more any time.
+                Build custom libraries for all supporting context with Spools. You can add and edit these at any time, but here are a few suggestions to get you started...
               </div>
-              <div className="wizard-coll-tags" style={{ marginBottom: 20 }}>
+              <div className="pw-spool-chips" style={{ marginBottom: 20 }}>
                 {ALL_COLLS.map(function (c) {
                   return (
-                    <span key={c} className={'wizard-coll-tag' + (selectedColls.includes(c) ? ' sel' : '')} onClick={function () { toggleColl(c); }}>{c}</span>
+                    <span key={c} className={'pw-spool-chip' + (selectedColls.includes(c) ? ' sel' : '')} onClick={function () { toggleColl(c); }}>{c}</span>
                   );
                 })}
               </div>
@@ -230,65 +282,34 @@ export default function ProjectWizard({ app, onClose }) {
           {step === 3 && (
             <div>
               <div style={{ marginBottom: 18 }}>
-                <span className="sect-lbl">What is one piece of writing called?</span>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    value={labelOne}
-                    onChange={function (e) { onLabelOneChange(e.target.value); }}
-                    placeholder="Draft"
-                    style={{ flex: 1 }}
-                  />
-                  <input
-                    value={labelMany}
-                    onChange={function (e) { pluralTouched.current = true; setLabelMany(e.target.value); }}
-                    placeholder="Drafts"
-                    style={{ flex: 1 }}
-                  />
-                </div>
-                <HelpText style={{ marginTop: 6 }}>Singular, then plural.</HelpText>
+                <InputField
+                  label="What are elements of this project called?"
+                  value={labelOne}
+                  onChange={function (e) { setLabelOne(e.target.value); }}
+                  placeholder="Chapter, Blog, Doc, etc."
+                />
               </div>
 
               <div style={{ marginBottom: 18 }}>
-                <span className="sect-lbl">How are they ordered?</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {SEQUENCE_MODES.map(function (m) {
-                    return (
-                      <div key={m.id}>
-                        <Radio on={seqMode === m.id} onClick={function () { setSeqMode(m.id); }} label={m.label} />
-                        <div style={{ fontSize: 12, color: 'var(--mid)', marginLeft: 28, marginTop: -2 }}>{m.desc}</div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <label className="wv-field-lbl">How should these be sequenced?</label>
+                <CardOptionGroup
+                  options={SEQ_DISPLAY_ORDER.map(function (id) { return SEQUENCE_MODES.find(function (m) { return m.id === id; }); })}
+                  value={seqMode}
+                  onChange={setSeqMode}
+                />
               </div>
 
               <div style={{ marginBottom: 18 }}>
-                <span className="sect-lbl">Cover images</span>
-                <div
+                <label className="wv-field-lbl">Cover images</label>
+                <Toggle
+                  on={thumbnails}
                   onClick={function () { setThumbnails(!thumbnails); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 0' }}
-                >
-                  <span
-                    style={{
-                      width: 36, height: 20, borderRadius: 10, flexShrink: 0, position: 'relative',
-                      background: thumbnails ? 'var(--indigo)' : 'var(--bg3)', transition: 'background .15s'
-                    }}
-                  >
-                    <span style={{
-                      position: 'absolute', top: 2, left: thumbnails ? 18 : 2, width: 16, height: 16,
-                      borderRadius: '50%', background: '#fff', transition: 'left .15s',
-                      boxShadow: '0 1px 3px rgba(42,31,16,.25)'
-                    }} />
-                  </span>
-                  <span style={{ fontSize: 13, color: 'var(--text)' }}>
-                    Show a cover image on each storyboard card
-                  </span>
-                </div>
-                <HelpText style={{ marginTop: 2 }}>Off makes the cards more compact.</HelpText>
+                  label="Show a cover image on each storyboard card"
+                />
               </div>
 
               <div style={{ marginBottom: 18 }}>
-                <span className="sect-lbl">Properties for each {labelOne.trim().toLowerCase() || 'draft'}</span>
+                <label className="wv-field-lbl">Properties for each {labelOne.trim().toLowerCase() || 'draft'}</label>
                 {fields.length === 0 && <HelpText>None yet. Add one below, or skip and add them later.</HelpText>}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {fields.map(function (f, i) {
@@ -355,31 +376,28 @@ export default function ProjectWizard({ app, onClose }) {
           {step === 4 && (
             <div>
               <div style={{ marginBottom: 18 }}>
-                <span className="sect-lbl">Deadline</span>
-                <input
+                <InputField
+                  label="Deadline"
                   type="date"
                   value={dueDate}
                   onChange={function (e) { setDueDate(e.target.value); }}
-                  style={{ width: '100%' }}
+                  style={{ maxWidth: FIELD_MAX_W }}
                 />
-                <HelpText style={{ marginTop: 6 }}>Optional. Nothing happens at the deadline — it is yours to aim at.</HelpText>
               </div>
 
               <div style={{ marginBottom: 18 }}>
-                <span className="sect-lbl">Writing pace</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {GOAL_MODES.map(function (m) {
-                    return (
-                      <div key={m.id}>
-                        <Radio on={goalMode === m.id} onClick={function () { setGoalMode(m.id); }} label={m.label} />
-                        <div style={{ fontSize: 12, color: 'var(--mid)', marginLeft: 28, marginTop: -2 }}>{m.desc}</div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <SelectField
+                  label="Writing pace"
+                  value={goalMode}
+                  onChange={function (e) { setGoalMode(e.target.value); }}
+                  style={{ maxWidth: FIELD_MAX_W }}
+                >
+                  {GOAL_MODES.map(function (m) { return <option key={m.id} value={m.id}>{m.label}</option>; })}
+                </SelectField>
                 {goalMode !== 'none' && (
                   <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input
+                    <InputField
+                      wrap={false}
                       type="number"
                       min="0"
                       value={goalWords}
