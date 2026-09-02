@@ -296,7 +296,7 @@ function StrandRefField({f,sid,val,pid,app,onUpdate}){
 
 // ── Mobile spool-switcher styles (scoped to this file — new classnames only, doesn't touch shared global CSS) ──
 var SPOOL_SWITCHER_CSS=`
-.spool-mobile-bar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #A88060;background:#EDE0CC;flex-shrink:0;}
+.spool-mobile-bar{display:flex;align-items:center;gap:8px;padding:0 12px;height:54px;box-sizing:border-box;border-bottom:1px solid #A88060;background:#EDE0CC;flex-shrink:0;}
 .spool-mobile-current{display:flex;align-items:center;gap:8px;flex:1;min-width:0;padding:8px 12px;border-radius:10px;border:1px solid #A88060;background:#FDF8F0;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;color:#6B4A26;}
 .spool-mobile-current span.name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;}
 .spool-switcher-overlay{position:fixed;inset:0;z-index:60;background:var(--bg1);display:flex;flex-direction:column;}
