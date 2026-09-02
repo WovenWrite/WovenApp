@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { useState, useEffect, useRef } from "react";
-import { AvatarEditModal, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio } from './SharedUI'
+import { AvatarEditModal, Drawer, HelpText, PrimaryButton, SecondaryButton, TertiaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio, Field, InputField, SelectField, Section, SpoolThumbnailUpload, DeleteConfirmModal } from './SharedUI'
 import { FIELD_TYPES, defaultFields, initials, uploadImage } from './utils'
-import { saveDB } from './App'
+import { saveDB, loadDB } from './App'
 
 // genId, PRESET_COLORS come from utils too — pulled in below where needed.
 import { genId, PRESET_COLORS } from './utils'
@@ -247,18 +247,12 @@ function StrandRefField({f,sid,val,pid,app,onUpdate}){
     var st=refStrands.find(function(s){return s.id===r.id;});
     if(!st)return null;
     return(
-<div key={r.id+i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:10,background:spoolColor+'14',border:'1px solid '+spoolColor+'44'}}>
-  {/* Circle avatar */}
-  <div style={{width:24,height:24,borderRadius:'50%',background:st.color||spoolColor,border:'2px solid '+spoolColor,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,boxSizing:'border-box'}}>
-    {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontFamily:'DM Sans,sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
-  </div>
-  <div style={{flex:1,minWidth:0}}>
-    <div style={{fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:600,color:spoolColor}}>{st.name}</div>
-    {/* Inline label edit */}
-    <input value={r.label} onChange={function(e){updateLabel(i,e.target.value);}} placeholder="Add relationship label…" style={{fontFamily:'DM Sans,sans-serif',fontSize:11,color:'var(--mid)',background:'transparent',border:'none',outline:'none',padding:0,width:'100%',fontStyle:r.label?'normal':'italic'}}/>
-  </div>
-  <button onClick={function(){removeRef(i);}} style={{background:'none',border:'none',cursor:'pointer',padding:2,color:spoolColor,opacity:.6,display:'flex',alignItems:'center'}}>
-    <span className="material-symbols-outlined" style={{fontSize:14}}>close</span>
+<div key={r.id+i} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 0',borderBottom:'1px solid #E2D0B8'}}>
+  <span style={{fontFamily:"'DM Sans',sans-serif",fontSize:16,color:'#7A5A38',flexShrink:0}}>{st.name}</span>
+  <span className="mi" style={{fontSize:16,color:'#A88060',flexShrink:0}}>arrow_forward</span>
+  <input value={r.label} onChange={function(e){updateLabel(i,e.target.value);}} placeholder="Add relationship…" style={{flex:1,minWidth:0,fontFamily:"'DM Sans',sans-serif",fontSize:16,color:'#A88060',background:'transparent',border:'none',outline:'none',padding:0,fontStyle:r.label?'normal':'italic'}}/>
+  <button onClick={function(){removeRef(i);}} style={{background:'none',border:'none',cursor:'pointer',padding:2,color:'#A88060',opacity:.6,display:'flex',alignItems:'center',flexShrink:0}}>
+    <span className="material-symbols-outlined" style={{fontSize:16}}>close</span>
   </button>
 </div>
     );
@@ -296,7 +290,7 @@ function StrandRefField({f,sid,val,pid,app,onUpdate}){
 
 // ── Mobile spool-switcher styles (scoped to this file — new classnames only, doesn't touch shared global CSS) ──
 var SPOOL_SWITCHER_CSS=`
-.spool-mobile-bar{display:flex;align-items:center;gap:8px;padding:0 12px;height:54px;box-sizing:border-box;border-bottom:1px solid #A88060;background:#EDE0CC;flex-shrink:0;}
+.spool-mobile-bar{display:flex;align-items:center;gap:8px;padding:0 12px;height:64px;box-sizing:border-box;border-bottom:1px solid #A88060;background:#EDE0CC;flex-shrink:0;}
 .spool-mobile-current{display:flex;align-items:center;gap:8px;flex:1;min-width:0;padding:8px 12px;border-radius:10px;border:1px solid #A88060;background:#FDF8F0;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;color:#6B4A26;}
 .spool-mobile-current span.name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;}
 .spool-switcher-overlay{position:fixed;inset:0;z-index:60;background:var(--bg1);display:flex;flex-direction:column;}
@@ -313,6 +307,23 @@ var SPOOL_SWITCHER_CSS=`
 .spool-switcher-ic{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .spool-switcher-name{flex:1;min-width:0;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .spool-switcher-count{font-size:12px;color:var(--mid);flex-shrink:0;}
+/* The list panel now sits on the left of the split view (Webflow-style —
+   list, then detail beside it), reversing Drawer's default right-hand
+   placement, so its divider border needs to flip sides to sit between the
+   two panels rather than on the outer edge. Scoped to this page only. */
+.strands-layout .wv-drawer--inline{border-left:none;border-right:1px solid var(--border);}
+.strands-layout .wv-drawer--flexw{border-right:none;}
+/* The list's own Drawer header just repeats the active tab's name — the
+   tab bar above it already shows that, so it's a redundant title + stroke. */
+.strands-layout .wv-drawer-hdr{display:none;}
+@media(max-width:768px){
+  /* On this page the global .nav bar AND our own .spool-mobile-bar both sit
+     above the strand-list Drawer, so its default single-bar mobile offset
+     (SharedUI's .wv-drawer--inline, calibrated for .nav alone) needs to
+     account for both stacked bars here. Scoped to .strands-layout so it
+     doesn't affect Drawer usage on any other page. */
+  .strands-layout .wv-drawer--inline{top:128px;}
+}
 `;
 function SpoolSwitcherStyles(){return <style dangerouslySetInnerHTML={{__html:SPOOL_SWITCHER_CSS}}/>;}
 
@@ -373,12 +384,47 @@ function StrandsPage({app,allProjects}){
   var pid=app.projId;
   var projStrands=app.allStrands[pid]||{};
   var projTemplates=app.allTemplates[pid]||[];
-  // Restore saved tab order if available
-  var savedOrder=null;try{var so=localStorage.getItem('woven:collOrder:'+pid);if(so)savedOrder=JSON.parse(so);}catch(e){}
   var rawColl=Object.keys(projStrands);
-  var collNames=savedOrder?savedOrder.filter(function(c){return rawColl.includes(c);}).concat(rawColl.filter(function(c){return !savedOrder.includes(c);})):rawColl;
+  // Explicit, persisted display order for collection tabs — decoupled from
+  // Object.keys() insertion order (which is fragile: object key order isn't
+  // a real ordering guarantee and previously got mutated purely for display
+  // purposes). null while the persisted order is still loading.
+  var sco3=useState(null);var collOrder=sco3[0];var setCollOrder=sco3[1];
+  useEffect(function(){
+    var cancelled=false;
+    loadDB('woven:collOrder:'+pid,null).then(function(saved){
+      if(cancelled)return;
+      setCollOrder(Array.isArray(saved)?saved:[]);
+    });
+    return function(){cancelled=true;};
+  },[pid]);
+  // Reconcile: drop collections that no longer exist, append any that
+  // aren't tracked yet (newly created, or shared in from another project),
+  // and persist the reconciled order so it's durable going forward.
+  useEffect(function(){
+    setCollOrder(function(prev){
+      if(prev===null)return prev;
+      var merged=prev.filter(function(c){return rawColl.includes(c);}).concat(rawColl.filter(function(c){return !prev.includes(c);}));
+      var changed=merged.length!==prev.length||merged.some(function(c,i){return c!==prev[i];});
+      if(changed){saveDB('woven:collOrder:'+pid,merged);return merged;}
+      return prev;
+    });
+  },[rawColl.join('|')]);
+  var collNames=collOrder===null?rawColl:collOrder.filter(function(c){return rawColl.includes(c);}).concat(rawColl.filter(function(c){return !collOrder.includes(c);}));
   if(collNames.length===0)collNames=['Characters'];
   var sac=useState(function(){ return app.strandsFocusColl && collNames.includes(app.strandsFocusColl) ? app.strandsFocusColl : collNames[0]; });var activeColl=sac[0];var setActiveColl=sac[1];
+  // The initializer above runs once, before the persisted collOrder has
+  // loaded — it only has rawColl's (unordered) key order to guess from. Once
+  // the real order arrives, correct the default tab to match it — but only
+  // once, so we don't clobber a tab the user already clicked in the interim.
+  var collOrderAppliedRef=useRef(false);
+  useEffect(function(){
+    if(collOrderAppliedRef.current)return;
+    if(collOrder===null)return;
+    collOrderAppliedRef.current=true;
+    var proper=app.strandsFocusColl && collNames.includes(app.strandsFocusColl) ? app.strandsFocusColl : collNames[0];
+    if(proper&&proper!==activeColl)setActiveColl(proper);
+  },[collOrder]);
   var sasi=useState(null);var activeStrandId=sasi[0];var setActiveStrandId=sasi[1];
   var ssc=useState('');var search=ssc[0];var setSearch=ssc[1];
   var sss=useState('name');var strandSort=sss[0];var setStrandSort=sss[1];
@@ -394,7 +440,9 @@ function StrandsPage({app,allProjects}){
   var filtered=(search?collStrands.filter(function(s){return s.name&&s.name.toLowerCase().includes(search.toLowerCase());}):collStrands)
     .filter(function(s){if(!strandFilter)return true;var val=s.fields&&s.fields[strandFilter.fieldId];return val&&val.toLowerCase().includes(strandFilter.value.toLowerCase());})
     .slice().sort(function(a,b){if(strandSort==='name')return (a.name||'').localeCompare(b.name||'');if(strandSort==='recent')return (b.createdAt||'').localeCompare(a.createdAt||'');return 0;});
-  var activeStrand=activeStrandId?filtered.find(function(s){return s.id===activeStrandId;})||null:filtered.length>0?filtered[0]:null;
+  // No default selection — landing on a collection shows the list; opening
+  // an item is an explicit action (click a row, or create a new one).
+  var activeStrand=activeStrandId?(filtered.find(function(s){return s.id===activeStrandId;})||null):null;
   function getTpl(coll){return projTemplates.find(function(t){return t.name===coll;})||null;}
   var activeTpl=getTpl(activeColl);
   var fields=activeTpl?activeTpl.fields:defaultFields(activeColl);
@@ -405,21 +453,34 @@ function StrandsPage({app,allProjects}){
   function handleImageUpload(e,sid){var file=e.target.files&&e.target.files[0];if(!file)return;uploadImage(file).then(function(url){if(url)updateStrand(sid,{image:url});});}
   function getDraftAppearances(sid){return(app.allDrafts[pid]||[]).filter(function(d){return(d.strandTags||[]).includes(sid);});}
   function renderFieldInput(f,sid,val){
-    if(f.type==='long_text')return <textarea key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} rows={3} onBlur={function(e){updateField(sid,f.id,e.target.value);}} style={{resize:'vertical',minHeight:72,cursor:'default'}}/>;
+    if(f.type==='long_text')return <Field key={sid+'-'+f.id} label={f.label} defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} resizeMode="manual" rows={5} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
     if(f.type==='boolean')return(
-<div key={sid+'-'+f.id} style={{display:'flex',gap:16}}>
-  {['Yes','No'].map(function(opt){return(
-    <Radio key={opt} on={val===opt} label={opt} onClick={function(){updateField(sid,f.id,opt);}}/>
-  );})}
+<div key={sid+'-'+f.id} className="wv-field-wrap">
+  <label className="wv-field-lbl">{f.label}</label>
+  <div style={{display:'flex',gap:16}}>
+    {['Yes','No'].map(function(opt){return(
+      <Radio key={opt} on={val===opt} label={opt} onClick={function(){updateField(sid,f.id,opt);}}/>
+    );})}
+  </div>
 </div>
     );
-    if(f.type==='select')return(<select key={sid+'-'+f.id} defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}><option value="">Select...</option>{(f.options||[]).map(function(o){return <option key={o} value={o}>{o}</option>;})}</select>);
-    if(f.type==='date')return(<input key={sid+'-'+f.id} type="date" defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}/>);
+    if(f.type==='select')return(
+<SelectField key={sid+'-'+f.id} label={f.label} defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}>
+  <option value="">Select...</option>
+  {(f.options||[]).map(function(o){return <option key={o} value={o}>{o}</option>;})}
+</SelectField>
+    );
+    if(f.type==='date')return <InputField key={sid+'-'+f.id} label={f.label} type="date" defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}/>;
+    if(f.type==='number')return <InputField key={sid+'-'+f.id} label={f.label} type="number" defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
     if(f.type==='strand_ref'){
-      return <StrandRefField key={sid+'-'+f.id} f={f} sid={sid} val={val} pid={pid} app={app} onUpdate={function(newVal){updateField(sid,f.id,newVal);}}/>;
+      return(
+<div key={sid+'-'+f.id} className="wv-field-wrap">
+  <label className="wv-field-lbl">{f.label}</label>
+  <StrandRefField f={f} sid={sid} val={val} pid={pid} app={app} onUpdate={function(newVal){updateField(sid,f.id,newVal);}}/>
+</div>
+      );
     }
-    return <input key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} type={f.type==='number'?'number':'text'} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
-
+    return <Field key={sid+'-'+f.id} label={f.label} defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
   }
   // Collection settings editing
   var sef=useState(null);var editingFields=sef[0];var setEditingFields=sef[1];
@@ -429,7 +490,33 @@ function StrandsPage({app,allProjects}){
   var snfn=useState('');var newFieldName=snfn[0];var setNewFieldName=snfn[1];
   var snft=useState('short_text');var newFieldType=snft[0];var setNewFieldType=snft[1];
   var ssw=useState([]);var sharedWith=ssw[0];var setSharedWith=ssw[1];
+  var spd=useState(null);var pendingDeleteFieldIdx=spd[0];var setPendingDeleteFieldIdx=spd[1];
   function openCollSettings(){setEditingFields(activeTpl?[...activeTpl.fields]:[]);setSharedWith(activeTpl?activeTpl.sharedWith||[]:[]);setEditingSpoolColor(activeTpl?activeTpl.color||null:null);setEditingSpoolIcon(activeTpl?activeTpl.icon||null:null);setShowCollSettings(true);}
+  // Every settings change saves immediately — no separate Save step.
+  function commitFields(nf){setEditingFields(nf);if(activeTpl)app.updateTemplate(pid,activeTpl.id,{fields:nf});}
+  function commitColor(c){setEditingSpoolColor(c);if(activeTpl)app.updateTemplate(pid,activeTpl.id,{color:c});}
+  function commitIcon(ic){setEditingSpoolIcon(ic);if(activeTpl)app.updateTemplate(pid,activeTpl.id,{icon:ic});}
+  function commitSharedWith(list){setSharedWith(list);if(activeTpl)app.updateTemplate(pid,activeTpl.id,{sharedWith:list});}
+  // A field can't be deleted while any existing strand in this collection
+  // still has data in it — deleting it would silently destroy that data.
+  function fieldHasContent(fieldId){
+    var items=(app.allStrands[pid]&&app.allStrands[pid][activeColl])||[];
+    return items.some(function(s){
+      var v=s.fields&&s.fields[fieldId];
+      if(v===undefined||v===null)return false;
+      if(typeof v==='string')return v.trim().length>0;
+      return true;
+    });
+  }
+  function requestDeleteField(idx){
+    var f=editingFields[idx];if(!f||fieldHasContent(f.id))return;
+    setPendingDeleteFieldIdx(idx);
+  }
+  function confirmDeleteField(){
+    if(pendingDeleteFieldIdx===null)return;
+    commitFields(editingFields.filter(function(_,j){return j!==pendingDeleteFieldIdx;}));
+    setPendingDeleteFieldIdx(null);
+  }
   useEffect(function(){
     if(app.strandsFocusColl){
       openCollSettings();
@@ -446,42 +533,22 @@ function StrandsPage({app,allProjects}){
     if(remaining.length>0)setActiveColl(remaining[0]);
     setShowCollSettings(false);setDeleteCollConfirm(false);
   }
-  function saveCollSettings(){
-    // Save colour and icon to template
-    if(activeTpl&&(editingSpoolColor||editingSpoolIcon)){
-      var tplUpdates={};
-      if(editingSpoolColor)tplUpdates.color=editingSpoolColor;
-      if(editingSpoolIcon)tplUpdates.icon=editingSpoolIcon;
-      app.updateTemplate(pid,activeTpl.id,tplUpdates);
-    }if(!activeTpl)return;app.updateTemplate(pid,activeTpl.id,{fields:editingFields,sharedWith:sharedWith});setShowCollSettings(false);}
-  function addFieldToSettings(){if(!newFieldName.trim()||!editingFields)return;setEditingFields(editingFields.concat([{id:genId(),label:newFieldName.trim(),type:newFieldType}]));setNewFieldName('');}
+  function addFieldToSettings(){if(!newFieldName.trim()||!editingFields)return;commitFields(editingFields.concat([{id:genId(),label:newFieldName.trim(),type:newFieldType}]));setNewFieldName('');}
   var otherProjects=allProjects.filter(function(p){return p.id!==pid;});
   var sco2=useState(null);var dragOverColl=sco2[0];var setDragOverColl=sco2[1];
   function reorderColls(fromColl,toColl){
     if(fromColl===toColl)return;
-    app.setAllStrands(function(prev){
-      var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});
-      var keys=Object.keys(ps);
-      var fi=keys.indexOf(fromColl);var ti=keys.indexOf(toColl);
+    setCollOrder(function(prev){
+      var order=(prev&&prev.length?prev:collNames).slice();
+      var fi=order.indexOf(fromColl);var ti=order.indexOf(toColl);
       if(fi<0||ti<0)return prev;
-      keys.splice(fi,1);keys.splice(ti,0,fromColl);
-      var reordered={};keys.forEach(function(k){reordered[k]=ps[k];});
-      n[pid]=reordered;
-      // Persist the new order — saveDB writes the whole strands object
-      // which preserves key order in JS objects and JSON
-      saveDB('woven:strands:'+pid,reordered);
-      return n;
+      order.splice(fi,1);order.splice(ti,0,fromColl);
+      saveDB('woven:collOrder:'+pid,order);
+      return order;
     });
-    // Save new order immediately (setAllStrands is async so we compute from current keys)
-    var currentKeys=Object.keys((app&&app.allStrands&&app.allStrands[pid])||{});
-    var fi2=currentKeys.indexOf(fromColl);var ti2=currentKeys.indexOf(toColl);
-    if(fi2>=0&&ti2>=0){
-      var newOrder=currentKeys.slice();newOrder.splice(fi2,1);newOrder.splice(ti2,0,fromColl);
-      try{localStorage.setItem('woven:collOrder:'+pid,JSON.stringify(newOrder));}catch(e){}
-    }
   }
   var detailContent=showCollSettings&&editingFields?(
-<div style={{padding:24}}>
+<div style={{padding:40}}>
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
     <div>
       <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>{activeColl} — Settings</div>
@@ -492,8 +559,7 @@ function StrandsPage({app,allProjects}){
     </div>
     <div style={{display:'flex',gap:8}}>
       {(!activeTpl||activeTpl.projectId===pid)&&<button className="btn btn-danger btn-sm" onClick={function(){setDeleteCollConfirm(true);}}><span className="mi" style={{fontSize:14}}>delete</span>Delete</button>}
-      <button className="btn btn-ghost btn-sm" onClick={function(){setShowCollSettings(false);}}>Cancel</button>
-      <button className="btn btn-primary btn-sm" onClick={saveCollSettings}>Save</button>
+      <SecondaryButton onClick={function(){setShowCollSettings(false);}} style={{width:'auto'}}>Done</SecondaryButton>
     </div>
   </div>
   {/* Spool colour + icon */}
@@ -509,7 +575,7 @@ function StrandsPage({app,allProjects}){
     <span className="sect-lbl">Colour</span>
     <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
       {SPOOL_COLORS.map(function(c){var isActive=(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')===c;return(
-<div key={c} onClick={function(){setEditingSpoolColor(c);}} style={{width:22,height:22,borderRadius:'50%',background:c,cursor:'pointer',flexShrink:0,transform:isActive?'scale(1.25)':'scale(1)',boxShadow:isActive?'0 0 0 2px var(--bg1),0 0 0 3.5px '+c:'none',transition:'transform .15s'}}/>
+<div key={c} onClick={function(){commitColor(c);}} style={{width:22,height:22,borderRadius:'50%',background:c,cursor:'pointer',flexShrink:0,transform:isActive?'scale(1.25)':'scale(1)',boxShadow:isActive?'0 0 0 2px var(--bg1),0 0 0 3.5px '+c:'none',transition:'transform .15s'}}/>
       );})}
     </div>
   </div>
@@ -518,7 +584,7 @@ function StrandsPage({app,allProjects}){
     <span className="sect-lbl">Icon</span>
     <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:6}}>
       {SPOOL_ICONS.slice(0,10).map(function(ic){var isActive=(editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories')===ic;return(
-<button key={ic} onClick={function(){setEditingSpoolIcon(ic);}} style={{width:32,height:32,borderRadius:6,border:'1.5px solid '+(isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--border)'),background:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')+'22':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+<button key={ic} onClick={function(){commitIcon(ic);}} style={{width:32,height:32,borderRadius:6,border:'1.5px solid '+(isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--border)'),background:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')+'22':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
   <span className="material-symbols-outlined" style={{fontSize:16,color:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--mid)'}}>{ic}</span>
 </button>
       );})}
@@ -526,51 +592,55 @@ function StrandsPage({app,allProjects}){
         Search more
       </button>
     </div>
-    {showIconSearch&&<IconSearchPopup current={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onSelect={function(ic){setEditingSpoolIcon(ic);}} onClose={function(){setShowIconSearch(false);}}/>}
+    {showIconSearch&&<IconSearchPopup current={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onSelect={function(ic){commitIcon(ic);}} onClose={function(){setShowIconSearch(false);}}/>}
   </div>
   <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:12,color:'var(--text)'}}>Fields</div>
   {deleteCollConfirm&&(
-<div className="modal-overlay">
-  <div className="modal-backdrop" onClick={function(){setDeleteCollConfirm(false);}}/>
-  <div className="modal-box" style={{maxWidth:400}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,marginBottom:12}}>Delete "{activeColl}"?</div>
-    <div style={{fontSize:14,color:'var(--body-text)',lineHeight:1.6,marginBottom:8}}>This will permanently delete the collection and all <strong>{(app.allStrands[pid]&&app.allStrands[pid][activeColl]?app.allStrands[pid][activeColl].length:0)}</strong> strands inside it.</div>
-    <div style={{fontSize:13,color:'var(--mid)',marginBottom:20}}>This cannot be undone.</div>
-    <div style={{display:'flex',gap:8}}>
-      <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={function(){setDeleteCollConfirm(false);}}>Cancel</button>
-      <button className="btn btn-danger" style={{flex:1,justifyContent:'center'}} onClick={deleteCollection}><span className="mi" style={{fontSize:16}}>delete</span>Delete collection</button>
-    </div>
-  </div>
-</div>
+<DeleteConfirmModal
+  itemName={activeColl}
+  message={<>This will permanently delete the collection and all <strong>{(app.allStrands[pid]&&app.allStrands[pid][activeColl]?app.allStrands[pid][activeColl].length:0)}</strong> strands inside it.</>}
+  confirmLabel="Delete collection"
+  onConfirm={deleteCollection}
+  onCancel={function(){setDeleteCollConfirm(false);}}
+/>
   )}
-  {editingFields.map(function(f,i){return(
+  {pendingDeleteFieldIdx!==null&&(
+<DeleteConfirmModal
+  itemName={editingFields[pendingDeleteFieldIdx]&&editingFields[pendingDeleteFieldIdx].label}
+  message="This field will be removed from the template."
+  confirmLabel="Delete field"
+  onConfirm={confirmDeleteField}
+  onCancel={function(){setPendingDeleteFieldIdx(null);}}
+/>
+  )}
+  {editingFields.map(function(f,i){var hasContent=fieldHasContent(f.id);return(
 <div key={f.id} draggable={true}
   onDragStart={function(e){e.dataTransfer.setData('fieldIdx',''+i);}}
   onDragOver={function(e){e.preventDefault();}}
-  onDrop={function(e){e.preventDefault();var from=parseInt(e.dataTransfer.getData('fieldIdx'),10);if(isNaN(from)||from===i)return;var nf=editingFields.slice();var item=nf.splice(from,1)[0];nf.splice(i,0,item);setEditingFields(nf);}}
+  onDrop={function(e){e.preventDefault();var from=parseInt(e.dataTransfer.getData('fieldIdx'),10);if(isNaN(from)||from===i)return;var nf=editingFields.slice();var item=nf.splice(from,1)[0];nf.splice(i,0,item);commitFields(nf);}}
   style={{borderBottom:'1px solid var(--bg2)',padding:'8px 0'}}>
   <div style={{display:'flex',alignItems:'center',gap:7}}>
     <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab',flexShrink:0}}>drag_indicator</span>
-    <input defaultValue={f.label} style={{maxWidth:160,fontSize:13}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});setEditingFields(nf);}}/>
-    <select value={f.type} style={{width:110,fontSize:13}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value,refSpool:null,refMultiple:false,options:null});setEditingFields(nf);}}>
+    <input defaultValue={f.label} style={{maxWidth:160,fontSize:13}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});commitFields(nf);}}/>
+    <select value={f.type} style={{width:110,fontSize:13}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value,refSpool:null,refMultiple:false,options:null});commitFields(nf);}}>
       {FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}
     </select>
-    <button className="btn-icon" onClick={function(){setEditingFields(editingFields.filter(function(_,j){return j!==i;}));}}><span className="mi" style={{fontSize:18}}>delete</span></button>
+    <button className="btn-icon" disabled={hasContent} title={hasContent?'This field has content on existing items — remove that data before deleting the field':'Delete field'} onClick={function(){requestDeleteField(i);}} style={hasContent?{opacity:.35,cursor:'not-allowed'}:undefined}><span className="mi" style={{fontSize:18}}>delete</span></button>
   </div>
   {f.type==='strand_ref'&&(
 <div style={{display:'flex',gap:4,alignItems:'center',marginTop:6,marginLeft:26}}>
-  <select value={f.refSpool||''} style={{fontSize:11,flex:1}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refSpool:e.target.value});setEditingFields(nf);}}>
+  <select value={f.refSpool||''} style={{fontSize:11,flex:1}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refSpool:e.target.value});commitFields(nf);}}>
     <option value="">Pick spool…</option>
     {Object.keys(app.allStrands[pid]||{}).map(function(c){return <option key={c} value={c}>{c}</option>;})}
   </select>
   <label style={{fontSize:11,display:'flex',alignItems:'center',gap:3,whiteSpace:'nowrap',cursor:'pointer'}}>
-    <input type="checkbox" checked={!!f.refMultiple} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refMultiple:e.target.checked});setEditingFields(nf);}}/> Multiple
+    <input type="checkbox" checked={!!f.refMultiple} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refMultiple:e.target.checked});commitFields(nf);}}/> Multiple
   </label>
 </div>
   )}
   {f.type==='select'&&(
     <div style={{marginLeft:26,marginTop:2}}>
-      <OptionsEditor options={f.options} onChange={function(opts){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{options:opts});setEditingFields(nf);}}/>
+      <OptionsEditor options={f.options} onChange={function(opts){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{options:opts});commitFields(nf);}}/>
     </div>
   )}
 </div>
@@ -587,7 +657,7 @@ function StrandsPage({app,allProjects}){
       ?<div style={{fontSize:13,color:'var(--placeholder)'}}>No other projects to share with.</div>
       :<div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>        {otherProjects.map(function(p){var checked=sharedWith.includes(p.id);return(
 <label key={p.id} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,color:'var(--text)'}}>
-  <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(checked?'var(--indigo)':'var(--border)'),background:checked?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}} onClick={function(){setSharedWith(checked?sharedWith.filter(function(id){return id!==p.id;}):sharedWith.concat([p.id]));}}>
+  <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(checked?'var(--indigo)':'var(--border)'),background:checked?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}} onClick={function(){commitSharedWith(checked?sharedWith.filter(function(id){return id!==p.id;}):sharedWith.concat([p.id]));}}>
     {checked&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
   </span>
   {p.title}
@@ -599,34 +669,28 @@ function StrandsPage({app,allProjects}){
   )}
 </div>
   ):activeStrand?(
-<div style={{padding:24,backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.12) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
-  <div className="strand-detail-hdr" style={{alignItems:'center'}}>
-    <div className="strand-av-wrap" style={{background:activeStrand.color}} onClick={function(){setShowAvatarEdit(true);}}>
-      <div className="strand-av-overlay"><span className="mi" style={{fontSize:18,color:'#fff'}}>edit</span></div>
-      {activeStrand.image
-        ?<img src={activeStrand.image} alt={activeStrand.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>
-        :activeStrand.emoji
-          ?<span style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>{activeStrand.emoji}</span>
-          :<span style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,fontWeight:600,color:'#fff',fontFamily:'var(--serif)'}}>{initials(activeStrand.name)}</span>
-      }
-    </div>
-    <div style={{flex:1}}>
-      <input key={activeStrand.id+'-n'} className="strand-name-inp" defaultValue={activeStrand.name} placeholder="Name" spellCheck={false} onBlur={function(e){updateStrand(activeStrand.id,{name:e.target.value});}}/>
+<div style={{padding:40,position:'relative',backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.12) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
+  {!isMobile&&<button className="btn-icon" onClick={function(){setActiveStrandId(null);}} title="Back to list" style={{position:'absolute',top:16,right:16}}><span className="mi" style={{fontSize:22}}>close</span></button>}
+  <div style={{display:'flex',gap:20,alignItems:'flex-start',marginBottom:24}}>
+    <SpoolThumbnailUpload strand={activeStrand} onClick={function(){setShowAvatarEdit(true);}}/>
+    <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:24}}>
+      <input key={activeStrand.id+'-n'} defaultValue={activeStrand.name} placeholder="Name" spellCheck={false} onBlur={function(e){updateStrand(activeStrand.id,{name:e.target.value});}} style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26',border:'none',background:'transparent',outline:'none',padding:0,width:'100%',paddingRight:40}}/>
+      {fields[0]&&(function(){var f=fields[0];var val=activeStrand.fields&&activeStrand.fields[f.id]?activeStrand.fields[f.id]:'';return renderFieldInput(f,activeStrand.id,val);})()}
     </div>
   </div>
   {showAvatarEdit&&<AvatarEditModal strand={activeStrand} onClose={function(){setShowAvatarEdit(false);}} onSave={function(updates){updateStrand(activeStrand.id,updates);setShowAvatarEdit(false);}}/>}
-  {fields.map(function(f){var val=activeStrand.fields&&activeStrand.fields[f.id]?activeStrand.fields[f.id]:'';return(
-<div key={f.id} className="strand-field-row">
-  <span className="edrawer-lbl">{f.label}</span>
-  {renderFieldInput(f,activeStrand.id,val)}
-</div>
-  );})}
+  {fields.length>1&&(
+  <div style={{display:'flex',flexDirection:'column',gap:24}}>
+    {fields.slice(1).map(function(f){var val=activeStrand.fields&&activeStrand.fields[f.id]?activeStrand.fields[f.id]:'';return renderFieldInput(f,activeStrand.id,val);})}
+  </div>
+  )}
   <div className="appears-section">
-    <span className="edrawer-lbl">Appears In</span>
-    <div className="appears-chips">
-      {getDraftAppearances(activeStrand.id).map(function(d){return <span key={d.id} className="appears-chip" onClick={function(){app.openDraft(d.id);}}>{d.title||'Untitled'}</span>;})}
-      {getDraftAppearances(activeStrand.id).length===0&&<span style={{fontSize:13,color:'var(--mid)'}}>Not tagged in any drafts yet.</span>}
-    </div>
+    <Section label="Appears In">
+      <div className="appears-chips">
+        {getDraftAppearances(activeStrand.id).map(function(d){return <span key={d.id} className="appears-chip" onClick={function(){app.openDraft(d.id);}}>{d.title||'Untitled'}</span>;})}
+        {getDraftAppearances(activeStrand.id).length===0&&<span style={{fontSize:13,color:'var(--mid)'}}>Not tagged in any drafts yet.</span>}
+      </div>
+    </Section>
   </div>
 </div>
   ):(
@@ -639,7 +703,7 @@ function StrandsPage({app,allProjects}){
   );
   var findSelectIcon=function(collName){var t=projTemplates.find(function(t){return t.name===collName;});return (t&&t.icon)||'auto_stories';};
   var findSelectPanel=(
-<Drawer variant="inline" title={activeColl}
+<Drawer variant="inline" title={activeColl} width={activeStrand?undefined:'flex'}
   toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<StrandSortFilter sort={strandSort} setSort={setStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>}/>}
   footer={<PrimaryButton icon="add" onClick={addStrand}>Add to {activeColl}</PrimaryButton>}>
   {filtered.length===0?(
@@ -673,18 +737,9 @@ function StrandsPage({app,allProjects}){
   <button style={{fontSize:13,color:'var(--teal)'}} onClick={addCollection}>ok</button>
 </div>
     ):(
-<div style={{display:'flex',alignItems:'center',gap:4,marginLeft:'auto'}}>
-  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
-    <button className="btn-icon" onClick={openCollSettings} title="Spool settings"><span className="mi" style={{fontSize:18}}>settings</span></button>
-    <button className="btn btn-ghost btn-sm" onClick={function(){setNewColl(true);}}>+ Create Spool</button>
-  {newColl&&<NewSpoolModal onConfirm={function(name,icon,color){
-    if(!name.trim())return;
-    var nt={id:genId(),projectId:pid,name:name.trim(),icon:icon,color:color,fields:defaultFields(name.trim()),sharedWith:[]};
-    app.addTemplate(pid,nt);
-    app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name.trim()]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});
-    setActiveColl(name.trim());setNewColl(false);
-  }} onCancel={function(){setNewColl(false);}}/>}
-  </div>
+<div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',marginBottom:6}}>
+  <TertiaryButton onClick={openCollSettings} style={{color:'#A88060',display:'flex',alignItems:'center',gap:8}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Collection</TertiaryButton>
+  <SecondaryButton icon="add" onClick={function(){setNewColl(true);}} style={{width:'auto',color:'#A88060',borderColor:'#A88060'}}>New Spool</SecondaryButton>
 </div>
     )}
   </div>
@@ -720,8 +775,9 @@ function StrandsPage({app,allProjects}){
     />
   )}
   <div className="strands-layout">
-    {!isMobile&&<div style={{flex:1,overflowY:'auto'}}>{detailContent}</div>}
+    {!isMobile&&showCollSettings&&<div style={{flex:1,overflowY:'auto'}}>{detailContent}</div>}
     {!isMobile&&!showCollSettings&&findSelectPanel}
+    {!isMobile&&!showCollSettings&&activeStrand&&<div style={{flex:1,overflowY:'auto'}}>{detailContent}</div>}
     {isMobile&&!mobileDetailOpen&&!showCollSettings&&findSelectPanel}
     {isMobile&&mobileDetailOpen&&(
 <div style={{position:'fixed',inset:0,zIndex:50,background:'var(--bg1)',overflow:'auto'}}>

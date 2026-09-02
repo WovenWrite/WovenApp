@@ -141,6 +141,7 @@ var DRAWER_CSS = `
 /* Strand result row — used in browse/tag lists (StrandsDrawer, etc.) */
 .wv-strand-result{display:flex;align-items:center;height:50px;box-sizing:border-box;
   cursor:pointer;}
+.wv-strand-result + .wv-strand-result{margin-top:5px;}
 .wv-strand-result-left{display:flex;align-items:center;gap:6px;flex:1;min-width:0;}
 .wv-strand-result-title{font-family:var(--serif,'Crimson Text',serif);font-weight:600;
   font-size:20px;line-height:1.5;color:#684a26;white-space:nowrap;overflow:hidden;
@@ -242,7 +243,7 @@ var DRAWER_CSS = `
 
 /* Mobile — inline drawers become full-screen sheets */
 @media(max-width:768px){
-  .wv-drawer--inline{position:fixed;top:54px;bottom:0;left:0;right:0;z-index:50;
+  .wv-drawer--inline{position:fixed;top:64px;bottom:0;left:0;right:0;z-index:50;
     width:100%;border-left:none;}
   .wv-drawer--overlay{width:100%;max-width:100%;border-left:none;}
 }
@@ -654,9 +655,9 @@ export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
   return (
     <div className="wv-strand-result" onClick={onClick}>
       <div className="wv-strand-result-left">
-        <Avatar strand={strand} size={30} />
+        <Avatar strand={strand} size={36} />
         <span className="wv-strand-result-title">{strand.name}</span>
-        <span className="mi wv-strand-result-icon" style={{ fontSize: 10 }}>{spoolIcon || 'auto_stories'}</span>
+        <span className="mi wv-strand-result-icon" style={{ fontSize: 20 }}>{spoolIcon || 'auto_stories'}</span>
       </div>
       <span className="mi wv-strand-result-arrow">arrow_forward_ios</span>
       {onAdd && (
