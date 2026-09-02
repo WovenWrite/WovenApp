@@ -176,14 +176,15 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .dash-main{flex:2;overflow-y:auto;padding:120px 108px 200px;min-width:0;background-color:var(--bg0);background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;}
 .dash-sidebar{flex:1;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;background:var(--bg1);padding:24px;min-width:220px;max-width:280px;}
 .dash-greeting{font-family:var(--serif);font-size:44px;font-weight:600;color:var(--text);margin-bottom:4px;}
-.dash-subtitle{font-family:'DM Sans',sans-serif;font-size:28px;color:#7A5A38;margin-bottom:24px;font-weight:600;}
+.dash-subtitle{font-family:'DM Sans',sans-serif;font-size:24px;color:#7A5A38;margin-bottom:24px;font-weight:400;}
+.dash-section-hdr{font-family:'DM Sans',sans-serif;font-size:20px;font-weight:700;color:#2A1F10;}
 .proj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;}
 .proj-card{background:#F5EDE0;border:2px solid transparent;border-radius:15px;overflow:hidden;cursor:pointer;transition:border-color .2s,box-shadow .2s;box-shadow:0 2px 8px rgba(42,31,16,.06);}
 .proj-card:hover{border-color:#c45e28;box-shadow:0 4px 16px rgba(42,31,16,.12);}
 .proj-card-band{height:150px;background:#E2D0B8;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border-radius:13px 13px 0 0;}
-.proj-card-body{padding:10px 15px;display:flex;flex-direction:column;gap:10px;min-height:220px;}
+.proj-card-body{padding:10px 15px;display:flex;flex-direction:column;gap:10px;min-height:200px;}
 .proj-card-title{font-family:'Crimson Text',serif;font-size:18px;font-weight:700;color:#2a1f10;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;flex-shrink:0;}
-.proj-card-syn{font-family:'DM Sans',sans-serif;font-size:16px;color:#7A5A38;line-height:1.45;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;flex:1;}
+.proj-card-syn{font-family:'DM Sans',sans-serif;font-size:16px;color:#7A5A38;line-height:1.45;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;height:93px;flex-shrink:0;}
 .proj-card-footer{display:flex;justify-content:space-between;align-items:center;font-family:'DM Sans',sans-serif;font-size:14px;color:#a88060;margin-top:auto;flex-shrink:0;}
 .add-proj{border:2px dashed var(--border);border-radius:15px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:230px;transition:all .15s;}
 .add-proj:hover{border-color:#c45e28;background:rgba(196,94,40,.04);}

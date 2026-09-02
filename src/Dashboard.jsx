@@ -21,7 +21,7 @@ function WovenLogo({size,color,dark}){
   var textColor=color||(dark?'var(--text)':'var(--indigo)');var h=size||28;var symH=Math.round(h*0.75);
   return(
 <div style={{display:'inline-flex',alignItems:'center',gap:7,userSelect:'none',verticalAlign:'middle'}}>
-  <svg width={symH} height={symH} viewBox="0 0 848.94 831.84" xmlns="http://www.w3.org/2000/svg" fill="var(--indigo)">
+  <svg width={symH} height={symH} viewBox="0 0 848.94 831.84" xmlns="http://www.w3.org/2000/svg" fill={textColor}>
     <path d="M564.96,702.91c-53.18,9.44-103.06-5.16-143.76-39.96-38.56,34.9-87.88,49.1-141.72,40.7-4.12-18.08-4.13-45.56-1.92-61.83,2.5-18.43,107.47,6.04,107.44-63.63l-.06-125.7-44.3-1.48c-4.57-.15-8.32-3.69-8.72-8.25-1.68-18.87-1.68-35.22,0-54.09.4-4.55,4.15-8.1,8.72-8.25l44.3-1.48.05-125.71c.03-70.41-105.11-46.18-107.21-62.43-2.48-19.16-1.99-41.94.63-62.5,51.86-8.94,102.06,5.29,142.53,40.15,39.2-35.16,90.01-49.89,142.97-39.93,2.41,19.58,2.82,44.43.84,61.59-2.15,18.69-107.68-9.17-107.62,66.26l.09,122.21,44.46,1.87c4.58.19,8.3,3.78,8.65,8.36,1.37,18.04,1.42,33.28.5,53.08-.22,4.66-3.95,8.4-8.62,8.62l-44.91,2.15-.07,125.52c-.04,72.83,108.96,43.13,108.62,65.59l-.9,59.16Z"/>
     <rect y="382.8" width="313.51" height="67.4" rx="11.53" ry="11.53"/>
     <path d="M67.58,128.81h110.06v67.4h-110.06c-5.36,0-9.7-4.35-9.7-9.7v-47.99c0-5.36,4.35-9.7,9.7-9.7Z"/>
@@ -94,7 +94,11 @@ function StatsSection({app,onOpenProfile,greeting}){
       </div>
       <div className="stat-num">{todayWords.toLocaleString()}</div>
       <div className="progress-bar-bg"><div className="progress-bar-fill" style={{width:Math.min(100,pct)+'%'}}/></div>
-      <div className="stat-sub">{pct+'% of '}<input defaultValue={goal} key={goal} onBlur={function(e){var v=parseInt(e.target.value,10);if(!isNaN(v)&&v>0){app.setGoal(v);}else{e.target.value=goal;}}} onKeyDown={function(e){if(e.key==='Enter')e.target.blur();}} style={{width:52,border:'none',borderBottom:'1px dashed var(--mid)',background:'transparent',fontSize:16,color:'var(--mid)',padding:0,fontFamily:'inherit'}}/> words/day</div>
+      <div className="stat-sub">{pct+'% of '}<input defaultValue={goal} key={goal}
+        onFocus={function(e){e.target.style.borderBottomColor='#C45E28';}}
+        onBlur={function(e){e.target.style.borderBottomColor='var(--mid)';var v=parseInt(e.target.value,10);if(!isNaN(v)&&v>0){app.setGoal(v);}else{e.target.value=goal;}}}
+        onKeyDown={function(e){if(e.key==='Enter')e.target.blur();}}
+        style={{width:52,border:'none',outline:'none',borderRadius:0,borderBottom:'1px dashed var(--mid)',background:'transparent',fontSize:16,color:'var(--mid)',padding:0,fontFamily:'inherit'}}/> words/day</div>
     </div>
     <div className="stat-card">
       <div className="stat-card-hdr">
@@ -186,14 +190,12 @@ function GlobalLooseThreads({app}){
   return(
 <div style={{marginTop:40}}>
   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
-    <span className="wv-field-lbl" style={{marginBottom:0}}>Loose Threads</span>
+    <span className="dash-section-hdr">Loose Threads</span>
     {allLT.length>0&&<span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,fontWeight:600,color:'var(--indigo)',background:'rgba(196,94,40,.10)',padding:'3px 10px',borderRadius:12,whiteSpace:'nowrap'}}>{allLT.length} {allLT.length===1?'thread':'threads'}</span>}
     <div style={{flex:1}}/>
-    {allLT.length>3&&(
-    <div className="almond-primary-btn"><PrimaryButton onClick={function(){setShowMore(!showMore);}} style={{width:'auto'}}>
+    <div className="almond-primary-btn"><PrimaryButton disabled={allLT.length<=3} onClick={function(){setShowMore(!showMore);}} style={{width:'auto'}}>
       {showMore?'Show less':'Show all'}
     </PrimaryButton></div>
-    )}
   </div>
   <div style={{display:'flex',flexWrap:'wrap',gap:10,overflow:showMore?'visible':'hidden',maxHeight:showMore?'none':140,paddingBottom:4}}>
     <div onClick={handleAddLT} style={{background:"transparent",border:"2px dashed #A88060",padding:"10px 15px",borderRadius:15,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,minWidth:120,flexShrink:0,minHeight:80}} onMouseEnter={function(e){e.currentTarget.style.borderColor="#c45e28";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#A88060";}}>
@@ -312,7 +314,7 @@ function ArchiveDrawer({app,open,onClose}){
 export default function Dashboard({app,onOpenProfile,onNewProject}){
   var profile=app.profile||{};
   var firstName=profile.firstName||'';
-  var greeting=getGreeting()+(firstName?', '+firstName:'');
+  var greeting=getGreeting()+(firstName?', '+firstName:'')+'.';
   var sep=useState(null);var editingProjId=sep[0];var setEditingProjId=sep[1];
   var sar=useState(false);var archiveOpen=sar[0];var setArchiveOpen=sar[1];
   var archivedCount=Object.values(app.allDrafts).flat().filter(function(d){return d.archived;}).length+(app.projects.filter(function(p){return p.archived;}).length);
@@ -322,7 +324,7 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
   <nav className="nav" style={{justifyContent:'space-between'}}>
-    <WovenLogo size={26}/>
+    <WovenLogo size={26} color="#2A1F10"/>
     <div className="avatar" onClick={function(){onOpenProfile(null);}}>
       {profile.headshot?<img src={profile.headshot} alt=""/>:initials(firstName+' '+(profile.lastName||''))}
       <div className="avatar-overlay"><span className="mi">edit</span></div>
@@ -333,7 +335,7 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
       <div className="dash-greeting dash-greeting-desktop">{greeting}</div>
       <div className="dash-subtitle dash-greeting-desktop">What will you weave today?</div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-        <span className="wv-field-lbl" style={{marginBottom:0}}>Your Projects</span>
+        <span className="dash-section-hdr">Your Projects</span>
         <div className="almond-primary-btn"><PrimaryButton icon="add" onClick={onNewProject} style={{width:'auto'}}>New Project</PrimaryButton></div>
       </div>
       <div className="proj-grid">
@@ -358,7 +360,7 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
       <div style={{marginTop:40,border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'12px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,background:'var(--bg1)',transition:'border-color .15s'}} onClick={function(){setArchiveOpen(true);}}>
         <span className="mi" style={{fontSize:24,color:'var(--placeholder)',flexShrink:0}}>inventory_2</span>
         <div style={{flex:1}}>
-          <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>Your Archive</div>
+          <div className="dash-section-hdr">Your Archive</div>
           <div style={{fontSize:16,color:'var(--mid)'}}>Where shelved ideas stay safe.{archivedCount>0?' '+archivedCount+' item'+(archivedCount!==1?'s':'')+' archived.':''}</div>
         </div>
         <span className="mi" style={{fontSize:20,color:'var(--border)'}}>chevron_right</span>
