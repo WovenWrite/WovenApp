@@ -312,11 +312,7 @@ export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,
     </div>
   </div>
   <div style={{display:'flex',alignItems:'center',gap:8}}>
-    <button onClick={onBind} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:'var(--indigo)',color:'#fff',border:'none',borderRadius:8,fontSize:14,fontFamily:'DM Sans, sans-serif',fontWeight:600,cursor:'pointer',transition:'background .15s'}}
-      onMouseOver={function(e){e.currentTarget.style.background='#2A1F10';}}
-      onMouseOut={function(e){e.currentTarget.style.background='var(--indigo)';}}>
-      <span className="material-symbols-outlined" style={{fontSize:18}}>collections_bookmark</span>Bind {projLabel(app.currentProject,'drafts')}
-    </button>
+    <PrimaryButton icon="collections_bookmark" onClick={onBind} style={{width:'auto'}}>Bind {projLabel(app.currentProject,'drafts')}</PrimaryButton>
   </div>
 </div>
   );
