@@ -9,7 +9,7 @@
 import { useState, useEffect, useRef } from "react";
 import BindDrawer from './BindDrawer'
 import LooseThreadDrawer from './LooseThreadDrawer'
-import { Popover, Check, Avatar, StatusDotWithArchive, ArchiveConfirmModal, PrimaryButton } from './SharedUI'
+import { Popover, Check, Avatar, StatusDotWithArchive, ArchiveConfirmModal, PrimaryButton, TertiaryButton } from './SharedUI'
 import { genId, stripHtml, initials, uploadImage } from './utils'
 import { sortDraftsBySequence, projIsNumbered, projIsManualOrder, projSequence, projThumbnails, draftDateOf, formatDraftDate, projStatuses, projStatus, projLabel } from './projectConfig'
 
@@ -101,7 +101,7 @@ export function applyFS(drafts,filterObj,sort,proj){
 }
 
 // ── ViewHeader ──
-export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,structureMode,onStructureToggle,searchQ,onSearch,hideStructure,resultCount}){
+export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,onAddDraft,structureMode,onStructureToggle,searchQ,onSearch,hideStructure,resultCount}){
   var filter=filterProp||emptyFilterState();
   var sf=useState(false);var filterOpen=sf[0];var setFilterOpen=sf[1];
   var srt=useState(false);var sortOpen=srt[0];var setSortOpen=srt[1];
@@ -312,7 +312,8 @@ export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,
     </div>
   </div>
   <div style={{display:'flex',alignItems:'center',gap:8}}>
-    <PrimaryButton icon="collections_bookmark" onClick={onBind} style={{width:'auto'}}>Bind {projLabel(app.currentProject,'drafts')}</PrimaryButton>
+    <TertiaryButton onClick={onBind} style={{width:'auto',display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:18}}>collections_bookmark</span>Bind {projLabel(app.currentProject,'drafts')}</TertiaryButton>
+    {onAddDraft&&<PrimaryButton icon="add" onClick={onAddDraft} style={{width:'auto'}}>New {projLabel(app.currentProject,'drafts').replace(/s$/,'')}</PrimaryButton>}
   </div>
 </div>
   );
@@ -811,7 +812,7 @@ export default function CardsView({app}){
   });
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onBind={function(){setBindOpen(true);}} structureMode={structureMode} onStructureToggle={function(v){setStructureMode(v);}} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onBind={function(){setBindOpen(true);}} onAddDraft={addDraft} structureMode={structureMode} onStructureToggle={function(v){setStructureMode(v);}} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
   <div className="view-area dot-grid" ref={viewAreaRef} onScroll={handleViewAreaScroll}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div className="cards-grid"

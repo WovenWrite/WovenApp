@@ -124,7 +124,7 @@ const CANVAS_CSS = `
   border-bottom:1px solid var(--border);cursor:grab;user-select:none;transition:background .12s;}
 .ex-edrawer-row:hover{background:var(--bg2);}
 .ex-edrawer-row:active{cursor:grabbing;}
-.ex-spool-row{cursor:grab;}
+.ex-spool-row{cursor:grab;padding:0 14px;}
 .ex-spool-row:active{cursor:grabbing;}
 .ex-edrawer-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;
   justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0;overflow:hidden;}
@@ -1383,8 +1383,16 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     }
     if (activeTool.startsWith('shape:')) {
       const variant = activeTool.split(':')[1]
+      const defaultSize = {
+        rectangle: { width: 140, height: 100 },
+        ellipse:   { width: 120, height: 120 },
+        diamond:   { width: 120, height: 120 },
+        triangle:  { width: 120, height: 104 },
+        arrow:     { width: 160, height: 60 },
+      }[variant] || { width: 120, height: 120 }
       setNodes(nds => [...nds, {
         id: genId(), type: 'shapeNode', position,
+        style: defaultSize,
         data: { variant, colorId: 'sky' },
       }])
     }
