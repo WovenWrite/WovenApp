@@ -173,7 +173,8 @@ var DRAWER_CSS = `
 .wv-search-box:focus-within{background:#FFFCF8;border-color:#C45E28;}
 .wv-search-icon{font-size:16px;color:#A88060;flex-shrink:0;}
 .wv-search-input{border:none;background:none;outline:none;flex:1;min-width:0;
-  font-family:var(--serif,'Crimson Text',serif);font-size:14px;color:#6B4A26;padding:0;}
+  font-family:'DM Sans',sans-serif;font-size:16px;color:#6B4A26;padding:0;}
+.wv-search-input:focus{outline:none;border:none;box-shadow:none;background:none;}
 .wv-search-input::placeholder{font-style:italic;color:var(--placeholder,#A88060);}
 
 /* Checkbox */

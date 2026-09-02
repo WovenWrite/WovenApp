@@ -18,13 +18,13 @@ function StrandSortFilter({sort,setSort,strandFilter,setStrandFilter,fields}){
   var hasActive=strandFilter||sort!=='name';
   return(
 <div ref={ref} style={{position:'relative',flexShrink:0}}>
-  <button className={'btn-icon'+(hasActive?' ':' ')} style={{padding:4,border:'1px solid '+(hasActive?'var(--indigo)':'var(--border)'),borderRadius:'var(--r)',color:hasActive?'var(--indigo)':'var(--mid)'}} onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setPos({top:r.bottom+4,left:r.right-180});setOpen(!open);}}>
-    <span className="mi" style={{fontSize:16}}>tune</span>
-  </button>
+  <TertiaryButton onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setPos({top:r.bottom+4,left:r.right-180});setOpen(!open);}} style={{color:hasActive?'var(--indigo)':'#A88060',display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap'}}>
+    <span className="mi" style={{fontSize:18}}>sort</span>Sort
+  </TertiaryButton>
   {open&&(
 <div style={{position:'fixed',top:pos.top,left:pos.left,zIndex:400,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--rl)',boxShadow:'0 8px 28px rgba(42,31,16,.14)',minWidth:180,padding:10}}>
   <div style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Sort</div>
-  {[['name','Name A–Z'],['recent','Recently added']].map(function(o){return(
+  {[['name','Name A–Z'],['recent','Recently added'],['tagged','Most tagged in drafts']].map(function(o){return(
 <div key={o[0]} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',cursor:'pointer',fontSize:13,color:sort===o[0]?'var(--indigo)':'var(--text)',fontWeight:sort===o[0]?600:400}} onClick={function(){setSort(o[0]);}}>
   <span style={{width:14,height:14,borderRadius:'50%',border:'2px solid '+(sort===o[0]?'var(--indigo)':'var(--border)'),background:sort===o[0]?'var(--indigo)':'transparent',flexShrink:0}}/>
   {o[1]}
@@ -316,6 +316,10 @@ var SPOOL_SWITCHER_CSS=`
 /* The list's own Drawer header just repeats the active tab's name — the
    tab bar above it already shows that, so it's a redundant title + stroke. */
 .strands-layout .wv-drawer-hdr{display:none;}
+.strands-layout .wv-drawer{background:#FDF8F0;}
+.strands-layout .wv-drawer-toolbar{background:#FDF8F0;}
+.strands-layout .wv-drawer-footer{background:#FDF8F0;}
+.strands-layout .wv-drawer-body--pad{padding:40px;}
 @media(max-width:768px){
   /* On this page the global .nav bar AND our own .spool-mobile-bar both sit
      above the strand-list Drawer, so its default single-bar mobile offset
@@ -428,6 +432,14 @@ function StrandsPage({app,allProjects}){
   var sasi=useState(null);var activeStrandId=sasi[0];var setActiveStrandId=sasi[1];
   var ssc=useState('');var search=ssc[0];var setSearch=ssc[1];
   var sss=useState('name');var strandSort=sss[0];var setStrandSort=sss[1];
+  // Sort preference is a personal display setting, not project data — it
+  // persists globally (not scoped to this project) until explicitly changed.
+  useEffect(function(){
+    loadDB('woven:strandSort','name').then(function(saved){
+      if(saved)setStrandSort(saved);
+    });
+  },[]);
+  function updateStrandSort(val){setStrandSort(val);saveDB('woven:strandSort',val);}
   var ssf=useState(null);var strandFilter=ssf[0];var setStrandFilter=ssf[1];
   var snc=useState(false);var newColl=snc[0];var setNewColl=snc[1];
   var sncn=useState('');var newCollName=sncn[0];var setNewCollName=sncn[1];
@@ -439,7 +451,7 @@ function StrandsPage({app,allProjects}){
   var collStrands=projStrands[activeColl]||[];
   var filtered=(search?collStrands.filter(function(s){return s.name&&s.name.toLowerCase().includes(search.toLowerCase());}):collStrands)
     .filter(function(s){if(!strandFilter)return true;var val=s.fields&&s.fields[strandFilter.fieldId];return val&&val.toLowerCase().includes(strandFilter.value.toLowerCase());})
-    .slice().sort(function(a,b){if(strandSort==='name')return (a.name||'').localeCompare(b.name||'');if(strandSort==='recent')return (b.createdAt||'').localeCompare(a.createdAt||'');return 0;});
+    .slice().sort(function(a,b){if(strandSort==='name')return (a.name||'').localeCompare(b.name||'');if(strandSort==='recent')return (b.createdAt||'').localeCompare(a.createdAt||'');if(strandSort==='tagged')return getDraftAppearances(b.id).length-getDraftAppearances(a.id).length;return 0;});
   // No default selection — landing on a collection shows the list; opening
   // an item is an explicit action (click a row, or create a new one).
   var activeStrand=activeStrandId?(filtered.find(function(s){return s.id===activeStrandId;})||null):null;
@@ -704,7 +716,7 @@ function StrandsPage({app,allProjects}){
   var findSelectIcon=function(collName){var t=projTemplates.find(function(t){return t.name===collName;});return (t&&t.icon)||'auto_stories';};
   var findSelectPanel=(
 <Drawer variant="inline" title={activeColl} width={activeStrand?undefined:'flex'}
-  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<StrandSortFilter sort={strandSort} setSort={setStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>}/>}
+  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<StrandSortFilter sort={strandSort} setSort={updateStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>}/>}
   footer={<PrimaryButton icon="add" onClick={addStrand}>Add to {activeColl}</PrimaryButton>}>
   {filtered.length===0?(
     <HelpText>{collStrands.length===0?'No entries yet.':'No results for "'+search+'".'}</HelpText>
