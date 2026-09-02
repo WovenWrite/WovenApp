@@ -948,7 +948,7 @@ export function OptionsEditor({ options, onChange }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
           {opts.map(function (o, i) {
             return (
-              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 6px 3px 10px', borderRadius: 12, background: 'rgba(196,94,40,.08)', border: '1px solid rgba(196,94,40,.25)', fontFamily: 'DM Sans, sans-serif', fontSize: 12, color: '#6B4A26' }}>
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 6px 3px 10px', borderRadius: 12, background: 'rgba(196,94,40,.08)', border: '1px solid rgba(196,94,40,.25)', fontFamily: 'DM Sans, sans-serif', fontSize: 16, color: '#6B4A26' }}>
                 {o}
                 <span className="mi" style={{ fontSize: 13, cursor: 'pointer', color: '#A88060' }} onClick={function () { remove(i); }}>close</span>
               </span>

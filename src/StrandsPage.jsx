@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState, useEffect, useRef } from "react";
-import { AvatarEditModal, Drawer, HelpText, PrimaryButton, SecondaryButton, TertiaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio, Field, InputField, SelectField, Section, SpoolThumbnailUpload, DeleteConfirmModal } from './SharedUI'
+import { AvatarEditModal, Drawer, HelpText, PrimaryButton, TertiaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio, Field, InputField, SelectField, Section, SpoolThumbnailUpload, DeleteConfirmModal, Check } from './SharedUI'
 import { FIELD_TYPES, defaultFields, initials, uploadImage } from './utils'
 import { saveDB, loadDB } from './App'
 
@@ -65,10 +65,9 @@ function MultiSelectDropdown({options,selected,onChange,placeholder}){
   {options.length===0?<div style={{fontSize:13,color:'var(--placeholder)',padding:8}}>No other projects to share with.</div>:options.map(function(o){var checked=selected.includes(o.id);return(
 <label key={o.id} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:14,fontFamily:'DM Sans,sans-serif',color:'var(--text)',padding:'7px 6px',borderRadius:6}}
   onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
-  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
-  <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(checked?'var(--indigo)':'var(--border)'),background:checked?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}} onClick={function(){onChange(checked?selected.filter(function(id){return id!==o.id;}):selected.concat([o.id]));}}>
-    {checked&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
-  </span>
+  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}
+  onClick={function(){onChange(checked?selected.filter(function(id){return id!==o.id;}):selected.concat([o.id]));}}>
+  <Check on={checked}/>
   {o.label}
 </label>
     );})}
@@ -165,79 +164,48 @@ function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,closeDetail,set
 
 // ── IconSearchPopup ──
 // Uses full Material Symbols library — no hardcoded list
-var ICON_CATEGORIES={
-  'Narrative & Writing':['auto_stories','book_ribbon','edit_note','history_edu','create','draw','stylus_note','ink_highlighter','quill','ink_pen','description','article','library_books','menu_book','local_library','sticky_note_2','assignment','topic','newsstand','feed','drafts'],
-  'People':['person','group','diversity_3','family_restroom','child_care','elderly','face','waving_hand','handshake','supervisor_account','manage_accounts','badge','contacts','emoji_people','social_distance','connect_without_contact'],
-  'Places':['location_on','map','home','apartment','castle','cottage','cabin','park','forest','beach_access','landscape','terrain','public','travel_explore','flight','train','directions_car','anchor','explore','near_me'],
-  'Nature & World':['nature','water','fire','water_drop','air','eco','recycling','sunny','storm','cloud','wb_sunny','nights_stay','ac_unit','tsunami','volcano','energy_savings_leaf','solar_power','wind_power','grass','flower'],
-  'Objects & Items':['key','lock','shield','sword','diamond','crown','trophy','flag','bookmark','label','tag','star','favorite','gift','cake','coffee','restaurant','local_pizza','wine_bar','sports_bar'],
-  'Science & Tech':['science','biotech','experiment','microbiology','telescope','microscope','satellite_alt','psychology','lightbulb','hub','code','terminal','database','computer','phone_android','watch','rocket_launch','smart_toy'],
-  'Arts & Culture':['palette','brush','photo_camera','music_note','headphones','piano','mic','theater_comedy','movie','sports_esports','casino','sports','emoji_objects','gesture','animation','casino'],
-  'Health & Body':['medical_services','stethoscope','vaccines','medication','monitor_heart','bloodtype','fitness_center','self_improvement','spa','yoga','emergency','biotech'],
-  'Symbols':['bolt','warning','info','help','check_circle','cancel','add_circle','verified','military_tech','workspace_premium','grade','celebration','emoji_events','trending_up','analytics','savings','account_balance','gavel','campaign']
-};
-var ALL_PRESET_ICONS=Object.values(ICON_CATEGORIES).flat();
+var COMMON_ICONS=['auto_stories','edit_note','person','group','location_on','map','home','castle','star','favorite','bookmark','key','lock','palette','lightbulb','flag'];
+var SEARCHABLE_ICONS=COMMON_ICONS.concat(['park','public','flight','brush','photo_camera','music_note','theater_comedy','movie','shield','diamond','trophy','cake','restaurant','science','code','computer','rocket_launch','medical_services','fitness_center','spa','bolt','warning','info','celebration','emoji_events','campaign','explore','psychology','history_edu','menu_book','article','nature','water_drop','eco','cloud','terrain','anchor','volcano','account_balance','gavel','savings','trending_up','analytics','verified','military_tech','grade','contacts','badge','handshake','waving_hand','elderly','child_care','apartment','cottage','cabin','forest','beach_access','landscape','travel_explore','train','directions_car','near_me','air','sunny','wb_sunny','nights_stay','ac_unit','grass','headphones','piano','mic','sports_esports','casino','sports','gesture','animation','stethoscope','vaccines','medication','monitor_heart','self_improvement','emergency','check_circle','cancel','add_circle']);
 
-function IconSearchPopup({current,onSelect,onClose}){
+function IconSearchPopup({currentIcon,currentColor,onSelectIcon,onSelectColor,onClose}){
   var sq=useState('');var q=sq[0];var setQ=sq[1];
-  var showAll=!q.trim();
+  var showCommon=!q.trim();
   var iconStyle={fontFamily:"'Material Symbols Outlined'",fontStyle:'normal',fontSize:24,lineHeight:1,display:'flex',alignItems:'center',justifyContent:'center',letterSpacing:'normal',textTransform:'none',direction:'ltr',WebkitFontSmoothing:'antialiased'};
-
-  // When typing, try to show any valid icon name — material symbols accepts any string
-  // Show curated categories when no search, or filtered presets + the raw typed name
-  var results=showAll?ALL_PRESET_ICONS:ALL_PRESET_ICONS.filter(function(ic){return ic.includes(q.toLowerCase().replace(/\s+/g,'_'));});
-  var typedName=q.trim().toLowerCase().replace(/\s+/g,'_');
-  var showTyped=typedName&&!results.includes(typedName);
+  var results=showCommon?COMMON_ICONS:SEARCHABLE_ICONS.filter(function(ic){return ic.includes(q.toLowerCase().replace(/\s+/g,'_'));});
 
   return(
 <div style={{position:'fixed',inset:0,zIndex:700,display:'flex',alignItems:'center',justifyContent:'center'}}>
   <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={onClose}/>
-  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:14,padding:24,width:560,maxWidth:'94vw',maxHeight:'82vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(42,31,16,.2)'}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600,marginBottom:6,color:'var(--text)'}}>Choose icon</div>
-    <div style={{fontSize:12,color:'var(--mid)',marginBottom:12}}>Search by name, or type any <a href="https://fonts.google.com/icons" target="_blank" rel="noopener" style={{color:'var(--indigo)'}}>Material Symbol</a> name directly.</div>
-    <input autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search icons (e.g. dragon, mountain, crystal)…" style={{padding:'8px 12px',fontSize:14,border:'1px solid var(--border)',borderRadius:8,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',marginBottom:12}}/>
+  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:14,padding:24,width:560,maxWidth:'94vw',height:600,maxHeight:'82vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(42,31,16,.2)'}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600,marginBottom:16,color:'var(--text)',flexShrink:0}}>Icon &amp; colour</div>
+    <div style={{marginBottom:16,flexShrink:0}}>
+      <label className="wv-field-lbl">Colour</label>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:6}}>
+        {SPOOL_COLORS.map(function(c){var isActive=currentColor===c;return(
+<div key={c} onClick={function(){onSelectColor(c);}} style={{width:26,height:26,borderRadius:'50%',background:c,cursor:'pointer',flexShrink:0,transform:isActive?'scale(1.2)':'scale(1)',boxShadow:isActive?'0 0 0 2px var(--bg1),0 0 0 3.5px '+c:'none',transition:'transform .15s'}}/>
+        );})}
+      </div>
+    </div>
+    <div style={{marginBottom:10,flexShrink:0}}>
+      <label className="wv-field-lbl">Icon</label>
+      <div className="wv-search-box" style={{marginTop:6}}>
+        <span className="mi wv-search-icon">search</span>
+        <input className="wv-search-input" autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search icons…"/>
+      </div>
+    </div>
     <div style={{overflowY:'auto',flex:1}}>
-      {/* Typed custom name — always show if it could be a valid icon */}
-      {showTyped&&(
-<div style={{marginBottom:14}}>
-  <div style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>Use custom icon name</div>
-  <button onClick={function(){onSelect(typedName);onClose();}} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderRadius:8,border:'1.5px solid var(--indigo)',background:'rgba(196,94,40,.06)',cursor:'pointer',width:'100%',textAlign:'left'}}>
-    <span style={Object.assign({},iconStyle,{fontSize:28,color:'var(--indigo)',width:36,height:36})}>{typedName}</span>
-    <div>
-      <div style={{fontFamily:'DM Sans,sans-serif',fontSize:13,fontWeight:600,color:'var(--indigo)'}}>{typedName}</div>
-      <div style={{fontFamily:'DM Sans,sans-serif',fontSize:11,color:'var(--mid)'}}>If this is a valid Material Symbol name, it will render as an icon.</div>
-    </div>
-  </button>
-</div>
-      )}
-      {/* Category sections when not searching */}
-      {showAll?Object.keys(ICON_CATEGORIES).map(function(cat){return(
-<div key={cat} style={{marginBottom:16}}>
-  <div style={{fontSize:11,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>{cat}</div>
-  <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-    {ICON_CATEGORIES[cat].map(function(ic){var isActive=current===ic;return(
-<button key={ic} onClick={function(){onSelect(ic);onClose();}} title={ic.replace(/_/g,' ')} style={{width:40,height:40,borderRadius:8,border:'1.5px solid '+(isActive?'#c45e28':'var(--border)'),background:isActive?'rgba(196,94,40,.1)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        {results.map(function(ic){var isActive=currentIcon===ic;return(
+<button key={ic} onClick={function(){onSelectIcon(ic);}} title={ic.replace(/_/g,' ')} style={{width:44,height:44,borderRadius:8,border:'1.5px solid '+(isActive?'#c45e28':'var(--border)'),background:isActive?'rgba(196,94,40,.1)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
   onMouseOver={function(e){if(!isActive)e.currentTarget.style.background='var(--bg2)';}}
   onMouseOut={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
-  <span style={Object.assign({},iconStyle,{fontSize:20,color:isActive?'#c45e28':'var(--mid)'})}>{ic}</span>
+  <span style={Object.assign({},iconStyle,{fontSize:22,color:isActive?'#c45e28':'var(--mid)'})}>{ic}</span>
 </button>
-    );})}
-  </div>
-</div>
-      )}):(
-<div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-  {results.map(function(ic){var isActive=current===ic;return(
-<button key={ic} onClick={function(){onSelect(ic);onClose();}} title={ic.replace(/_/g,' ')} style={{width:40,height:40,borderRadius:8,border:'1.5px solid '+(isActive?'#c45e28':'var(--border)'),background:isActive?'rgba(196,94,40,.1)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
-  onMouseOver={function(e){if(!isActive)e.currentTarget.style.background='var(--bg2)';}}
-  onMouseOut={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
-  <span style={Object.assign({},iconStyle,{fontSize:20,color:isActive?'#c45e28':'var(--mid)'})}>{ic}</span>
-</button>
-  );})}
-  {results.length===0&&!showTyped&&<div style={{fontSize:13,color:'var(--mid)',padding:8}}>No presets match. Type any Material Symbol name above to use it directly.</div>}
-</div>
-      )}
+        );})}
+        {results.length===0&&<div style={{fontSize:13,color:'var(--mid)',padding:8}}>No icons match "{q}".</div>}
+      </div>
     </div>
-    <button className="btn btn-ghost" style={{marginTop:14,width:'100%',justifyContent:'center'}} onClick={onClose}>Cancel</button>
+    <button className="btn btn-ghost" style={{marginTop:14,width:'100%',justifyContent:'center',flexShrink:0}} onClick={onClose}>Close</button>
   </div>
 </div>
   );
@@ -245,7 +213,7 @@ function IconSearchPopup({current,onSelect,onClose}){
 
 // ── NewSpoolModal ──
 var SPOOL_ICONS=['auto_stories','gesture','hub','lightbulb','book_ribbon','favorite','star','location_on','person','group','explore','psychology','edit_note','campaign','local_library','history_edu','science','palette','music_note','sports_esports'];
-var SPOOL_COLORS=['#c45e28','#2f76e0','#2f9966','#ce2fe0','#e02f79','#e8a030','#b83220','#2fe07f','#64e02f','#f0c050'];
+var SPOOL_COLORS=['#c45e28','#2f76e0','#2f9966','#ce2fe0','#e02f79','#e8a030','#b83220','#2fe07f','#64e02f','#f0c050','#7a5a38','#a88060','#8a3a10','#6b4a26','#2f9999','#6b2fce','#e02f2f','#2f6bce'];
 function NewSpoolModal({onConfirm,onCancel}){
   var sn=useState('');var name=sn[0];var setName=sn[1];
   var si=useState('auto_stories');var icon=si[0];var setIcon=si[1];
@@ -292,7 +260,7 @@ function NewSpoolModal({onConfirm,onCancel}){
         <button onClick={function(){setShowModalIconSearch(true);}} style={{padding:'0 10px',height:36,borderRadius:6,border:'1px solid var(--border)',background:'transparent',cursor:'pointer',fontSize:11,fontFamily:'DM Sans, sans-serif',color:'var(--mid)',whiteSpace:'nowrap'}}>
           Search more
         </button>
-        {showModalIconSearch&&<IconSearchPopup current={icon} onSelect={function(ic){setIcon(ic);}} onClose={function(){setShowModalIconSearch(false);}}/> }      </div>
+        {showModalIconSearch&&<IconSearchPopup currentIcon={icon} currentColor={color} onSelectIcon={function(ic){setIcon(ic);}} onSelectColor={function(c){setColor(c);}} onClose={function(){setShowModalIconSearch(false);}}/> }      </div>
     </div>
     <div style={{display:'flex',gap:8}}>
       <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onCancel}>Cancel</button>
@@ -641,7 +609,6 @@ function StrandsPage({app,allProjects}){
   var sesi=useState(null);var editingSpoolIcon=sesi[0];var setEditingSpoolIcon=sesi[1];
   var ssis=useState(false);var showIconSearch=ssis[0];var setShowIconSearch=ssis[1];
   var snfn=useState('');var newFieldName=snfn[0];var setNewFieldName=snfn[1];
-  var sftp=useState(false);var showFieldTypePicker=sftp[0];var setShowFieldTypePicker=sftp[1];
   var sfct=useState(null);var chosenFieldType=sfct[0];var setChosenFieldType=sfct[1];
   var ssw=useState([]);var sharedWith=ssw[0];var setSharedWith=ssw[1];
   var spd=useState(null);var pendingDeleteFieldIdx=spd[0];var setPendingDeleteFieldIdx=spd[1];
@@ -692,7 +659,7 @@ function StrandsPage({app,allProjects}){
     if(remaining.length>0)setActiveColl(remaining[0]);
     setShowCollSettings(false);setDeleteCollConfirm(false);
   }
-  function addFieldToSettings(){if(!newFieldName.trim()||!chosenFieldType)return;commitFields(editingFields.concat([{id:genId(),label:newFieldName.trim(),type:chosenFieldType}]));setNewFieldName('');setChosenFieldType(null);setShowFieldTypePicker(false);}
+  function addFieldToSettings(){if(!newFieldName.trim()||!chosenFieldType)return;commitFields(editingFields.concat([{id:genId(),label:newFieldName.trim(),type:chosenFieldType}]));setNewFieldName('');setChosenFieldType(null);}
   var otherProjects=allProjects.filter(function(p){return p.id!==pid;});
   var sco2=useState(null);var dragOverColl=sco2[0];var setDragOverColl=sco2[1];
   function reorderColls(fromColl,toColl){
@@ -707,48 +674,23 @@ function StrandsPage({app,allProjects}){
     });
   }
   var detailContent=showCollSettings&&editingFields?(
-<div style={{padding:40}}>
+<div style={{padding:40,position:'relative'}}>
+  {!isMobile&&<button className="btn-icon" onClick={function(){setShowCollSettings(false);}} title="Close" style={{position:'absolute',top:16,right:16}}><span className="mi" style={{fontSize:22}}>close</span></button>}
   <div style={{maxWidth:900,margin:'0 auto'}}>
-  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:32}}>
-    <div>
-      <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>{activeColl} — Settings</div>
-      {activeTpl&&activeTpl.projectId!==pid&&(function(){
-        var srcProj=allProjects.find(function(p){return p.id===activeTpl.projectId;});
-        return <div style={{fontSize:12,color:'var(--mid)',marginTop:2}}>Shared from {srcProj?srcProj.title:'another project'} — fields and items are editable here, but the collection itself (rename, delete, sharing) is managed from its source.</div>;
-      })()}
-    </div>
-    <div style={{display:'flex',gap:8}}>
-      {(!activeTpl||activeTpl.projectId===pid)&&<button className="btn btn-danger btn-sm" onClick={function(){setDeleteCollConfirm(true);}}><span className="mi" style={{fontSize:14}}>delete</span>Delete</button>}
-      <SecondaryButton onClick={function(){setShowCollSettings(false);}} style={{width:'auto'}}>Done</SecondaryButton>
-    </div>
-  </div>
+  {activeTpl&&activeTpl.projectId!==pid&&(function(){
+    var srcProj=allProjects.find(function(p){return p.id===activeTpl.projectId;});
+    return <div style={{fontSize:12,color:'var(--mid)',marginBottom:16}}>Shared from {srcProj?srcProj.title:'another project'} — fields and items are editable here, but the collection itself (rename, delete, sharing) is managed from its source.</div>;
+  })()}
 
-  {/* Hero: icon/colour thumbnail + name, same layout rhythm as a spool item's own thumbnail + title + first field */}
+  {/* Hero: icon/colour thumbnail (click opens combined icon+colour picker) + name */}
   <div style={{display:'flex',gap:20,alignItems:'flex-start',marginBottom:32,position:'relative'}}>
     <CollectionIconThumb color={editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'} icon={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onClick={function(){setShowIconSearch(true);}}/>
-    {showIconSearch&&<IconSearchPopup current={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onSelect={function(ic){commitIcon(ic);}} onClose={function(){setShowIconSearch(false);}}/>}
-    <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:24,paddingTop:8}}>
+    {showIconSearch&&<IconSearchPopup currentIcon={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} currentColor={editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'} onSelectIcon={function(ic){commitIcon(ic);}} onSelectColor={function(c){commitColor(c);}} onClose={function(){setShowIconSearch(false);}}/>}
+    <div style={{flex:1,minWidth:0,paddingTop:8}}>
       <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26'}}>{activeColl}</div>
-      <div className="wv-field-wrap">
-        <label className="wv-field-lbl">Colour</label>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:6}}>
-          {SPOOL_COLORS.map(function(c){var isActive=(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')===c;return(
-<div key={c} onClick={function(){commitColor(c);}} style={{width:24,height:24,borderRadius:'50%',background:c,cursor:'pointer',flexShrink:0,transform:isActive?'scale(1.25)':'scale(1)',boxShadow:isActive?'0 0 0 2px var(--bg1),0 0 0 3.5px '+c:'none',transition:'transform .15s'}}/>
-          );})}
-        </div>
-      </div>
     </div>
   </div>
 
-  {deleteCollConfirm&&(
-<DeleteConfirmModal
-  itemName={activeColl}
-  message={<>This will permanently delete the collection and all <strong>{(app.allStrands[pid]&&app.allStrands[pid][activeColl]?app.allStrands[pid][activeColl].length:0)}</strong> strands inside it.</>}
-  confirmLabel="Delete collection"
-  onConfirm={deleteCollection}
-  onCancel={function(){setDeleteCollConfirm(false);}}
-/>
-  )}
   {pendingDeleteFieldIdx!==null&&(
 <DeleteConfirmModal
   itemName={editingFields[pendingDeleteFieldIdx]&&editingFields[pendingDeleteFieldIdx].label}
@@ -773,7 +715,8 @@ function StrandsPage({app,allProjects}){
     );
   })()}
 
-  <Section label="Fields">
+  <div className="wv-field-wrap" style={{marginBottom:24}}>
+  <label className="wv-field-lbl">Fields</label>
   <div style={{marginTop:12}}>
   {editingFields.map(function(f,i){return(
 <div key={f.id} draggable={true}
@@ -785,19 +728,19 @@ function StrandsPage({app,allProjects}){
     <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab',flexShrink:0}}>drag_indicator</span>
     <span className="material-symbols-outlined" style={{fontSize:16,color:'#A88060',flexShrink:0}}>{(FIELD_TYPE_INFO[f.type]||{}).icon||'text_fields'}</span>
     <input defaultValue={f.label} style={{maxWidth:160,fontSize:13}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});commitFields(nf);}}/>
-    <select value={f.type} style={{width:110,fontSize:13}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value,refSpool:null,refMultiple:false,options:null});commitFields(nf);}}>
+    <SelectField wrap={false} value={f.type} style={{width:110,fontSize:13,padding:'6px 8px'}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value,refSpool:null,refMultiple:false,options:null});commitFields(nf);}}>
       {FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}
-    </select>
+    </SelectField>
     <button className="btn-icon" title="Delete field" onClick={function(){requestDeleteField(i);}}><span className="mi" style={{fontSize:18}}>delete</span></button>
   </div>
   {f.type==='strand_ref'&&(
 <div style={{display:'flex',gap:4,alignItems:'center',marginTop:6,marginLeft:26}}>
-  <select value={f.refSpool||''} style={{fontSize:11,flex:1}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refSpool:e.target.value});commitFields(nf);}}>
+  <SelectField wrap={false} value={f.refSpool||''} style={{fontSize:11,flex:1,padding:'4px 6px'}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refSpool:e.target.value});commitFields(nf);}}>
     <option value="">Pick spool…</option>
     {Object.keys(app.allStrands[pid]||{}).map(function(c){return <option key={c} value={c}>{c}</option>;})}
-  </select>
-  <label style={{fontSize:11,display:'flex',alignItems:'center',gap:3,whiteSpace:'nowrap',cursor:'pointer'}}>
-    <input type="checkbox" checked={!!f.refMultiple} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refMultiple:e.target.checked});commitFields(nf);}}/> Multiple
+  </SelectField>
+  <label style={{fontSize:11,display:'flex',alignItems:'center',gap:3,whiteSpace:'nowrap',cursor:'pointer'}} onClick={function(){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refMultiple:!f.refMultiple});commitFields(nf);}}>
+    <Check on={!!f.refMultiple}/> Multiple
   </label>
 </div>
   )}
@@ -809,17 +752,10 @@ function StrandsPage({app,allProjects}){
 </div>
   );})}
 
-  {/* Webflow-style field-type picker — replaces the old typebox + dropdown */}
+  {/* Webflow-style field-type picker — open by default, no toggle or container chrome */}
   <div style={{marginTop:16}}>
-    {!showFieldTypePicker?(
-      <TertiaryButton onClick={function(){setShowFieldTypePicker(true);}} style={{color:'#A88060',display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:18}}>add</span>Add Field</TertiaryButton>
-    ):!chosenFieldType?(
-<div style={{border:'1px solid var(--border)',borderRadius:12,padding:16,background:'var(--bg1)'}}>
-  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-    <span className="wv-field-lbl">Choose a field type</span>
-    <button className="btn-icon" onClick={function(){setShowFieldTypePicker(false);}}><span className="mi" style={{fontSize:18}}>close</span></button>
-  </div>
-  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))',gap:10}}>
+    {!chosenFieldType?(
+<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))',gap:10}}>
     {FIELD_TYPES.map(function(t){var info=FIELD_TYPE_INFO[t.id]||{icon:'text_fields',help:''};return(
 <button key={t.id} type="button" onClick={function(){setChosenFieldType(t.id);}} style={{display:'flex',flexDirection:'column',alignItems:'center',textAlign:'center',gap:6,padding:'16px 12px',borderRadius:12,border:'1.5px solid var(--border)',background:'var(--bg1)',cursor:'pointer',transition:'all .5s ease'}}
   onMouseOver={function(e){e.currentTarget.style.borderColor='#C45E28';e.currentTarget.style.background='rgba(196,94,40,.05)';}}
@@ -829,29 +765,41 @@ function StrandsPage({app,allProjects}){
   <span style={{fontFamily:"'DM Sans',sans-serif",fontSize:11,color:'var(--mid)',lineHeight:1.35}}>{info.help}</span>
 </button>
     );})}
-  </div>
 </div>
     ):(
-<div style={{display:'flex',gap:8,alignItems:'center',border:'1px solid var(--border)',borderRadius:12,padding:16,background:'var(--bg1)'}}>
-  <span className="material-symbols-outlined" style={{fontSize:22,color:'#C45E28',flexShrink:0}}>{(FIELD_TYPE_INFO[chosenFieldType]||{}).icon}</span>
-  <input autoFocus value={newFieldName} onChange={function(e){setNewFieldName(e.target.value);}} placeholder="Field name" onKeyDown={function(e){if(e.key==='Enter')addFieldToSettings();if(e.key==='Escape'){setChosenFieldType(null);}}} style={{flex:1}}/>
+<div className="wv-search-box" style={{gap:8}}>
+  <span className="material-symbols-outlined" style={{fontSize:20,color:'#C45E28',flexShrink:0}}>{(FIELD_TYPE_INFO[chosenFieldType]||{}).icon}</span>
+  <input className="wv-search-input" autoFocus value={newFieldName} onChange={function(e){setNewFieldName(e.target.value);}} placeholder="Field name" onKeyDown={function(e){if(e.key==='Enter')addFieldToSettings();if(e.key==='Escape'){setChosenFieldType(null);}}}/>
   <button className="btn-icon" title="Back" onClick={function(){setChosenFieldType(null);}}><span className="mi" style={{fontSize:18}}>arrow_back</span></button>
   <PrimaryButton onClick={addFieldToSettings} style={{width:'auto'}}>Add</PrimaryButton>
 </div>
     )}
   </div>
   </div>
-  </Section>
+  </div>
 
   {(!activeTpl||activeTpl.projectId===pid)&&(
-<div style={{paddingTop:24,marginTop:24,borderTop:'1px solid var(--border)'}}>
-    <div className="wv-field-wrap">
-      <label className="wv-field-lbl">Share across projects</label>
-      <div style={{marginTop:6}}>
-        <MultiSelectDropdown options={otherProjects.map(function(p){return{id:p.id,label:p.title};})} selected={sharedWith} onChange={commitSharedWith} placeholder="Not shared with any other project"/>
-      </div>
-    </div>
+<div className="wv-field-wrap" style={{marginBottom:32}}>
+  <label className="wv-field-lbl">Share across projects</label>
+  <div style={{marginTop:6}}>
+    <MultiSelectDropdown options={otherProjects.map(function(p){return{id:p.id,label:p.title};})} selected={sharedWith} onChange={commitSharedWith} placeholder="Not shared with any other project"/>
   </div>
+</div>
+  )}
+
+  {deleteCollConfirm&&(
+<DeleteConfirmModal
+  itemName={activeColl}
+  message={<>This will permanently delete the collection and all <strong>{(app.allStrands[pid]&&app.allStrands[pid][activeColl]?app.allStrands[pid][activeColl].length:0)}</strong> strands inside it.</>}
+  confirmLabel="Delete collection"
+  onConfirm={deleteCollection}
+  onCancel={function(){setDeleteCollConfirm(false);}}
+/>
+  )}
+  {(!activeTpl||activeTpl.projectId===pid)&&(
+<div style={{paddingTop:24,borderTop:'1px solid var(--border)',textAlign:'center'}}>
+  <TertiaryButton onClick={function(){setDeleteCollConfirm(true);}} style={{color:'var(--danger)',display:'inline-flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:18}}>delete</span>Delete Spool</TertiaryButton>
+</div>
   )}
   </div>
 </div>
