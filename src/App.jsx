@@ -1293,6 +1293,19 @@ function App(){
       return next;
     });
   }
+  function deleteStrand(pid,coll,sid){
+    var ownerPid=ownerOfCollection(pid,coll);
+    setAllStrands(function(prev){
+      var next=Object.assign({},prev);
+      var ownerPs=Object.assign({},next[ownerPid]||{});
+      var updated=(ownerPs[coll]||[]).filter(function(s){return s.id!==sid;});
+      ownerPs[coll]=updated;
+      next[ownerPid]=ownerPs;
+      saveDB('woven:strands:'+ownerPid,ownerPs);
+      propagateSharedStrands(next,ownerPid,coll,updated);
+      return next;
+    });
+  }
   function addTemplate(pid,tpl){setAllTemplates(function(prev){var next=Object.assign({},prev);next[pid]=(next[pid]||[]).concat([tpl]);saveDB('woven:templates:'+pid,next[pid]);return next;});}
   function updateTemplate(pid,tid,changes){
     // Templates already carry their own projectId — use that as the source
@@ -1406,7 +1419,7 @@ function App(){
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,deleteDraftPermanently:deleteDraftPermanently,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,promoteStrand:promoteStrand,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,deleteDraftPermanently:deleteDraftPermanently,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,promoteStrand:promoteStrand,updateStrand:updateStrand,addStrand:addStrand,deleteStrand:deleteStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
 
   function signOut(){
     supabase.auth.signOut().then(function(){

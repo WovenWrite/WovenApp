@@ -9,6 +9,49 @@ import { genId, PRESET_COLORS } from './utils'
 
 function useIsMobile(){var s=useState(window.innerWidth<768);var isMobile=s[0];var setIsMobile=s[1];useEffect(function(){function onResize(){setIsMobile(window.innerWidth<768);}window.addEventListener('resize',onResize);return function(){window.removeEventListener('resize',onResize);};},[]);return isMobile;}
 
+// ── LongTextField ──
+// A long_text Field with a small markdown toolbar (bold/italic/bulleted
+// list) above it. Lightweight by design — inserts markdown syntax at the
+// cursor rather than rendering a full WYSIWYG editor. onMouseDown+
+// preventDefault on the toolbar buttons keeps the textarea's selection
+// intact (a plain onClick would blur the textarea first and lose it).
+function LongTextField({f,sid,val,onCommit}){
+  var taRef=useRef(null);
+  function wrap(pre,post,placeholder){
+    var ta=taRef.current;if(!ta)return;
+    var start=ta.selectionStart,end=ta.selectionEnd;
+    var text=ta.value;
+    var selected=text.slice(start,end)||placeholder;
+    var newValue=text.slice(0,start)+pre+selected+post+text.slice(end);
+    ta.value=newValue;
+    var cursor=start+pre.length+selected.length+post.length;
+    ta.focus();ta.setSelectionRange(cursor,cursor);
+    onCommit(newValue);
+  }
+  function list(){
+    var ta=taRef.current;if(!ta)return;
+    var start=ta.selectionStart;
+    var text=ta.value;
+    var lineStart=text.lastIndexOf('\n',start-1)+1;
+    var newValue=text.slice(0,lineStart)+'- '+text.slice(lineStart);
+    ta.value=newValue;
+    var cursor=start+2;
+    ta.focus();ta.setSelectionRange(cursor,cursor);
+    onCommit(newValue);
+  }
+  return(
+<div className="wv-field-wrap">
+  <label className="wv-field-lbl">{f.label}</label>
+  <div style={{display:'flex',gap:2,marginBottom:4}}>
+    <button type="button" className="btn-icon" title="Bold" onMouseDown={function(e){e.preventDefault();wrap('**','**','bold text');}}><span className="mi" style={{fontSize:16}}>format_bold</span></button>
+    <button type="button" className="btn-icon" title="Italic" onMouseDown={function(e){e.preventDefault();wrap('*','*','italic text');}}><span className="mi" style={{fontSize:16}}>format_italic</span></button>
+    <button type="button" className="btn-icon" title="Bulleted list" onMouseDown={function(e){e.preventDefault();list();}}><span className="mi" style={{fontSize:16}}>format_list_bulleted</span></button>
+  </div>
+  <Field defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} resizeMode="manual" rows={5} innerRef={taRef} wrap={false} onBlur={function(e){onCommit(e.target.value);}}/>
+</div>
+  );
+}
+
 // ── StrandSortFilter ──
 function StrandSortFilter({sort,setSort,strandFilter,setStrandFilter,fields}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
@@ -38,7 +81,7 @@ function StrandSortFilter({sort,setSort,strandFilter,setStrandFilter,fields}){
 }
 
 // ── CollTab ──
-function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrandId,setSearch,setShowCollSettings}){
+function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,closeDetail,setSearch,setShowCollSettings}){
   var se=useState(false);var editing=se[0];var setEditing=se[1];
   var sv=useState(coll);var val=sv[0];var setVal=sv[1];
   var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.name===coll;});
@@ -51,7 +94,7 @@ function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrand
   if(editing)return(<div className="strands-tab active" style={{padding:'0 4px'}}><input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commitRename} onKeyDown={function(e){if(e.key==='Enter')commitRename();if(e.key==='Escape'){setVal(coll);setEditing(false);}}} style={{width:90,height:24,fontSize:13,padding:'2px 6px',borderRadius:4}}/></div>);
   var tabIcon=tpl&&tpl.icon?tpl.icon:null;
   var tabColor=tpl&&tpl.color?tpl.color:'#7A5A38';
-  return(<div className={'strands-tab'+(isActive?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){if(isNative)setEditing(true);}} title={isNative?undefined:'Shared from another project — rename from its source'} style={{display:'flex',alignItems:'center',gap:6}}>
+  return(<div className={'strands-tab'+(isActive?' active':'')} onClick={function(){closeDetail();setActiveColl(coll);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){if(isNative)setEditing(true);}} title={isNative?undefined:'Shared from another project — rename from its source'} style={{display:'flex',alignItems:'center',gap:6}}>
     {tabIcon&&<span className="material-symbols-outlined" style={{fontSize:16,color:isActive?tabColor:'rgba(122,90,56,.75)'}}>{tabIcon}</span>}
     {coll}
   </div>);
@@ -260,9 +303,12 @@ function StrandRefField({f,sid,val,pid,app,onUpdate}){
 
   {/* Add new ref — show if multiple allowed or no refs yet */}
   {(f.refMultiple||refs.length===0)&&(
-<div style={{display:'flex',flexDirection:'column',gap:6,padding:'8px 10px',borderRadius:10,background:'var(--bg2)',border:'1px dashed var(--border)'}}>
+<div style={{display:'flex',flexDirection:'column',gap:6}}>
   {/* Search + select */}
-  <input value={searchQ} onChange={function(e){setSearchQ(e.target.value);setSelId('');}} placeholder={'Search '+refCollName+'…'} style={{fontFamily:'DM Sans,sans-serif',fontSize:12,padding:'4px 8px',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg1)',color:'var(--text)',outline:'none'}}/>
+  <div className="wv-search-box">
+    <span className="mi wv-search-icon">search</span>
+    <input className="wv-search-input" value={searchQ} onChange={function(e){setSearchQ(e.target.value);setSelId('');}} placeholder={'Search '+refCollName+'…'}/>
+  </div>
   {searchQ&&available.length>0&&(
 <div style={{maxHeight:120,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg1)'}}>
   {available.map(function(st){return(
@@ -317,13 +363,19 @@ var SPOOL_SWITCHER_CSS=`
    mobile's always-full-screen list), the footer's Add button shouldn't
    stretch edge to edge with it. */
 .strands-layout .wv-drawer--flexw .wv-btn{max-width:400px;margin:0 auto;}
-/* "New Spool" toolbar button: almond at rest. The shared SecondaryButton's
-   default hover (amber fill) was previously fought with an inline color
-   override, which inline styles can never win against a stylesheet's
-   :hover rule — text stayed almond on an amber fill, illegible. Styling
-   both states here in CSS instead fixes that properly. */
-.new-spool-btn .wv-btn-secondary{color:#A88060;border-color:#A88060;}
-.new-spool-btn .wv-btn-secondary:hover:not(:disabled){background:#6B4A26;border-color:#6B4A26;color:#F5EDE0;}
+/* "New Spool" tab-add icon — same treatment as the Canvas board-add tab,
+   so creating a new collection reads as "adding another tab" consistently
+   across the app. */
+.strands-tab-add{width:32px;height:32px;border-radius:8px;border:1px dashed #A88060;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  color:rgba(122,90,56,.6);font-size:20px;flex-shrink:0;margin:0 0 6px 6px;
+  transition:all .12s;line-height:1;user-select:none;}
+.strands-tab-add:hover{border-color:var(--indigo);color:var(--indigo);background:rgba(196,94,40,.08);}
+.strands-tab-add-wrap{display:flex;align-items:center;height:44px;padding:0 12px;
+  margin:0 0 0 6px;border-radius:10px 10px 0 0;border:1px solid #A88060;
+  background:#FDF8F0;flex-shrink:0;}
+.strands-tab-add-input{background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;
+  font-size:16px;font-weight:600;color:#6B4A26;width:130px;padding:0;}
 /* The list's own Drawer header just repeats the active tab's name — the
    tab bar above it already shows that, so it's a redundant title + stroke. */
 .strands-layout .wv-drawer-hdr{display:none;}
@@ -470,12 +522,28 @@ function StrandsPage({app,allProjects}){
   var fields=activeTpl?activeTpl.fields:defaultFields(activeColl);
   function updateStrand(sid,changes){app.updateStrand(pid,activeColl,sid,changes);}
   function updateField(sid,fieldId,val){if(!activeStrand)return;var nf=Object.assign({},activeStrand.fields||{});nf[fieldId]=val;updateStrand(sid,{fields:nf});}
-  function addStrand(){var tpl=getTpl(activeColl);var existing=(app.allStrands[pid]&&app.allStrands[pid][activeColl])||[];var base='New '+activeColl.replace(/s$/,'');var num=existing.filter(function(s){return s.name&&s.name.startsWith(base);}).length+1;var ns={id:genId(),templateId:tpl?tpl.id:'',collectionName:activeColl,name:base+' '+num,color:({"Characters":"#c45e28","Locations":"#2f9966","Plot Threads":"#2f76e0","Sources":"#ce2fe0","Interviews":"#e02f79","Subjects":"#e8a030","Scenes":"#64e02f","Topics":"#2fe07f","Lore & World":"#e8a030","Reports":"#b83220","Audience Notes":"#f0c050"}[activeColl])||PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};app.addStrand(pid,activeColl,ns);setActiveStrandId(ns.id);if(isMobile)setMobileDetailOpen(true);}
-  function addCollection(){var name=newCollName.trim();if(!name)return;var nt={id:genId(),projectId:pid,name:name,fields:defaultFields(name),sharedWith:[]};app.addTemplate(pid,nt);app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});setActiveColl(name);setNewColl(false);setNewCollName('');}
+  function addStrand(){var tpl=getTpl(activeColl);var ns={id:genId(),templateId:tpl?tpl.id:'',collectionName:activeColl,name:'',color:({"Characters":"#c45e28","Locations":"#2f9966","Plot Threads":"#2f76e0","Sources":"#ce2fe0","Interviews":"#e02f79","Subjects":"#e8a030","Scenes":"#64e02f","Topics":"#2fe07f","Lore & World":"#e8a030","Reports":"#b83220","Audience Notes":"#f0c050"}[activeColl])||PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};app.addStrand(pid,activeColl,ns);setActiveStrandId(ns.id);if(isMobile)setMobileDetailOpen(true);}
+  // Closing a still-untitled item discards it rather than leaving a blank
+  // "Spool name 1"-style entry behind — nothing is really "saved" until a
+  // title is actually given.
+  function closeDetail(){
+    if(activeStrand&&(!activeStrand.name||!activeStrand.name.trim())){
+      app.deleteStrand(pid,activeColl,activeStrand.id);
+    }
+    setActiveStrandId(null);
+    if(isMobile)setMobileDetailOpen(false);
+  }
+  function addCollection(){var name=newCollName.trim();if(!name)return;var nt={id:genId(),projectId:pid,name:name,fields:defaultFields(name),sharedWith:[]};app.addTemplate(pid,nt);app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});setActiveColl(name);setNewColl(false);setNewCollName('');
+    // Land in the collection builder rather than an empty item list. Seed
+    // editing state from the template we just built locally — activeTpl
+    // won't reflect it until the next render, so reading from it here would
+    // still show the previous collection's settings.
+    setEditingFields([...nt.fields]);setSharedWith(nt.sharedWith||[]);setEditingSpoolColor(null);setEditingSpoolIcon(null);setShowCollSettings(true);
+  }
   function handleImageUpload(e,sid){var file=e.target.files&&e.target.files[0];if(!file)return;uploadImage(file).then(function(url){if(url)updateStrand(sid,{image:url});});}
   function getDraftAppearances(sid){return(app.allDrafts[pid]||[]).filter(function(d){return(d.strandTags||[]).includes(sid);});}
   function renderFieldInput(f,sid,val){
-    if(f.type==='long_text')return <Field key={sid+'-'+f.id} label={f.label} defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} resizeMode="manual" rows={5} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
+    if(f.type==='long_text')return <LongTextField key={sid+'-'+f.id} f={f} sid={sid} val={val} onCommit={function(newVal){updateField(sid,f.id,newVal);}}/>;
     if(f.type==='boolean')return(
 <div key={sid+'-'+f.id} className="wv-field-wrap">
   <label className="wv-field-lbl">{f.label}</label>
@@ -522,16 +590,21 @@ function StrandsPage({app,allProjects}){
   // A field can't be deleted while any existing strand in this collection
   // still has data in it — deleting it would silently destroy that data.
   function fieldHasContent(fieldId){
+    return fieldContentCount(fieldId)>0;
+  }
+  function fieldContentCount(fieldId){
     var items=(app.allStrands[pid]&&app.allStrands[pid][activeColl])||[];
-    return items.some(function(s){
+    return items.filter(function(s){
       var v=s.fields&&s.fields[fieldId];
       if(v===undefined||v===null)return false;
       if(typeof v==='string')return v.trim().length>0;
       return true;
-    });
+    }).length;
   }
+  var sfdb=useState(null);var fieldDeleteBlockedIdx=sfdb[0];var setFieldDeleteBlockedIdx=sfdb[1];
   function requestDeleteField(idx){
-    var f=editingFields[idx];if(!f||fieldHasContent(f.id))return;
+    var f=editingFields[idx];if(!f)return;
+    if(fieldHasContent(f.id)){setFieldDeleteBlockedIdx(idx);return;}
     setPendingDeleteFieldIdx(idx);
   }
   function confirmDeleteField(){
@@ -635,7 +708,21 @@ function StrandsPage({app,allProjects}){
   onCancel={function(){setPendingDeleteFieldIdx(null);}}
 />
   )}
-  {editingFields.map(function(f,i){var hasContent=fieldHasContent(f.id);return(
+  {fieldDeleteBlockedIdx!==null&&(function(){
+    var f=editingFields[fieldDeleteBlockedIdx];
+    var count=f?fieldContentCount(f.id):0;
+    return(
+<div className="modal-overlay">
+  <div className="modal-backdrop" onClick={function(){setFieldDeleteBlockedIdx(null);}}/>
+  <div className="modal-box" style={{maxWidth:400}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,marginBottom:12,color:'var(--text)'}}>Can't delete "{f&&f.label}"</div>
+    <div style={{fontSize:14,color:'var(--body-text)',lineHeight:1.6,marginBottom:20}}>This field has content on <strong>{count}</strong> existing {count===1?'item':'items'}. Remove that data first if you want to delete the field.</div>
+    <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={function(){setFieldDeleteBlockedIdx(null);}}>Got it</button>
+  </div>
+</div>
+    );
+  })()}
+  {editingFields.map(function(f,i){return(
 <div key={f.id} draggable={true}
   onDragStart={function(e){e.dataTransfer.setData('fieldIdx',''+i);}}
   onDragOver={function(e){e.preventDefault();}}
@@ -647,7 +734,7 @@ function StrandsPage({app,allProjects}){
     <select value={f.type} style={{width:110,fontSize:13}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value,refSpool:null,refMultiple:false,options:null});commitFields(nf);}}>
       {FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}
     </select>
-    <button className="btn-icon" disabled={hasContent} title={hasContent?'This field has content on existing items — remove that data before deleting the field':'Delete field'} onClick={function(){requestDeleteField(i);}} style={hasContent?{opacity:.35,cursor:'not-allowed'}:undefined}><span className="mi" style={{fontSize:18}}>delete</span></button>
+    <button className="btn-icon" title="Delete field" onClick={function(){requestDeleteField(i);}}><span className="mi" style={{fontSize:18}}>delete</span></button>
   </div>
   {f.type==='strand_ref'&&(
 <div style={{display:'flex',gap:4,alignItems:'center',marginTop:6,marginLeft:26}}>
@@ -692,11 +779,11 @@ function StrandsPage({app,allProjects}){
 </div>
   ):activeStrand?(
 <div style={{padding:40,position:'relative',backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.12) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
-  {!isMobile&&<button className="btn-icon" onClick={function(){setActiveStrandId(null);}} title="Back to list" style={{position:'absolute',top:16,right:16}}><span className="mi" style={{fontSize:22}}>close</span></button>}
+  {!isMobile&&<button className="btn-icon" onClick={closeDetail} title="Back to list" style={{position:'absolute',top:16,right:16}}><span className="mi" style={{fontSize:22}}>close</span></button>}
   <div style={{display:'flex',gap:20,alignItems:'flex-start',marginBottom:24}}>
     <SpoolThumbnailUpload strand={activeStrand} onClick={function(){setShowAvatarEdit(true);}}/>
     <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:24}}>
-      <input key={activeStrand.id+'-n'} defaultValue={activeStrand.name} placeholder="Name" spellCheck={false} onBlur={function(e){updateStrand(activeStrand.id,{name:e.target.value});}} style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26',border:'none',background:'transparent',outline:'none',padding:0,width:'100%',paddingRight:40}}/>
+      <input key={activeStrand.id+'-n'} defaultValue={activeStrand.name} placeholder="Title (required)" spellCheck={false} onBlur={function(e){updateStrand(activeStrand.id,{name:e.target.value});}} style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26',border:'none',background:'transparent',outline:'none',padding:0,width:'100%',paddingRight:40}}/>
       {fields[0]&&(function(){var f=fields[0];var val=activeStrand.fields&&activeStrand.fields[f.id]?activeStrand.fields[f.id]:'';return renderFieldInput(f,activeStrand.id,val);})()}
     </div>
   </div>
@@ -720,20 +807,21 @@ function StrandsPage({app,allProjects}){
   <span className="mi" style={{fontSize:40,color:'var(--border)'}}>auto_awesome</span>
   <div style={{fontFamily:'var(--serif)',fontSize:20,color:'var(--mid)'}}>{activeColl}</div>
   <div style={{fontSize:13,color:'var(--placeholder)',marginBottom:4}}>No entries yet</div>
-  <button className="btn btn-primary" onClick={addStrand}>+ Add {activeColl.replace(/s$/,'')}</button>
+  <PrimaryButton icon="add" onClick={addStrand} style={{width:'auto'}}>Add {activeColl.replace(/s$/,'')}</PrimaryButton>
 </div>
   );
   var findSelectIcon=function(collName){var t=projTemplates.find(function(t){return t.name===collName;});return (t&&t.icon)||'auto_stories';};
+  var addItemLabel='Add '+activeColl.replace(/s$/,'');
   var findSelectPanel=(
 <Drawer variant="inline" title={activeColl} width={activeStrand?undefined:'flex'}
-  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<StrandSortFilter sort={strandSort} setSort={updateStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>}/>}
-  footer={<PrimaryButton icon="add" onClick={addStrand}>Add to {activeColl}</PrimaryButton>}>
+  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<StrandSortFilter sort={strandSort} setSort={updateStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>} trailingSlot={<PrimaryButton icon="add" onClick={addStrand} style={{width:'auto'}}>{addItemLabel}</PrimaryButton>}/>}
+  footer={<div style={{display:'flex',flexDirection:'column',gap:8}}><PrimaryButton icon="add" onClick={addStrand}>{addItemLabel}</PrimaryButton><TertiaryButton onClick={openCollSettings} style={{color:'#A88060',justifyContent:'center',display:'flex',alignItems:'center',gap:8,width:'100%'}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Spool</TertiaryButton></div>}>
   {filtered.length===0?(
     <HelpText>{collStrands.length===0?'No entries yet.':'No results for "'+search+'".'}</HelpText>
   ):(
     <div>
       {filtered.map(function(st){return(
-        <StrandResultRow key={st.id} strand={st} spoolIcon={findSelectIcon(activeColl)} trailingCount={getDraftAppearances(st.id).length} trailingLabel={'Tagged in '+getDraftAppearances(st.id).length+' draft'+(getDraftAppearances(st.id).length===1?'':'s')} onClick={function(){setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}/>
+        <StrandResultRow key={st.id} strand={st} spoolIcon={findSelectIcon(activeColl)} trailingCount={getDraftAppearances(st.id).length} trailingLabel={'Tagged in '+getDraftAppearances(st.id).length+' draft'+(getDraftAppearances(st.id).length===1?'':'s')} onClick={function(){closeDetail();setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}/>
       );})}
     </div>
   )}
@@ -751,20 +839,20 @@ function StrandsPage({app,allProjects}){
   onDragLeave={function(){setDragOverColl(null);}}
   onDrop={function(e){e.preventDefault();var from=e.dataTransfer.getData('collName');reorderColls(from,coll);setDragOverColl(null);}}
   style={{borderLeft:dragOverColl===coll?'2px solid var(--indigo)':'2px solid transparent'}}>
-  <CollTab coll={coll} isActive={activeColl===coll} pid={pid} app={app} activeColl={activeColl} setActiveColl={setActiveColl} setActiveStrandId={setActiveStrandId} setSearch={setSearch} setShowCollSettings={setShowCollSettings}/>
+  <CollTab coll={coll} isActive={activeColl===coll} pid={pid} app={app} activeColl={activeColl} setActiveColl={setActiveColl} closeDetail={closeDetail} setSearch={setSearch} setShowCollSettings={setShowCollSettings}/>
 </div>
     );})}
     {newColl?(
-<div style={{display:'flex',alignItems:'center',gap:4}}>
-  <input autoFocus value={newCollName} onChange={function(e){setNewCollName(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')addCollection();if(e.key==='Escape'){setNewColl(false);setNewCollName('');}}} placeholder="Name" style={{width:100,height:30,fontSize:13}}/>
-  <button style={{fontSize:13,color:'var(--teal)'}} onClick={addCollection}>ok</button>
+<div className="strands-tab-add-wrap">
+  <input autoFocus className="strands-tab-add-input" value={newCollName} onChange={function(e){setNewCollName(e.target.value);}} onBlur={function(){setNewColl(false);setNewCollName('');}} onKeyDown={function(e){if(e.key==='Enter')addCollection();if(e.key==='Escape'){setNewColl(false);setNewCollName('');}}} placeholder="Spool name"/>
 </div>
     ):(
-<div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',marginBottom:6}}>
-  <TertiaryButton onClick={openCollSettings} style={{color:'#A88060',display:'flex',alignItems:'center',gap:8}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Spool</TertiaryButton>
-  <div className="new-spool-btn"><SecondaryButton icon="add" onClick={function(){setNewColl(true);}} style={{width:'auto'}}>New Spool</SecondaryButton></div>
-</div>
+<div className="strands-tab-add" onClick={function(){setNewColl(true);}} title="New Spool">+</div>
     )}
+    <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',marginBottom:6}}>
+      <TertiaryButton onClick={openCollSettings} style={{color:'#A88060',display:'flex',alignItems:'center',gap:8}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Spool</TertiaryButton>
+      <PrimaryButton icon="add" onClick={addStrand} style={{width:'auto'}}>{addItemLabel}</PrimaryButton>
+    </div>
   </div>
   )}
   {isMobile&&(
@@ -783,6 +871,10 @@ function StrandsPage({app,allProjects}){
     app.addTemplate(pid,nt);
     app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name.trim()]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});
     setActiveColl(name.trim());setNewColl(false);
+    // Land in the collection builder rather than an empty item list — same
+    // reasoning as addCollection() above: seed from the template we just
+    // built locally, since activeTpl won't reflect it until next render.
+    setEditingFields([...nt.fields]);setSharedWith(nt.sharedWith||[]);setEditingSpoolColor(nt.color||null);setEditingSpoolIcon(nt.icon||null);setShowCollSettings(true);
   }} onCancel={function(){setNewColl(false);}}/>}
   {isMobile&&showSpoolSwitcher&&(
     <SpoolSwitcherSheet
@@ -790,7 +882,7 @@ function StrandsPage({app,allProjects}){
       activeColl={activeColl}
       projTemplates={projTemplates}
       projStrands={projStrands}
-      onSelect={function(coll){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);setShowSpoolSwitcher(false);}}
+      onSelect={function(coll){closeDetail();setActiveColl(coll);setSearch('');setShowCollSettings(false);setShowSpoolSwitcher(false);}}
       onClose={function(){setShowSpoolSwitcher(false);}}
       onOpenSettings={function(){setShowSpoolSwitcher(false);openCollSettings();}}
       onCreateNew={function(){setShowSpoolSwitcher(false);setNewColl(true);}}
@@ -804,7 +896,7 @@ function StrandsPage({app,allProjects}){
     {isMobile&&mobileDetailOpen&&(
 <div style={{position:'fixed',inset:0,zIndex:50,background:'var(--bg1)',overflow:'auto'}}>
   <div style={{display:'flex',alignItems:'center',gap:8,padding:'14px 16px',borderBottom:'1px solid var(--border)'}}>
-    <button className="btn-icon" onClick={function(){setMobileDetailOpen(false);}}><span className="mi">arrow_back</span></button>
+    <button className="btn-icon" onClick={closeDetail}><span className="mi">arrow_back</span></button>
     <span style={{fontFamily:'var(--serif)',fontSize:17,fontWeight:600}}>{activeColl}</span>
   </div>
   {detailContent}

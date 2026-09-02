@@ -894,7 +894,7 @@ export function DraftThumbnailUpload({ image, onUpload }) {
   );
 }
 
-export function SearchSortBar({ value, onChange, placeholder, sortSlot }) {
+export function SearchSortBar({ value, onChange, placeholder, sortSlot, trailingSlot }) {
   return (
     <div className="wv-drawer-toolbar">
       <div className="wv-search-box">
@@ -908,6 +908,7 @@ export function SearchSortBar({ value, onChange, placeholder, sortSlot }) {
         />
       </div>
       {sortSlot}
+      {trailingSlot}
     </div>
   );
 }
