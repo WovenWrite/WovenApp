@@ -71,6 +71,21 @@ function StatsSection({app,onOpenProfile,greeting}){
       if(createdStr>=weekStartStr)ltCount++;
     }
   });
+  // Cumulative progress across every project — mirrors the per-project
+  // progress widget's word/sequenced/loose-thread stats (ProjectDrawer.jsx),
+  // just summed across app.allDrafts instead of one project's drafts.
+  // The per-status colour breakdown doesn't carry over here since status
+  // sets are configured per project and aren't necessarily comparable
+  // across projects with different setups.
+  var allTotalWords=0,allSequenced=0,allLoose=0;
+  Object.keys(app.allDrafts).forEach(function(pid){
+    (app.allDrafts[pid]||[]).forEach(function(d){
+      if(d.archived)return;
+      allTotalWords+=(d.wordCount||0);
+      if(d.status==='loose_thread')allLoose++;
+      else allSequenced++;
+    });
+  });
   return(
 <div>
   <div className="dash-greeting dash-greeting-mobile">{greeting||''}</div>
@@ -118,6 +133,23 @@ function StatsSection({app,onOpenProfile,greeting}){
       );})}
     </div>
   </div>
+  <div className="stat-card stat-hide-mobile">
+    <div className="stat-card-hdr"><span className="stat-card-title">All Projects</span></div>
+    <div style={{display:'flex',gap:10,marginTop:4}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600,color:'var(--text)',lineHeight:1.1}}>{allTotalWords.toLocaleString()}</div>
+        <div style={{fontSize:14,color:'var(--mid)',marginTop:2}}>{allTotalWords===1?'word':'words'}</div>
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600,color:'var(--text)',lineHeight:1.1}}>{allSequenced}</div>
+        <div style={{fontSize:14,color:'var(--mid)',marginTop:2}}>{allSequenced===1?'draft':'drafts'}</div>
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600,color:'var(--text)',lineHeight:1.1}}>{allLoose}</div>
+        <div style={{fontSize:14,color:'var(--mid)',marginTop:2}}>{allLoose===1?'loose thread':'loose threads'}</div>
+      </div>
+    </div>
+  </div>
 </div>
   );
 }
@@ -141,8 +173,6 @@ function GlobalLooseThreads({app}){
     app.updateGlobalLT(ltId,{archived:true});
   }
   var ssm=useState(false);var showMore=ssm[0];var setShowMore=ssm[1];
-  // Show one row (approx 3-4 cards) collapsed, rest hidden
-  var visibleLT=showMore?allLT:allLT.slice(0,3);
   function handleAddLT(){
     var id=genId();
     setPendingLT({id:id,title:'',synopsis:'',createdAt:new Date().toISOString(),archived:false});
@@ -174,12 +204,21 @@ function GlobalLooseThreads({app}){
   }
   return(
 <div style={{marginTop:24}}>
-  <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Loose Threads</div>
-  <div style={{display:"flex",flexWrap:"nowrap",gap:10,overflowX:"auto",paddingBottom:4}}>
+  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+    <span className="wv-field-lbl" style={{marginBottom:0}}>Loose Threads</span>
+    {allLT.length>0&&<span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,fontWeight:600,color:'var(--indigo)',background:'rgba(196,94,40,.10)',padding:'3px 10px',borderRadius:12,whiteSpace:'nowrap'}}>{allLT.length} {allLT.length===1?'thread':'threads'}</span>}
+    <div style={{flex:1}}/>
+    {allLT.length>3&&(
+    <button className="btn btn-ghost btn-sm" onClick={function(){setShowMore(!showMore);}}>
+      {showMore?'Show less':'Show all'}
+    </button>
+    )}
+  </div>
+  <div style={{display:'flex',flexWrap:'wrap',gap:10,overflow:showMore?'visible':'hidden',maxHeight:showMore?'none':100,paddingBottom:4}}>
     <div onClick={handleAddLT} style={{background:"transparent",border:"2px dashed #A88060",padding:"10px 15px",borderRadius:15,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,minWidth:120,flexShrink:0,minHeight:80}} onMouseEnter={function(e){e.currentTarget.style.borderColor="#c45e28";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#A88060";}}>
       <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
     </div>
-    {visibleLT.map(function(d){return(
+    {allLT.map(function(d){return(
 <div key={d.id} style={{background:'#FDF8F0',border:'1px solid #E2D0B8',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:150,maxWidth:150,flexShrink:0,transition:'border-color .2s,box-shadow .2s',outline:'1px solid transparent'}}
   onClick={function(){setOpenLTId(d.id);}}
   onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';e.currentTarget.style.boxShadow='0 4px 12px rgba(196,94,40,.12)';}}
@@ -189,13 +228,6 @@ function GlobalLooseThreads({app}){
 </div>
     );})}
   </div>
-  {allLT.length>3&&(
-<div style={{marginTop:8,textAlign:'center'}}>
-  <button className="btn btn-ghost btn-sm" onClick={function(){setShowMore(!showMore);}}>
-    {showMore?'Show less':'Show '+( allLT.length-3)+' more'}
-  </button>
-</div>
-  )}
   <button onClick={handleAddLT} title="Add a loose thread" style={{position:'fixed',bottom:28,right:28,width:52,height:52,borderRadius:'50%',background:'#DF6321',border:'none',boxShadow:'0 4px 14px rgba(42,31,16,.25)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',zIndex:400,transition:'background .15s ease'}}
     onMouseEnter={function(e){e.currentTarget.style.background='#6B4A26';}}
     onMouseLeave={function(e){e.currentTarget.style.background='#DF6321';}}>
@@ -242,7 +274,7 @@ function ArchiveDrawer({app,open,onClose}){
 <Drawer variant="overlay" open={open} title="Your Archive" topOffset={54} onClose={onClose}
   footer={selectedCount>0?(
 <div style={{display:'flex',gap:8,width:'100%',alignItems:'center'}}>
-  <span style={{fontSize:12,color:'var(--mid)',flex:1}}>{selectedCount} selected</span>
+  <span style={{fontSize:14,color:'var(--mid)',flex:1}}>{selectedCount} selected</span>
   <button className="btn btn-primary" style={{justifyContent:'center'}} onClick={restoreSelected}>
     <span className="mi" style={{fontSize:16}}>unarchive</span>Restore as Loose Thread
   </button>
@@ -252,21 +284,21 @@ function ArchiveDrawer({app,open,onClose}){
 <div style={{textAlign:'center',padding:'40px 20px',color:'var(--placeholder)'}}>
   <span className="mi" style={{fontSize:48,display:'block',marginBottom:12}}>inventory_2</span>
   <div style={{fontFamily:'var(--serif)',fontSize:18,marginBottom:6}}>Your archive is empty</div>
-  <div style={{fontSize:13}}>Archived drafts and projects will appear here.</div>
+  <div style={{fontSize:16}}>Archived drafts and projects will appear here.</div>
 </div>
   )}
   {archivedDrafts.length>0&&(
 <div style={{marginBottom:20}}>
-  <span className="sect-lbl">Archived Drafts</span>
+  <span className="wv-field-lbl">Archived Drafts</span>
   {archivedDrafts.map(function(d){var isSelected=!!selected[d.id];return(
 <div key={d.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
   <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(isSelected?'var(--indigo)':'var(--border)'),background:isSelected?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:2,transition:'all .15s',cursor:'pointer'}} onClick={function(){toggleDraft(d.id);}}>
-    {isSelected&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
+    {isSelected&&<span className="mi" style={{fontSize:14,color:'#fff'}}>check</span>}
   </span>
   <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={function(){toggleDraft(d.id);}}>
     <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)',marginBottom:2}}>{d.title||'Untitled'}</div>
-    <div style={{fontSize:11,color:'var(--indigo)',marginBottom:3}}>{d.projectTitle}</div>
-    {d.synopsis&&<div style={{fontSize:12,color:'var(--mid)',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.synopsis}</div>}
+    <div style={{fontSize:14,color:'var(--indigo)',marginBottom:3}}>{d.projectTitle}</div>
+    {d.synopsis&&<div style={{fontSize:16,color:'var(--mid)',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.synopsis}</div>}
   </div>
   <button className="btn-icon" style={{color:'var(--danger)',flexShrink:0}} title="Delete permanently" onClick={function(){deleteDraft(d);}}>
     <span className="mi" style={{fontSize:16}}>delete</span>
@@ -277,12 +309,12 @@ function ArchiveDrawer({app,open,onClose}){
   )}
   {archivedProjects.length>0&&(
 <div>
-  <span className="sect-lbl">Archived Projects</span>
+  <span className="wv-field-lbl">Archived Projects</span>
   {archivedProjects.map(function(p){return(
 <div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
   <div style={{flex:1}}>
     <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)',marginBottom:2}}>{p.title||'Untitled'}</div>
-    {p.synopsis&&<div style={{fontSize:12,color:'var(--mid)'}}>{p.synopsis}</div>}
+    {p.synopsis&&<div style={{fontSize:16,color:'var(--mid)'}}>{p.synopsis}</div>}
   </div>
   <button className="btn btn-ghost btn-sm" onClick={function(){app.unarchiveProject(p.id);}}>
     <span className="mi" style={{fontSize:14}}>unarchive</span>Restore
@@ -318,13 +350,13 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
     <div className="dash-main dot-grid">
       <div className="dash-greeting dash-greeting-desktop">{greeting}</div>
       <div className="dash-subtitle dash-greeting-desktop">What will you weave today?</div>
-      <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Your Projects</div>
+      <div className="wv-field-lbl" style={{marginBottom:12}}>Your Projects</div>
       <div className="proj-grid">
         {app.projects.filter(function(p){return !p.archived;}).map(function(p){var wc=getWC(p.id);return(
 <div key={p.id} className="proj-card proj-card-hover" style={{position:'relative'}}>
   <div className="proj-card-band" onClick={function(){openProject(p.id);}}>
     {p.image?<img src={p.image} alt={p.title} style={{width:'100%',height:'100%',objectFit:'cover',position:'absolute',inset:0}}/>:null}
-    {!p.image&&<span className="mi" style={{position:'relative',zIndex:1,fontSize:28,color:'rgba(42,31,16,.25)'}}>photo_camera</span>}
+    {!p.image&&<span className="mi" style={{position:'relative',zIndex:1,fontSize:32,color:'rgba(42,31,16,.25)'}}>photo_camera</span>}
   </div>
   <div className="proj-card-body" onClick={function(){openProject(p.id);}}>
     <div className="proj-card-title">{p.title||'Untitled'}</div>
@@ -337,7 +369,7 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
 </div>
         );})}<div className="add-proj" onClick={onNewProject}>
           <span className="mi" style={{fontSize:28,color:'var(--mid)'}}>add_circle_outline</span>
-          <div style={{fontSize:13,color:'var(--mid)'}}>New project</div>
+          <div style={{fontSize:14,color:'var(--mid)'}}>New project</div>
         </div>
       </div>
       <GlobalLooseThreads app={app}/>
@@ -345,7 +377,7 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
         <span className="mi" style={{fontSize:24,color:'var(--placeholder)',flexShrink:0}}>inventory_2</span>
         <div style={{flex:1}}>
           <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>Your Archive</div>
-          <div style={{fontSize:12,color:'var(--mid)'}}>Where shelved ideas stay safe.{archivedCount>0?' '+archivedCount+' item'+(archivedCount!==1?'s':'')+' archived.':''}</div>
+          <div style={{fontSize:16,color:'var(--mid)'}}>Where shelved ideas stay safe.{archivedCount>0?' '+archivedCount+' item'+(archivedCount!==1?'s':'')+' archived.':''}</div>
         </div>
         <span className="mi" style={{fontSize:20,color:'var(--border)'}}>chevron_right</span>
       </div>
