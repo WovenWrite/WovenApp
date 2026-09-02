@@ -14,8 +14,7 @@
 //   <ProfileDrawer app={app} focusField={profileFocus} open={showProfile} onClose={...} />
 
 import { useState, useEffect, useRef } from 'react';
-import { Drawer, Field, HelpText, SecondaryButton } from './SharedUI';
-import { initials, uploadImage } from './utils';
+import { Drawer, Field, HelpText, SecondaryButton, SpoolThumbnailUpload } from './SharedUI';
 
 export default function ProfileDrawer({ app, focusField, open, onClose, topOffset }) {
   var profile = app.profile || {};
@@ -54,13 +53,6 @@ export default function ProfileDrawer({ app, focusField, open, onClose, topOffse
     app.setProfile(updated);
   }
 
-  function handlePhoto(e) {
-    var file = e.target.files && e.target.files[0];
-    if (!file) return;
-    if (file.size > 3 * 1024 * 1024) { alert('Please use an image under 3 MB.'); return; }
-    uploadImage(file).then(function (url) { if (url) { setHeadshot(url); autoSave({ headshot: url }); } });
-  }
-
   var footer = (
     <SecondaryButton icon="logout" onClick={function () { app.signOut(); }}>
       Sign out
@@ -71,24 +63,17 @@ export default function ProfileDrawer({ app, focusField, open, onClose, topOffse
     <Drawer variant="overlay" open={open} onClose={onClose} title="Your Profile" footer={footer} topOffset={topOffset}>
 
       <div>
-        <span className="sect-lbl">Profile photo</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 6 }}>
-          <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--indigo)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, border: '2px solid var(--border)' }}>
-            {headshot
-              ? <img src={headshot} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <span style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600, color: '#fff' }}>{initials((firstName || '') + ' ' + (lastName || ''))}</span>}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label style={{ cursor: 'pointer' }}>
-              <span className="btn btn-ghost btn-sm">{headshot ? 'Change photo' : 'Upload photo'}</span>
-              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhoto} />
-            </label>
-            {headshot && (
-              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={function () { setHeadshot(null); autoSave({ headshot: null }); }}>
-                Remove
-              </button>
-            )}
-          </div>
+        <span className="wv-field-lbl">Profile photo</span>
+        <div style={{ marginTop: 6 }}>
+          <SpoolThumbnailUpload
+            strand={{ color: 'var(--indigo)', image: headshot, name: (firstName || '') + ' ' + (lastName || '') }}
+            onUpload={function (url) { setHeadshot(url); autoSave({ headshot: url }); }}
+          />
+          {headshot && (
+            <button className="btn btn-ghost btn-sm" style={{ marginTop: 10, color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={function () { setHeadshot(null); autoSave({ headshot: null }); }}>
+              Remove
+            </button>
+          )}
         </div>
       </div>
 
@@ -120,14 +105,11 @@ export default function ProfileDrawer({ app, focusField, open, onClose, topOffse
         <Field
           label="Daily writing goal"
           innerRef={goalRef}
-          value={goalVal}
-          onChange={function (e) {
-            var v = parseInt(e.target.value, 10);
-            if (!isNaN(v) && v > 0) setGoalVal(v);
-          }}
+          defaultValue={goalVal}
           onBlur={function (e) {
             var v = parseInt(e.target.value, 10);
-            if (!isNaN(v) && v > 0) app.setGoal(v);
+            if (!isNaN(v) && v > 0) { setGoalVal(v); app.setGoal(v); }
+            else { e.target.value = goalVal; }
           }}
         />
         <HelpText style={{ marginTop: 4 }}>Words per day</HelpText>
@@ -136,7 +118,7 @@ export default function ProfileDrawer({ app, focusField, open, onClose, topOffse
       {/* ── Not yet migrated — awaiting spec for segmented controls, toggles, and chips ── */}
 
       <div>
-        <span className="sect-lbl">Editor mode</span>
+        <span className="wv-field-lbl">Editor mode</span>
         <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
           {[['rt', 'Rich Text'], ['md', 'Markdown']].map(function (pair) {
             return (
@@ -146,11 +128,11 @@ export default function ProfileDrawer({ app, focusField, open, onClose, topOffse
             );
           })}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--mid)', marginTop: 6 }}>Applies to all drafts.</div>
+        <div style={{ fontSize: 16, color: 'var(--mid)', marginTop: 6 }}>Applies to all drafts.</div>
       </div>
 
       <div ref={reminderRef}>
-        <span className="sect-lbl">Writing reminders</span>
+        <span className="wv-field-lbl">Writing reminders</span>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ fontSize: 14, color: 'var(--text)' }}>Send me a quick nudge if I haven't written yet!</span>
           <span style={{ width: 36, height: 20, borderRadius: 10, background: reminderEnabled ? 'var(--indigo)' : 'var(--bg3)', cursor: 'pointer', position: 'relative', transition: 'all .2s', flexShrink: 0, display: 'inline-block' }} onClick={function () { var nv = !reminderEnabled; setReminderEnabled(nv); autoSave({ reminderEnabled: nv }); }}>
@@ -159,7 +141,7 @@ export default function ProfileDrawer({ app, focusField, open, onClose, topOffse
         </div>
         {reminderEnabled && (
           <div style={{ marginTop: 8 }}>
-            <span className="sect-lbl">Remind me at</span>
+            <span className="wv-field-lbl">Remind me at</span>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 130, overflowY: 'auto', padding: '2px 0' }}>
               {['6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM', '10:00 PM'].map(function (t) {
                 var isActive = reminderTime === t;
@@ -173,20 +155,20 @@ export default function ProfileDrawer({ app, focusField, open, onClose, topOffse
       </div>
 
       <div style={{ opacity: .5, pointerEvents: 'none', userSelect: 'none', paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-        <span className="sect-lbl">Plan</span>
+        <span className="wv-field-lbl">Plan</span>
         <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
           {[['Basic', 'Free', 'Free forever'], ['Artisan', '$8.99/mo', 'For serious writers'], ['Guild', '$19.99/mo', 'For teams & studios']].map(function (p) {
             var isActive = p[0] === 'Basic';
             return (
               <div key={p[0]} style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '10px', textAlign: 'center', background: isActive ? 'var(--bg2)' : 'transparent' }}>
-                <div style={{ fontFamily: 'var(--serif)', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{p[0]}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--indigo)', margin: '2px 0' }}>{p[1]}</div>
-                <div style={{ fontSize: 10, color: 'var(--mid)' }}>{p[2]}</div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{p[0]}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--indigo)', margin: '2px 0' }}>{p[1]}</div>
+                <div style={{ fontSize: 14, color: 'var(--mid)' }}>{p[2]}</div>
               </div>
             );
           })}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--mid)', marginTop: 8, textAlign: 'center' }}>Paid plans coming soon</div>
+        <div style={{ fontSize: 16, color: 'var(--mid)', marginTop: 8, textAlign: 'center' }}>Paid plans coming soon</div>
       </div>
 
     </Drawer>

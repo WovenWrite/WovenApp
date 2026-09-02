@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState, useEffect, useRef } from "react";
-import { AvatarEditModal, Drawer, HelpText, PrimaryButton, SecondaryButton, TertiaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio, Field, InputField, SelectField, Section, SpoolThumbnailUpload, DeleteConfirmModal } from './SharedUI'
+import { AvatarEditModal, Drawer, HelpText, PrimaryButton, TertiaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio, Field, InputField, SelectField, Section, SpoolThumbnailUpload, DeleteConfirmModal, Check } from './SharedUI'
 import { FIELD_TYPES, defaultFields, initials, uploadImage } from './utils'
 import { saveDB, loadDB } from './App'
 
@@ -8,6 +8,125 @@ import { saveDB, loadDB } from './App'
 import { genId, PRESET_COLORS } from './utils'
 
 function useIsMobile(){var s=useState(window.innerWidth<768);var isMobile=s[0];var setIsMobile=s[1];useEffect(function(){function onResize(){setIsMobile(window.innerWidth<768);}window.addEventListener('resize',onResize);return function(){window.removeEventListener('resize',onResize);};},[]);return isMobile;}
+
+// ── LongTextField ──
+// A long_text Field with a small markdown toolbar (bold/italic/bulleted
+// list) above it. Lightweight by design — inserts markdown syntax at the
+// cursor rather than rendering a full WYSIWYG editor. onMouseDown+
+// preventDefault on the toolbar buttons keeps the textarea's selection
+// intact (a plain onClick would blur the textarea first and lose it).
+// ── Field type metadata for the Webflow-style type picker cards ──
+var FIELD_TYPE_INFO={
+  short_text:{icon:'short_text',help:'A single line — names, titles, short labels.'},
+  long_text:{icon:'notes',help:'Multiple lines with light formatting — backstory, notes, descriptions.'},
+  number:{icon:'123',help:'A numeric value — age, count, quantity.'},
+  date:{icon:'calendar_month',help:'A specific date — birthday, event, deadline.'},
+  boolean:{icon:'toggle_on',help:'A simple yes/no choice.'},
+  select:{icon:'list',help:'Pick one option from a defined list.'},
+  strand_ref:{icon:'hub',help:'Link to another spool item — relationships, connections.'}
+};
+
+// ── CollectionIconThumb ──
+// Matches SpoolThumbnailUpload's exact footprint (150x150, semi-opaque
+// amber pencil overlay) so a collection's icon/colour preview reads as the
+// same "thumbnail" pattern used on individual spool items — just centered
+// on a material icon instead of an image/emoji/initials, since a
+// collection doesn't have those.
+function CollectionIconThumb({color,icon,onClick}){
+  return(
+<div className="wv-thumb-upload" style={{background:color||'#A88060',cursor:'pointer'}} onClick={onClick}>
+  <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <span className="material-symbols-outlined" style={{fontSize:56,color:'#fff'}}>{icon||'auto_stories'}</span>
+  </div>
+  <div className="wv-thumb-upload-overlay">
+    <span className="mi">edit</span>
+  </div>
+</div>
+  );
+}
+
+// ── Dropdown ──
+// The one dropdown pattern for this page — a "current value" trigger that
+// expands into a floating option list. `multi` controls whether it behaves
+// as a multi-select (checkboxes, toggles freely) or single-select (picking
+// an option selects it and closes, no checkbox) — same component either
+// way, so every dropdown on this page looks and behaves identically.
+function Dropdown({options,selected,onChange,placeholder,multi,emptyText}){
+  var so=useState(false);var open=so[0];var setOpen=so[1];
+  var ref=useRef(null);
+  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
+  var selectedArr=multi?(selected||[]):(selected?[selected]:[]);
+  function labelFor(id){var o=options.find(function(o){return o.id===id;});return o?o.label:'';}
+  var summary=multi
+    ?(selectedArr.length===0?(placeholder||'None selected'):selectedArr.length===1?labelFor(selectedArr[0]):selectedArr.length+' selected')
+    :(selected?labelFor(selected):(placeholder||'Select...'));
+  function pick(id){
+    if(multi){
+      var checked=selectedArr.includes(id);
+      onChange(checked?selectedArr.filter(function(x){return x!==id;}):selectedArr.concat([id]));
+    }else{
+      onChange(id);
+      setOpen(false);
+    }
+  }
+  return(
+<div ref={ref} style={{position:'relative'}}>
+  <button type="button" className="wv-field-box" onClick={function(){setOpen(!open);}} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',textAlign:'left',fontSize:16,fontFamily:"'DM Sans',sans-serif"}}>
+    <span style={{color:selectedArr.length?'var(--text)':'var(--placeholder)',fontStyle:selectedArr.length?'normal':'italic'}}>{summary}</span>
+    <span className="mi" style={{fontSize:18,color:'var(--mid)',flexShrink:0}}>expand_more</span>
+  </button>
+  {open&&(
+<div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,zIndex:100,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.14)',padding:6,maxHeight:240,overflowY:'auto'}}>
+  {options.length===0?<div style={{fontSize:16,color:'var(--placeholder)',padding:8}}>{emptyText||'No options.'}</div>:options.map(function(o){var checked=selectedArr.includes(o.id);return(
+<div key={o.id} onClick={function(){pick(o.id);}} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:16,fontFamily:'DM Sans,sans-serif',color:multi?'var(--text)':(checked?'var(--indigo)':'var(--text)'),fontWeight:!multi&&checked?600:400,padding:'8px 7px',borderRadius:6}}
+  onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
+  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  {multi&&<Check on={checked}/>}
+  {o.label}
+</div>
+    );})}
+</div>
+  )}
+</div>
+  );
+}
+
+function LongTextField({f,sid,val,onCommit}){
+  var taRef=useRef(null);
+  function wrap(pre,post,placeholder){
+    var ta=taRef.current;if(!ta)return;
+    var start=ta.selectionStart,end=ta.selectionEnd;
+    var text=ta.value;
+    var selected=text.slice(start,end)||placeholder;
+    var newValue=text.slice(0,start)+pre+selected+post+text.slice(end);
+    ta.value=newValue;
+    var cursor=start+pre.length+selected.length+post.length;
+    ta.focus();ta.setSelectionRange(cursor,cursor);
+    onCommit(newValue);
+  }
+  function list(){
+    var ta=taRef.current;if(!ta)return;
+    var start=ta.selectionStart;
+    var text=ta.value;
+    var lineStart=text.lastIndexOf('\n',start-1)+1;
+    var newValue=text.slice(0,lineStart)+'- '+text.slice(lineStart);
+    ta.value=newValue;
+    var cursor=start+2;
+    ta.focus();ta.setSelectionRange(cursor,cursor);
+    onCommit(newValue);
+  }
+  return(
+<div className="wv-field-wrap">
+  <label className="wv-field-lbl">{f.label}</label>
+  <div style={{display:'flex',gap:2,marginBottom:4}}>
+    <button type="button" className="btn-icon" title="Bold" onMouseDown={function(e){e.preventDefault();wrap('**','**','bold text');}}><span className="mi" style={{fontSize:16}}>format_bold</span></button>
+    <button type="button" className="btn-icon" title="Italic" onMouseDown={function(e){e.preventDefault();wrap('*','*','italic text');}}><span className="mi" style={{fontSize:16}}>format_italic</span></button>
+    <button type="button" className="btn-icon" title="Bulleted list" onMouseDown={function(e){e.preventDefault();list();}}><span className="mi" style={{fontSize:16}}>format_list_bulleted</span></button>
+  </div>
+  <Field defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} resizeMode="manual" rows={5} innerRef={taRef} wrap={false} onBlur={function(e){onCommit(e.target.value);}}/>
+</div>
+  );
+}
 
 // ── StrandSortFilter ──
 function StrandSortFilter({sort,setSort,strandFilter,setStrandFilter,fields}){
@@ -18,14 +137,14 @@ function StrandSortFilter({sort,setSort,strandFilter,setStrandFilter,fields}){
   var hasActive=strandFilter||sort!=='name';
   return(
 <div ref={ref} style={{position:'relative',flexShrink:0}}>
-  <button className={'btn-icon'+(hasActive?' ':' ')} style={{padding:4,border:'1px solid '+(hasActive?'var(--indigo)':'var(--border)'),borderRadius:'var(--r)',color:hasActive?'var(--indigo)':'var(--mid)'}} onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setPos({top:r.bottom+4,left:r.right-180});setOpen(!open);}}>
-    <span className="mi" style={{fontSize:16}}>tune</span>
-  </button>
+  <TertiaryButton onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setPos({top:r.bottom+4,left:r.right-180});setOpen(!open);}} style={{color:hasActive?'var(--indigo)':'#A88060',display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap'}}>
+    <span className="mi" style={{fontSize:18}}>sort</span>Sort
+  </TertiaryButton>
   {open&&(
 <div style={{position:'fixed',top:pos.top,left:pos.left,zIndex:400,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--rl)',boxShadow:'0 8px 28px rgba(42,31,16,.14)',minWidth:180,padding:10}}>
-  <div style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Sort</div>
-  {[['name','Name A–Z'],['recent','Recently added']].map(function(o){return(
-<div key={o[0]} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',cursor:'pointer',fontSize:13,color:sort===o[0]?'var(--indigo)':'var(--text)',fontWeight:sort===o[0]?600:400}} onClick={function(){setSort(o[0]);}}>
+  <div style={{fontSize:14,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Sort</div>
+  {[['name','Name A–Z'],['recent','Recently added'],['tagged','Most tagged in drafts']].map(function(o){return(
+<div key={o[0]} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',cursor:'pointer',fontSize:16,color:sort===o[0]?'var(--indigo)':'var(--text)',fontWeight:sort===o[0]?600:400}} onClick={function(){setSort(o[0]);}}>
   <span style={{width:14,height:14,borderRadius:'50%',border:'2px solid '+(sort===o[0]?'var(--indigo)':'var(--border)'),background:sort===o[0]?'var(--indigo)':'transparent',flexShrink:0}}/>
   {o[1]}
 </div>
@@ -38,7 +157,7 @@ function StrandSortFilter({sort,setSort,strandFilter,setStrandFilter,fields}){
 }
 
 // ── CollTab ──
-function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrandId,setSearch,setShowCollSettings}){
+function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,closeDetail,setSearch,setShowCollSettings}){
   var se=useState(false);var editing=se[0];var setEditing=se[1];
   var sv=useState(coll);var val=sv[0];var setVal=sv[1];
   var tpl=(app.allTemplates[pid]||[]).find(function(t){return t.name===coll;});
@@ -48,10 +167,10 @@ function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrand
     if(nc&&nc!==coll){app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[nc]=ps[coll]||[];delete ps[coll];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});if(activeColl===coll)setActiveColl(nc);}
     else{setVal(coll);}setEditing(false);
   }
-  if(editing)return(<div className="strands-tab active" style={{padding:'0 4px'}}><input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commitRename} onKeyDown={function(e){if(e.key==='Enter')commitRename();if(e.key==='Escape'){setVal(coll);setEditing(false);}}} style={{width:90,height:24,fontSize:13,padding:'2px 6px',borderRadius:4}}/></div>);
+  if(editing)return(<div className="strands-tab active" style={{padding:'0 4px'}}><input autoFocus value={val} onChange={function(e){setVal(e.target.value);}} onBlur={commitRename} onKeyDown={function(e){if(e.key==='Enter')commitRename();if(e.key==='Escape'){setVal(coll);setEditing(false);}}} style={{width:90,height:24,fontSize:16,padding:'2px 6px',borderRadius:4}}/></div>);
   var tabIcon=tpl&&tpl.icon?tpl.icon:null;
   var tabColor=tpl&&tpl.color?tpl.color:'#7A5A38';
-  return(<div className={'strands-tab'+(isActive?' active':'')} onClick={function(){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){if(isNative)setEditing(true);}} title={isNative?undefined:'Shared from another project — rename from its source'} style={{display:'flex',alignItems:'center',gap:6}}>
+  return(<div className={'strands-tab'+(isActive?' active':'')} onClick={function(){closeDetail();setActiveColl(coll);setSearch('');setShowCollSettings(false);}} onDoubleClick={function(){if(isNative)setEditing(true);}} title={isNative?undefined:'Shared from another project — rename from its source'} style={{display:'flex',alignItems:'center',gap:6}}>
     {tabIcon&&<span className="material-symbols-outlined" style={{fontSize:16,color:isActive?tabColor:'rgba(122,90,56,.75)'}}>{tabIcon}</span>}
     {coll}
   </div>);
@@ -59,79 +178,48 @@ function CollTab({coll,isActive,pid,app,activeColl,setActiveColl,setActiveStrand
 
 // ── IconSearchPopup ──
 // Uses full Material Symbols library — no hardcoded list
-var ICON_CATEGORIES={
-  'Narrative & Writing':['auto_stories','book_ribbon','edit_note','history_edu','create','draw','stylus_note','ink_highlighter','quill','ink_pen','description','article','library_books','menu_book','local_library','sticky_note_2','assignment','topic','newsstand','feed','drafts'],
-  'People':['person','group','diversity_3','family_restroom','child_care','elderly','face','waving_hand','handshake','supervisor_account','manage_accounts','badge','contacts','emoji_people','social_distance','connect_without_contact'],
-  'Places':['location_on','map','home','apartment','castle','cottage','cabin','park','forest','beach_access','landscape','terrain','public','travel_explore','flight','train','directions_car','anchor','explore','near_me'],
-  'Nature & World':['nature','water','fire','water_drop','air','eco','recycling','sunny','storm','cloud','wb_sunny','nights_stay','ac_unit','tsunami','volcano','energy_savings_leaf','solar_power','wind_power','grass','flower'],
-  'Objects & Items':['key','lock','shield','sword','diamond','crown','trophy','flag','bookmark','label','tag','star','favorite','gift','cake','coffee','restaurant','local_pizza','wine_bar','sports_bar'],
-  'Science & Tech':['science','biotech','experiment','microbiology','telescope','microscope','satellite_alt','psychology','lightbulb','hub','code','terminal','database','computer','phone_android','watch','rocket_launch','smart_toy'],
-  'Arts & Culture':['palette','brush','photo_camera','music_note','headphones','piano','mic','theater_comedy','movie','sports_esports','casino','sports','emoji_objects','gesture','animation','casino'],
-  'Health & Body':['medical_services','stethoscope','vaccines','medication','monitor_heart','bloodtype','fitness_center','self_improvement','spa','yoga','emergency','biotech'],
-  'Symbols':['bolt','warning','info','help','check_circle','cancel','add_circle','verified','military_tech','workspace_premium','grade','celebration','emoji_events','trending_up','analytics','savings','account_balance','gavel','campaign']
-};
-var ALL_PRESET_ICONS=Object.values(ICON_CATEGORIES).flat();
+var COMMON_ICONS=['auto_stories','edit_note','person','group','location_on','map','home','castle','star','favorite','bookmark','key','lock','palette','lightbulb','flag'];
+var SEARCHABLE_ICONS=COMMON_ICONS.concat(['park','public','flight','brush','photo_camera','music_note','theater_comedy','movie','shield','diamond','trophy','cake','restaurant','science','code','computer','rocket_launch','medical_services','fitness_center','spa','bolt','warning','info','celebration','emoji_events','campaign','explore','psychology','history_edu','menu_book','article','nature','water_drop','eco','cloud','terrain','anchor','volcano','account_balance','gavel','savings','trending_up','analytics','verified','military_tech','grade','contacts','badge','handshake','waving_hand','elderly','child_care','apartment','cottage','cabin','forest','beach_access','landscape','travel_explore','train','directions_car','near_me','air','sunny','wb_sunny','nights_stay','ac_unit','grass','headphones','piano','mic','sports_esports','casino','sports','gesture','animation','stethoscope','vaccines','medication','monitor_heart','self_improvement','emergency','check_circle','cancel','add_circle']);
 
-function IconSearchPopup({current,onSelect,onClose}){
+function IconSearchPopup({currentIcon,currentColor,onSelectIcon,onSelectColor,onClose}){
   var sq=useState('');var q=sq[0];var setQ=sq[1];
-  var showAll=!q.trim();
+  var showCommon=!q.trim();
   var iconStyle={fontFamily:"'Material Symbols Outlined'",fontStyle:'normal',fontSize:24,lineHeight:1,display:'flex',alignItems:'center',justifyContent:'center',letterSpacing:'normal',textTransform:'none',direction:'ltr',WebkitFontSmoothing:'antialiased'};
-
-  // When typing, try to show any valid icon name — material symbols accepts any string
-  // Show curated categories when no search, or filtered presets + the raw typed name
-  var results=showAll?ALL_PRESET_ICONS:ALL_PRESET_ICONS.filter(function(ic){return ic.includes(q.toLowerCase().replace(/\s+/g,'_'));});
-  var typedName=q.trim().toLowerCase().replace(/\s+/g,'_');
-  var showTyped=typedName&&!results.includes(typedName);
+  var results=showCommon?COMMON_ICONS:SEARCHABLE_ICONS.filter(function(ic){return ic.includes(q.toLowerCase().replace(/\s+/g,'_'));});
 
   return(
 <div style={{position:'fixed',inset:0,zIndex:700,display:'flex',alignItems:'center',justifyContent:'center'}}>
   <div style={{position:'absolute',inset:0,background:'rgba(42,31,16,.3)'}} onClick={onClose}/>
-  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:14,padding:24,width:560,maxWidth:'94vw',maxHeight:'82vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(42,31,16,.2)'}}>
-    <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600,marginBottom:6,color:'var(--text)'}}>Choose icon</div>
-    <div style={{fontSize:12,color:'var(--mid)',marginBottom:12}}>Search by name, or type any <a href="https://fonts.google.com/icons" target="_blank" rel="noopener" style={{color:'var(--indigo)'}}>Material Symbol</a> name directly.</div>
-    <input autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search icons (e.g. dragon, mountain, crystal)…" style={{padding:'8px 12px',fontSize:14,border:'1px solid var(--border)',borderRadius:8,fontFamily:'DM Sans, sans-serif',background:'var(--bg2)',color:'var(--text)',outline:'none',marginBottom:12}}/>
+  <div style={{position:'relative',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:14,padding:24,width:560,maxWidth:'94vw',height:600,maxHeight:'82vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(42,31,16,.2)'}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:600,marginBottom:16,color:'var(--text)',flexShrink:0}}>Icon &amp; colour</div>
+    <div style={{marginBottom:16,flexShrink:0}}>
+      <label className="wv-field-lbl">Colour</label>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:6}}>
+        {SPOOL_COLORS.map(function(c){var isActive=currentColor===c;return(
+<div key={c} onClick={function(){onSelectColor(c);}} style={{width:26,height:26,borderRadius:'50%',background:c,cursor:'pointer',flexShrink:0,transform:isActive?'scale(1.2)':'scale(1)',boxShadow:isActive?'0 0 0 2px var(--bg1),0 0 0 3.5px '+c:'none',transition:'transform .15s'}}/>
+        );})}
+      </div>
+    </div>
+    <div style={{marginBottom:10,flexShrink:0}}>
+      <label className="wv-field-lbl">Icon</label>
+      <div className="wv-search-box" style={{marginTop:6}}>
+        <span className="mi wv-search-icon">search</span>
+        <input className="wv-search-input" autoFocus value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search icons…"/>
+      </div>
+    </div>
     <div style={{overflowY:'auto',flex:1}}>
-      {/* Typed custom name — always show if it could be a valid icon */}
-      {showTyped&&(
-<div style={{marginBottom:14}}>
-  <div style={{fontSize:11,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>Use custom icon name</div>
-  <button onClick={function(){onSelect(typedName);onClose();}} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderRadius:8,border:'1.5px solid var(--indigo)',background:'rgba(196,94,40,.06)',cursor:'pointer',width:'100%',textAlign:'left'}}>
-    <span style={Object.assign({},iconStyle,{fontSize:28,color:'var(--indigo)',width:36,height:36})}>{typedName}</span>
-    <div>
-      <div style={{fontFamily:'DM Sans,sans-serif',fontSize:13,fontWeight:600,color:'var(--indigo)'}}>{typedName}</div>
-      <div style={{fontFamily:'DM Sans,sans-serif',fontSize:11,color:'var(--mid)'}}>If this is a valid Material Symbol name, it will render as an icon.</div>
-    </div>
-  </button>
-</div>
-      )}
-      {/* Category sections when not searching */}
-      {showAll?Object.keys(ICON_CATEGORIES).map(function(cat){return(
-<div key={cat} style={{marginBottom:16}}>
-  <div style={{fontSize:11,fontWeight:600,color:'var(--mid)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>{cat}</div>
-  <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-    {ICON_CATEGORIES[cat].map(function(ic){var isActive=current===ic;return(
-<button key={ic} onClick={function(){onSelect(ic);onClose();}} title={ic.replace(/_/g,' ')} style={{width:40,height:40,borderRadius:8,border:'1.5px solid '+(isActive?'#c45e28':'var(--border)'),background:isActive?'rgba(196,94,40,.1)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        {results.map(function(ic){var isActive=currentIcon===ic;return(
+<button key={ic} onClick={function(){onSelectIcon(ic);}} title={ic.replace(/_/g,' ')} style={{width:44,height:44,borderRadius:8,border:'1.5px solid '+(isActive?'#c45e28':'var(--border)'),background:isActive?'rgba(196,94,40,.1)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
   onMouseOver={function(e){if(!isActive)e.currentTarget.style.background='var(--bg2)';}}
   onMouseOut={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
-  <span style={Object.assign({},iconStyle,{fontSize:20,color:isActive?'#c45e28':'var(--mid)'})}>{ic}</span>
+  <span style={Object.assign({},iconStyle,{fontSize:22,color:isActive?'#c45e28':'var(--mid)'})}>{ic}</span>
 </button>
-    );})}
-  </div>
-</div>
-      )}):(
-<div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-  {results.map(function(ic){var isActive=current===ic;return(
-<button key={ic} onClick={function(){onSelect(ic);onClose();}} title={ic.replace(/_/g,' ')} style={{width:40,height:40,borderRadius:8,border:'1.5px solid '+(isActive?'#c45e28':'var(--border)'),background:isActive?'rgba(196,94,40,.1)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}
-  onMouseOver={function(e){if(!isActive)e.currentTarget.style.background='var(--bg2)';}}
-  onMouseOut={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
-  <span style={Object.assign({},iconStyle,{fontSize:20,color:isActive?'#c45e28':'var(--mid)'})}>{ic}</span>
-</button>
-  );})}
-  {results.length===0&&!showTyped&&<div style={{fontSize:13,color:'var(--mid)',padding:8}}>No presets match. Type any Material Symbol name above to use it directly.</div>}
-</div>
-      )}
+        );})}
+        {results.length===0&&<div style={{fontSize:16,color:'var(--mid)',padding:8}}>No icons match "{q}".</div>}
+      </div>
     </div>
-    <button className="btn btn-ghost" style={{marginTop:14,width:'100%',justifyContent:'center'}} onClick={onClose}>Cancel</button>
+    <button className="btn btn-ghost" style={{marginTop:14,width:'100%',justifyContent:'center',flexShrink:0}} onClick={onClose}>Close</button>
   </div>
 </div>
   );
@@ -139,7 +227,7 @@ function IconSearchPopup({current,onSelect,onClose}){
 
 // ── NewSpoolModal ──
 var SPOOL_ICONS=['auto_stories','gesture','hub','lightbulb','book_ribbon','favorite','star','location_on','person','group','explore','psychology','edit_note','campaign','local_library','history_edu','science','palette','music_note','sports_esports'];
-var SPOOL_COLORS=['#c45e28','#2f76e0','#2f9966','#ce2fe0','#e02f79','#e8a030','#b83220','#2fe07f','#64e02f','#f0c050'];
+var SPOOL_COLORS=['#c45e28','#2f76e0','#2f9966','#ce2fe0','#e02f79','#e8a030','#b83220','#2fe07f','#64e02f','#f0c050','#7a5a38','#a88060','#8a3a10','#6b4a26','#2f9999','#6b2fce','#e02f2f','#2f6bce'];
 function NewSpoolModal({onConfirm,onCancel}){
   var sn=useState('');var name=sn[0];var setName=sn[1];
   var si=useState('auto_stories');var icon=si[0];var setIcon=si[1];
@@ -183,10 +271,10 @@ function NewSpoolModal({onConfirm,onCancel}){
 </button>
         );})}
 
-        <button onClick={function(){setShowModalIconSearch(true);}} style={{padding:'0 10px',height:36,borderRadius:6,border:'1px solid var(--border)',background:'transparent',cursor:'pointer',fontSize:11,fontFamily:'DM Sans, sans-serif',color:'var(--mid)',whiteSpace:'nowrap'}}>
+        <button onClick={function(){setShowModalIconSearch(true);}} style={{padding:'0 10px',height:36,borderRadius:6,border:'1px solid var(--border)',background:'transparent',cursor:'pointer',fontSize:14,fontFamily:'DM Sans, sans-serif',color:'var(--mid)',whiteSpace:'nowrap'}}>
           Search more
         </button>
-        {showModalIconSearch&&<IconSearchPopup current={icon} onSelect={function(ic){setIcon(ic);}} onClose={function(){setShowModalIconSearch(false);}}/> }      </div>
+        {showModalIconSearch&&<IconSearchPopup currentIcon={icon} currentColor={color} onSelectIcon={function(ic){setIcon(ic);}} onSelectColor={function(c){setColor(c);}} onClose={function(){setShowModalIconSearch(false);}}/> }      </div>
     </div>
     <div style={{display:'flex',gap:8}}>
       <button className="btn btn-ghost" style={{flex:1,justifyContent:'center'}} onClick={onCancel}>Cancel</button>
@@ -219,7 +307,7 @@ function StrandRefField({f,sid,val,pid,app,onUpdate}){
   var slb=useState('');var newLabel=slb[0];var setNewLabel=slb[1];
   var ssq=useState('');var searchQ=ssq[0];var setSearchQ=ssq[1];
 
-  if(!refCollName)return(<span style={{fontSize:13,color:'var(--mid)',fontStyle:'italic'}}>No spool linked — edit field settings.</span>);
+  if(!refCollName)return(<span style={{fontSize:16,color:'var(--mid)',fontStyle:'italic'}}>No spool linked — edit field settings.</span>);
 
   var selectedIds=refs.map(function(r){return r.id;});
   var available=refStrands.filter(function(st){
@@ -260,9 +348,12 @@ function StrandRefField({f,sid,val,pid,app,onUpdate}){
 
   {/* Add new ref — show if multiple allowed or no refs yet */}
   {(f.refMultiple||refs.length===0)&&(
-<div style={{display:'flex',flexDirection:'column',gap:6,padding:'8px 10px',borderRadius:10,background:'var(--bg2)',border:'1px dashed var(--border)'}}>
+<div style={{display:'flex',flexDirection:'column',gap:6}}>
   {/* Search + select */}
-  <input value={searchQ} onChange={function(e){setSearchQ(e.target.value);setSelId('');}} placeholder={'Search '+refCollName+'…'} style={{fontFamily:'DM Sans,sans-serif',fontSize:12,padding:'4px 8px',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg1)',color:'var(--text)',outline:'none'}}/>
+  <div className="wv-search-box">
+    <span className="mi wv-search-icon">search</span>
+    <input className="wv-search-input" value={searchQ} onChange={function(e){setSearchQ(e.target.value);setSelId('');}} placeholder={'Search '+refCollName+'…'}/>
+  </div>
   {searchQ&&available.length>0&&(
 <div style={{maxHeight:120,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg1)'}}>
   {available.map(function(st){return(
@@ -270,17 +361,17 @@ function StrandRefField({f,sid,val,pid,app,onUpdate}){
   onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
   onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
   <div style={{width:18,height:18,borderRadius:'50%',background:st.color||spoolColor,flexShrink:0}}/>
-  <span style={{fontSize:12,fontFamily:'DM Sans,sans-serif',color:'var(--text)'}}>{st.name}</span>
+  <span style={{fontSize:16,fontFamily:'DM Sans,sans-serif',color:'var(--text)'}}>{st.name}</span>
 </div>
   );})}
 </div>
   )}
-  {searchQ&&available.length===0&&<span style={{fontSize:11,color:'var(--mid)',fontStyle:'italic'}}>No matches.</span>}
+  {searchQ&&available.length===0&&<span style={{fontSize:16,color:'var(--mid)',fontStyle:'italic'}}>No matches.</span>}
   {selId&&(
-<input value={newLabel} onChange={function(e){setNewLabel(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')addRef();}} placeholder="Relationship label (e.g. Mother, Mentor)…" style={{fontFamily:'DM Sans,sans-serif',fontSize:12,padding:'4px 8px',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg1)',color:'var(--text)',outline:'none'}}/>
+<input value={newLabel} onChange={function(e){setNewLabel(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')addRef();}} placeholder="Relationship label (e.g. Mother, Mentor)…" style={{fontFamily:'DM Sans,sans-serif',fontSize:16,padding:'4px 8px',border:'1px solid var(--border)',borderRadius:6,background:'var(--bg1)',color:'var(--text)',outline:'none'}}/>
   )}
   {selId&&(
-<button onClick={addRef} style={{alignSelf:'flex-start',padding:'4px 12px',borderRadius:6,background:spoolColor,color:'#fff',border:'none',cursor:'pointer',fontSize:12,fontFamily:'DM Sans,sans-serif',fontWeight:600}}>Add</button>
+<button onClick={addRef} style={{alignSelf:'flex-start',padding:'4px 12px',borderRadius:6,background:spoolColor,color:'#fff',border:'none',cursor:'pointer',fontSize:16,fontFamily:'DM Sans,sans-serif',fontWeight:600}}>Add</button>
   )}
 </div>
   )}
@@ -313,9 +404,31 @@ var SPOOL_SWITCHER_CSS=`
    two panels rather than on the outer edge. Scoped to this page only. */
 .strands-layout .wv-drawer--inline{border-left:none;border-right:1px solid var(--border);}
 .strands-layout .wv-drawer--flexw{border-right:none;}
+/* When the list is full-page (no item selected — desktop full-width, or
+   mobile's always-full-screen list), the footer's Add button shouldn't
+   stretch edge to edge with it. */
+.strands-layout .wv-drawer--flexw .wv-btn{max-width:400px;margin:0;}
+/* "New Spool" tab-add icon — same treatment as the Canvas board-add tab,
+   so creating a new collection reads as "adding another tab" consistently
+   across the app. */
+.strands-tab-add{width:32px;height:32px;border-radius:8px;border:1px dashed #A88060;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  color:rgba(122,90,56,.6);font-size:20px;flex-shrink:0;margin:0 0 6px 6px;
+  transition:all .12s;line-height:1;user-select:none;}
+.strands-tab-add:hover{border-color:var(--indigo);color:var(--indigo);background:rgba(196,94,40,.08);}
+.strands-tab-add-wrap{display:flex;align-items:center;height:44px;padding:0 12px;
+  margin:0 0 -1px 6px;border-radius:10px 10px 0 0;border:1.5px solid #C45E28;
+  border-bottom:2px solid #FDF8F0;background:#FDF8F0;flex-shrink:0;}
+.strands-tab-add-input{background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;
+  font-size:16px;font-weight:600;color:#6B4A26;width:130px;padding:0;}
+.strands-tab-add-input:focus{outline:none;border:none;box-shadow:none;}
 /* The list's own Drawer header just repeats the active tab's name — the
    tab bar above it already shows that, so it's a redundant title + stroke. */
 .strands-layout .wv-drawer-hdr{display:none;}
+.strands-layout .wv-drawer{background:#FDF8F0;}
+.strands-layout .wv-drawer-toolbar{background:#FDF8F0;}
+.strands-layout .wv-drawer-footer{background:#FDF8F0;}
+.strands-layout .wv-drawer-body--pad{padding:40px;}
 @media(max-width:768px){
   /* On this page the global .nav bar AND our own .spool-mobile-bar both sit
      above the strand-list Drawer, so its default single-bar mobile offset
@@ -339,7 +452,6 @@ function SpoolSwitcherSheet({collNames,activeColl,projTemplates,projStrands,onSe
   if(sortMode==='az')list=list.slice().sort(function(a,b){return a.localeCompare(b);});
   return(
 <div className="spool-switcher-overlay">
-  <SpoolSwitcherStyles/>
   <div className="spool-switcher-hdr">
     <button className="btn-icon" onClick={onClose}><span className="mi">arrow_back</span></button>
     <span style={{fontFamily:'var(--serif)',fontSize:17,fontWeight:600,flex:1}}>Switch Spool</span>
@@ -366,7 +478,7 @@ function SpoolSwitcherSheet({collNames,activeColl,projTemplates,projStrands,onSe
       return(
 <div key={coll} className={'spool-switcher-row'+(isActive?' active':'')} onClick={function(){onSelect(coll);}}>
   <div className="spool-switcher-ic" style={{background:color}}>
-    {icon?<span className="material-symbols-outlined" style={{fontSize:18,color:'#fff'}}>{icon}</span>:<span style={{fontFamily:'DM Sans,sans-serif',fontSize:13,fontWeight:700,color:'#fff'}}>{initials(coll)}</span>}
+    {icon?<span className="material-symbols-outlined" style={{fontSize:18,color:'#fff'}}>{icon}</span>:<span style={{fontFamily:'DM Sans,sans-serif',fontSize:14,fontWeight:700,color:'#fff'}}>{initials(coll)}</span>}
   </div>
   <span className="spool-switcher-name">{coll}</span>
   <span className="spool-switcher-count">{count}</span>
@@ -428,6 +540,14 @@ function StrandsPage({app,allProjects}){
   var sasi=useState(null);var activeStrandId=sasi[0];var setActiveStrandId=sasi[1];
   var ssc=useState('');var search=ssc[0];var setSearch=ssc[1];
   var sss=useState('name');var strandSort=sss[0];var setStrandSort=sss[1];
+  // Sort preference is a personal display setting, not project data — it
+  // persists globally (not scoped to this project) until explicitly changed.
+  useEffect(function(){
+    loadDB('woven:strandSort','name').then(function(saved){
+      if(saved)setStrandSort(saved);
+    });
+  },[]);
+  function updateStrandSort(val){setStrandSort(val);saveDB('woven:strandSort',val);}
   var ssf=useState(null);var strandFilter=ssf[0];var setStrandFilter=ssf[1];
   var snc=useState(false);var newColl=snc[0];var setNewColl=snc[1];
   var sncn=useState('');var newCollName=sncn[0];var setNewCollName=sncn[1];
@@ -439,7 +559,7 @@ function StrandsPage({app,allProjects}){
   var collStrands=projStrands[activeColl]||[];
   var filtered=(search?collStrands.filter(function(s){return s.name&&s.name.toLowerCase().includes(search.toLowerCase());}):collStrands)
     .filter(function(s){if(!strandFilter)return true;var val=s.fields&&s.fields[strandFilter.fieldId];return val&&val.toLowerCase().includes(strandFilter.value.toLowerCase());})
-    .slice().sort(function(a,b){if(strandSort==='name')return (a.name||'').localeCompare(b.name||'');if(strandSort==='recent')return (b.createdAt||'').localeCompare(a.createdAt||'');return 0;});
+    .slice().sort(function(a,b){if(strandSort==='name')return (a.name||'').localeCompare(b.name||'');if(strandSort==='recent')return (b.createdAt||'').localeCompare(a.createdAt||'');if(strandSort==='tagged')return getDraftAppearances(b.id).length-getDraftAppearances(a.id).length;return 0;});
   // No default selection — landing on a collection shows the list; opening
   // an item is an explicit action (click a row, or create a new one).
   var activeStrand=activeStrandId?(filtered.find(function(s){return s.id===activeStrandId;})||null):null;
@@ -448,12 +568,28 @@ function StrandsPage({app,allProjects}){
   var fields=activeTpl?activeTpl.fields:defaultFields(activeColl);
   function updateStrand(sid,changes){app.updateStrand(pid,activeColl,sid,changes);}
   function updateField(sid,fieldId,val){if(!activeStrand)return;var nf=Object.assign({},activeStrand.fields||{});nf[fieldId]=val;updateStrand(sid,{fields:nf});}
-  function addStrand(){var tpl=getTpl(activeColl);var existing=(app.allStrands[pid]&&app.allStrands[pid][activeColl])||[];var base='New '+activeColl.replace(/s$/,'');var num=existing.filter(function(s){return s.name&&s.name.startsWith(base);}).length+1;var ns={id:genId(),templateId:tpl?tpl.id:'',collectionName:activeColl,name:base+' '+num,color:({"Characters":"#c45e28","Locations":"#2f9966","Plot Threads":"#2f76e0","Sources":"#ce2fe0","Interviews":"#e02f79","Subjects":"#e8a030","Scenes":"#64e02f","Topics":"#2fe07f","Lore & World":"#e8a030","Reports":"#b83220","Audience Notes":"#f0c050"}[activeColl])||PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};app.addStrand(pid,activeColl,ns);setActiveStrandId(ns.id);if(isMobile)setMobileDetailOpen(true);}
-  function addCollection(){var name=newCollName.trim();if(!name)return;var nt={id:genId(),projectId:pid,name:name,fields:defaultFields(name),sharedWith:[]};app.addTemplate(pid,nt);app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});setActiveColl(name);setNewColl(false);setNewCollName('');}
+  function addStrand(){var tpl=getTpl(activeColl);var ns={id:genId(),templateId:tpl?tpl.id:'',collectionName:activeColl,name:'',color:({"Characters":"#c45e28","Locations":"#2f9966","Plot Threads":"#2f76e0","Sources":"#ce2fe0","Interviews":"#e02f79","Subjects":"#e8a030","Scenes":"#64e02f","Topics":"#2fe07f","Lore & World":"#e8a030","Reports":"#b83220","Audience Notes":"#f0c050"}[activeColl])||PRESET_COLORS[Math.floor(Math.random()*PRESET_COLORS.length)],image:null,fields:{},createdAt:new Date().toISOString()};app.addStrand(pid,activeColl,ns);setActiveStrandId(ns.id);if(isMobile)setMobileDetailOpen(true);}
+  // Closing a still-untitled item discards it rather than leaving a blank
+  // "Spool name 1"-style entry behind — nothing is really "saved" until a
+  // title is actually given.
+  function closeDetail(){
+    if(activeStrand&&(!activeStrand.name||!activeStrand.name.trim())){
+      app.deleteStrand(pid,activeColl,activeStrand.id);
+    }
+    setActiveStrandId(null);
+    if(isMobile)setMobileDetailOpen(false);
+  }
+  function addCollection(){var name=newCollName.trim();if(!name)return;var nt={id:genId(),projectId:pid,name:name,fields:defaultFields(name),sharedWith:[]};app.addTemplate(pid,nt);app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});setActiveColl(name);setNewColl(false);setNewCollName('');
+    // Land in the collection builder rather than an empty item list. Seed
+    // editing state from the template we just built locally — activeTpl
+    // won't reflect it until the next render, so reading from it here would
+    // still show the previous collection's settings.
+    setEditingFields([...nt.fields]);setSharedWith(nt.sharedWith||[]);setEditingSpoolColor(null);setEditingSpoolIcon(null);setShowCollSettings(true);
+  }
   function handleImageUpload(e,sid){var file=e.target.files&&e.target.files[0];if(!file)return;uploadImage(file).then(function(url){if(url)updateStrand(sid,{image:url});});}
   function getDraftAppearances(sid){return(app.allDrafts[pid]||[]).filter(function(d){return(d.strandTags||[]).includes(sid);});}
   function renderFieldInput(f,sid,val){
-    if(f.type==='long_text')return <Field key={sid+'-'+f.id} label={f.label} defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} resizeMode="manual" rows={5} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
+    if(f.type==='long_text')return <LongTextField key={sid+'-'+f.id} f={f} sid={sid} val={val} onCommit={function(newVal){updateField(sid,f.id,newVal);}}/>;
     if(f.type==='boolean')return(
 <div key={sid+'-'+f.id} className="wv-field-wrap">
   <label className="wv-field-lbl">{f.label}</label>
@@ -465,7 +601,7 @@ function StrandsPage({app,allProjects}){
 </div>
     );
     if(f.type==='select')return(
-<SelectField key={sid+'-'+f.id} label={f.label} defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}>
+<SelectField key={sid+'-'+f.id} label={f.label} defaultValue={val} style={{fontFamily:"'DM Sans',sans-serif"}} onChange={function(e){updateField(sid,f.id,e.target.value);}}>
   <option value="">Select...</option>
   {(f.options||[]).map(function(o){return <option key={o} value={o}>{o}</option>;})}
 </SelectField>
@@ -488,7 +624,7 @@ function StrandsPage({app,allProjects}){
   var sesi=useState(null);var editingSpoolIcon=sesi[0];var setEditingSpoolIcon=sesi[1];
   var ssis=useState(false);var showIconSearch=ssis[0];var setShowIconSearch=ssis[1];
   var snfn=useState('');var newFieldName=snfn[0];var setNewFieldName=snfn[1];
-  var snft=useState('short_text');var newFieldType=snft[0];var setNewFieldType=snft[1];
+  var sfct=useState(null);var chosenFieldType=sfct[0];var setChosenFieldType=sfct[1];
   var ssw=useState([]);var sharedWith=ssw[0];var setSharedWith=ssw[1];
   var spd=useState(null);var pendingDeleteFieldIdx=spd[0];var setPendingDeleteFieldIdx=spd[1];
   function openCollSettings(){setEditingFields(activeTpl?[...activeTpl.fields]:[]);setSharedWith(activeTpl?activeTpl.sharedWith||[]:[]);setEditingSpoolColor(activeTpl?activeTpl.color||null:null);setEditingSpoolIcon(activeTpl?activeTpl.icon||null:null);setShowCollSettings(true);}
@@ -500,16 +636,21 @@ function StrandsPage({app,allProjects}){
   // A field can't be deleted while any existing strand in this collection
   // still has data in it — deleting it would silently destroy that data.
   function fieldHasContent(fieldId){
+    return fieldContentCount(fieldId)>0;
+  }
+  function fieldContentCount(fieldId){
     var items=(app.allStrands[pid]&&app.allStrands[pid][activeColl])||[];
-    return items.some(function(s){
+    return items.filter(function(s){
       var v=s.fields&&s.fields[fieldId];
       if(v===undefined||v===null)return false;
       if(typeof v==='string')return v.trim().length>0;
       return true;
-    });
+    }).length;
   }
+  var sfdb=useState(null);var fieldDeleteBlockedIdx=sfdb[0];var setFieldDeleteBlockedIdx=sfdb[1];
   function requestDeleteField(idx){
-    var f=editingFields[idx];if(!f||fieldHasContent(f.id))return;
+    var f=editingFields[idx];if(!f)return;
+    if(fieldHasContent(f.id)){setFieldDeleteBlockedIdx(idx);return;}
     setPendingDeleteFieldIdx(idx);
   }
   function confirmDeleteField(){
@@ -533,7 +674,7 @@ function StrandsPage({app,allProjects}){
     if(remaining.length>0)setActiveColl(remaining[0]);
     setShowCollSettings(false);setDeleteCollConfirm(false);
   }
-  function addFieldToSettings(){if(!newFieldName.trim()||!editingFields)return;commitFields(editingFields.concat([{id:genId(),label:newFieldName.trim(),type:newFieldType}]));setNewFieldName('');}
+  function addFieldToSettings(){if(!newFieldName.trim()||!chosenFieldType)return;commitFields(editingFields.concat([{id:genId(),label:newFieldName.trim(),type:chosenFieldType}]));setNewFieldName('');setChosenFieldType(null);}
   var otherProjects=allProjects.filter(function(p){return p.id!==pid;});
   var sco2=useState(null);var dragOverColl=sco2[0];var setDragOverColl=sco2[1];
   function reorderColls(fromColl,toColl){
@@ -548,53 +689,118 @@ function StrandsPage({app,allProjects}){
     });
   }
   var detailContent=showCollSettings&&editingFields?(
-<div style={{padding:40}}>
-  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-    <div>
-      <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>{activeColl} — Settings</div>
-      {activeTpl&&activeTpl.projectId!==pid&&(function(){
-        var srcProj=allProjects.find(function(p){return p.id===activeTpl.projectId;});
-        return <div style={{fontSize:12,color:'var(--mid)',marginTop:2}}>Shared from {srcProj?srcProj.title:'another project'} — fields and items are editable here, but the collection itself (rename, delete, sharing) is managed from its source.</div>;
+<div style={{padding:40,position:'relative'}}>
+  {!isMobile&&<button className="btn-icon" onClick={function(){setShowCollSettings(false);}} title="Close" style={{position:'absolute',top:16,right:16}}><span className="mi" style={{fontSize:22}}>close</span></button>}
+  <div style={{maxWidth:900,margin:'0 auto'}}>
+  {activeTpl&&activeTpl.projectId!==pid&&(function(){
+    var srcProj=allProjects.find(function(p){return p.id===activeTpl.projectId;});
+    return <div style={{fontSize:16,color:'var(--mid)',marginBottom:16}}>Shared from {srcProj?srcProj.title:'another project'} — fields and items are editable here, but the collection itself (rename, delete, sharing) is managed from its source.</div>;
+  })()}
+
+  {/* Hero: icon/colour thumbnail (click opens combined icon+colour picker) + name, with the field list stacked directly beneath the title, to the right of the thumbnail */}
+  <div style={{display:'flex',gap:20,alignItems:'flex-start',marginBottom:32,position:'relative'}}>
+    <CollectionIconThumb color={editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'} icon={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onClick={function(){setShowIconSearch(true);}}/>
+    {showIconSearch&&<IconSearchPopup currentIcon={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} currentColor={editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'} onSelectIcon={function(ic){commitIcon(ic);}} onSelectColor={function(c){commitColor(c);}} onClose={function(){setShowIconSearch(false);}}/>}
+    <div style={{flex:1,minWidth:0,paddingTop:8}}>
+      <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26',marginBottom:24}}>{activeColl}</div>
+
+      {pendingDeleteFieldIdx!==null&&(
+<DeleteConfirmModal
+  itemName={editingFields[pendingDeleteFieldIdx]&&editingFields[pendingDeleteFieldIdx].label}
+  message="This field will be removed from the template."
+  confirmLabel="Delete field"
+  onConfirm={confirmDeleteField}
+  onCancel={function(){setPendingDeleteFieldIdx(null);}}
+/>
+      )}
+      {fieldDeleteBlockedIdx!==null&&(function(){
+        var f=editingFields[fieldDeleteBlockedIdx];
+        var count=f?fieldContentCount(f.id):0;
+        return(
+<div className="modal-overlay">
+  <div className="modal-backdrop" onClick={function(){setFieldDeleteBlockedIdx(null);}}/>
+  <div className="modal-box" style={{maxWidth:400}}>
+    <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600,marginBottom:12,color:'var(--text)'}}>Can't delete "{f&&f.label}"</div>
+    <div style={{fontSize:14,color:'var(--body-text)',lineHeight:1.6,marginBottom:20}}>This field has content on <strong>{count}</strong> existing {count===1?'item':'items'}. Remove that data first if you want to delete the field.</div>
+    <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={function(){setFieldDeleteBlockedIdx(null);}}>Got it</button>
+  </div>
+</div>
+        );
       })()}
+
+      <div className="wv-field-wrap">
+      <label className="wv-field-lbl">Fields</label>
+      <div style={{marginTop:12}}>
+      {editingFields.map(function(f,i){return(
+<div key={f.id} draggable={true}
+  onDragStart={function(e){e.dataTransfer.setData('fieldIdx',''+i);}}
+  onDragOver={function(e){e.preventDefault();}}
+  onDrop={function(e){e.preventDefault();var from=parseInt(e.dataTransfer.getData('fieldIdx'),10);if(isNaN(from)||from===i)return;var nf=editingFields.slice();var item=nf.splice(from,1)[0];nf.splice(i,0,item);commitFields(nf);}}
+  style={{borderBottom:'1px solid var(--bg2)',padding:'16px 0'}}>
+  <div style={{display:'flex',alignItems:'center',gap:10}}>
+    <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab',flexShrink:0}}>drag_indicator</span>
+    <span className="material-symbols-outlined" style={{fontSize:18,color:'#A88060',flexShrink:0}}>{(FIELD_TYPE_INFO[f.type]||{}).icon||'text_fields'}</span>
+    <InputField wrap={false} defaultValue={f.label} style={{maxWidth:200,fontSize:16}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});commitFields(nf);}}/>
+    <div style={{width:170,flexShrink:0}}>
+      <Dropdown options={FIELD_TYPES.map(function(t){return{id:t.id,label:t.label};})} selected={f.type} multi={false} onChange={function(newType){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:newType,refSpool:null,refMultiple:false,options:null});commitFields(nf);}}/>
     </div>
-    <div style={{display:'flex',gap:8}}>
-      {(!activeTpl||activeTpl.projectId===pid)&&<button className="btn btn-danger btn-sm" onClick={function(){setDeleteCollConfirm(true);}}><span className="mi" style={{fontSize:14}}>delete</span>Delete</button>}
-      <SecondaryButton onClick={function(){setShowCollSettings(false);}} style={{width:'auto'}}>Done</SecondaryButton>
-    </div>
+    <button className="btn-icon" title="Delete field" onClick={function(){requestDeleteField(i);}}><span className="mi" style={{fontSize:18}}>delete</span></button>
   </div>
-  {/* Spool colour + icon */}
-  {/* Preview */}
-  <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
-    <div style={{width:40,height:40,borderRadius:10,background:editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-      <span className="material-symbols-outlined" style={{fontSize:22,color:'#fff'}}>{editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'}</span>
-    </div>
-    <span style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,color:'var(--text)'}}>{activeColl}</span>
+  {f.type==='strand_ref'&&(
+<div style={{display:'flex',gap:12,alignItems:'center',marginTop:8,marginLeft:28}}>
+  <div style={{width:200,flexShrink:0}}>
+    <Dropdown options={Object.keys(app.allStrands[pid]||{}).map(function(c){return{id:c,label:c};})} selected={f.refSpool||null} multi={false} placeholder="Pick spool…" onChange={function(newSpool){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refSpool:newSpool});commitFields(nf);}}/>
   </div>
-  {/* Colour */}
-  <div style={{marginBottom:16}}>
-    <span className="sect-lbl">Colour</span>
-    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
-      {SPOOL_COLORS.map(function(c){var isActive=(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')===c;return(
-<div key={c} onClick={function(){commitColor(c);}} style={{width:22,height:22,borderRadius:'50%',background:c,cursor:'pointer',flexShrink:0,transform:isActive?'scale(1.25)':'scale(1)',boxShadow:isActive?'0 0 0 2px var(--bg1),0 0 0 3.5px '+c:'none',transition:'transform .15s'}}/>
-      );})}
+  <label style={{fontSize:16,display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap',cursor:'pointer'}} onClick={function(){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refMultiple:!f.refMultiple});commitFields(nf);}}>
+    <Check on={!!f.refMultiple}/> Multiple
+  </label>
+</div>
+  )}
+  {f.type==='select'&&(
+    <div style={{marginLeft:28,marginTop:8}}>
+      <OptionsEditor options={f.options} onChange={function(opts){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{options:opts});commitFields(nf);}}/>
     </div>
-  </div>
-  {/* Icon */}
-  <div style={{marginBottom:16}}>
-    <span className="sect-lbl">Icon</span>
-    <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:6}}>
-      {SPOOL_ICONS.slice(0,10).map(function(ic){var isActive=(editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories')===ic;return(
-<button key={ic} onClick={function(){commitIcon(ic);}} style={{width:32,height:32,borderRadius:6,border:'1.5px solid '+(isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--border)'),background:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')+'22':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-  <span className="material-symbols-outlined" style={{fontSize:16,color:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--mid)'}}>{ic}</span>
+  )}
+</div>
+  );})}
+
+  {/* Webflow-style field-type picker — open by default, no toggle or container chrome */}
+  <div style={{marginTop:16}}>
+    {!chosenFieldType?(
+<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))',gap:10}}>
+    {FIELD_TYPES.map(function(t){var info=FIELD_TYPE_INFO[t.id]||{icon:'text_fields',help:''};return(
+<button key={t.id} type="button" onClick={function(){setChosenFieldType(t.id);}} style={{display:'flex',flexDirection:'column',alignItems:'center',textAlign:'center',gap:6,padding:'16px 12px',borderRadius:12,border:'1.5px solid var(--border)',background:'var(--bg1)',cursor:'pointer',transition:'all .5s ease'}}
+  onMouseOver={function(e){e.currentTarget.style.borderColor='#C45E28';e.currentTarget.style.background='rgba(196,94,40,.05)';}}
+  onMouseOut={function(e){e.currentTarget.style.borderColor='var(--border)';e.currentTarget.style.background='var(--bg1)';}}>
+  <span className="material-symbols-outlined" style={{fontSize:28,color:'#C45E28'}}>{info.icon}</span>
+  <span style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:14,color:'#6B4A26'}}>{t.label}</span>
+  <span style={{fontFamily:"'DM Sans',sans-serif",fontSize:14,color:'var(--mid)',lineHeight:1.35}}>{info.help}</span>
 </button>
-      );})}
-      <button onClick={function(){setShowIconSearch(true);}} style={{padding:'0 10px',height:32,borderRadius:6,border:'1px solid var(--border)',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontFamily:'DM Sans, sans-serif',color:'var(--mid)',whiteSpace:'nowrap'}}>
-        Search more
-      </button>
-    </div>
-    {showIconSearch&&<IconSearchPopup current={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onSelect={function(ic){commitIcon(ic);}} onClose={function(){setShowIconSearch(false);}}/>}
+    );})}
+</div>
+    ):(
+<div className="wv-search-box" style={{gap:8}}>
+  <span className="material-symbols-outlined" style={{fontSize:20,color:'#C45E28',flexShrink:0}}>{(FIELD_TYPE_INFO[chosenFieldType]||{}).icon}</span>
+  <input className="wv-search-input" autoFocus value={newFieldName} onChange={function(e){setNewFieldName(e.target.value);}} placeholder="Field name" onKeyDown={function(e){if(e.key==='Enter')addFieldToSettings();if(e.key==='Escape'){setChosenFieldType(null);}}}/>
+  <button className="btn-icon" title="Back" onClick={function(){setChosenFieldType(null);}}><span className="mi" style={{fontSize:18}}>arrow_back</span></button>
+  <PrimaryButton onClick={addFieldToSettings} style={{width:'auto'}}>Add</PrimaryButton>
+</div>
+    )}
   </div>
-  <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:12,color:'var(--text)'}}>Fields</div>
+  </div>
+  </div>
+  </div>
+  </div>
+
+  {(!activeTpl||activeTpl.projectId===pid)&&(
+<div className="wv-field-wrap" style={{marginBottom:32}}>
+  <label className="wv-field-lbl">Share across projects</label>
+  <div style={{marginTop:6}}>
+    <Dropdown options={otherProjects.map(function(p){return{id:p.id,label:p.title};})} selected={sharedWith} multi={true} onChange={commitSharedWith} placeholder="Not shared with any other project" emptyText="No other projects to share with."/>
+  </div>
+</div>
+  )}
+
   {deleteCollConfirm&&(
 <DeleteConfirmModal
   itemName={activeColl}
@@ -604,77 +810,20 @@ function StrandsPage({app,allProjects}){
   onCancel={function(){setDeleteCollConfirm(false);}}
 />
   )}
-  {pendingDeleteFieldIdx!==null&&(
-<DeleteConfirmModal
-  itemName={editingFields[pendingDeleteFieldIdx]&&editingFields[pendingDeleteFieldIdx].label}
-  message="This field will be removed from the template."
-  confirmLabel="Delete field"
-  onConfirm={confirmDeleteField}
-  onCancel={function(){setPendingDeleteFieldIdx(null);}}
-/>
-  )}
-  {editingFields.map(function(f,i){var hasContent=fieldHasContent(f.id);return(
-<div key={f.id} draggable={true}
-  onDragStart={function(e){e.dataTransfer.setData('fieldIdx',''+i);}}
-  onDragOver={function(e){e.preventDefault();}}
-  onDrop={function(e){e.preventDefault();var from=parseInt(e.dataTransfer.getData('fieldIdx'),10);if(isNaN(from)||from===i)return;var nf=editingFields.slice();var item=nf.splice(from,1)[0];nf.splice(i,0,item);commitFields(nf);}}
-  style={{borderBottom:'1px solid var(--bg2)',padding:'8px 0'}}>
-  <div style={{display:'flex',alignItems:'center',gap:7}}>
-    <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab',flexShrink:0}}>drag_indicator</span>
-    <input defaultValue={f.label} style={{maxWidth:160,fontSize:13}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});commitFields(nf);}}/>
-    <select value={f.type} style={{width:110,fontSize:13}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value,refSpool:null,refMultiple:false,options:null});commitFields(nf);}}>
-      {FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}
-    </select>
-    <button className="btn-icon" disabled={hasContent} title={hasContent?'This field has content on existing items — remove that data before deleting the field':'Delete field'} onClick={function(){requestDeleteField(i);}} style={hasContent?{opacity:.35,cursor:'not-allowed'}:undefined}><span className="mi" style={{fontSize:18}}>delete</span></button>
-  </div>
-  {f.type==='strand_ref'&&(
-<div style={{display:'flex',gap:4,alignItems:'center',marginTop:6,marginLeft:26}}>
-  <select value={f.refSpool||''} style={{fontSize:11,flex:1}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refSpool:e.target.value});commitFields(nf);}}>
-    <option value="">Pick spool…</option>
-    {Object.keys(app.allStrands[pid]||{}).map(function(c){return <option key={c} value={c}>{c}</option>;})}
-  </select>
-  <label style={{fontSize:11,display:'flex',alignItems:'center',gap:3,whiteSpace:'nowrap',cursor:'pointer'}}>
-    <input type="checkbox" checked={!!f.refMultiple} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{refMultiple:e.target.checked});commitFields(nf);}}/> Multiple
-  </label>
-</div>
-  )}
-  {f.type==='select'&&(
-    <div style={{marginLeft:26,marginTop:2}}>
-      <OptionsEditor options={f.options} onChange={function(opts){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{options:opts});commitFields(nf);}}/>
-    </div>
-  )}
-</div>
-  );})}
-  <div style={{display:'flex',gap:8,marginTop:12,marginBottom:24}}>
-    <input value={newFieldName} onChange={function(e){setNewFieldName(e.target.value);}} placeholder="New field name" onKeyDown={function(e){if(e.key==='Enter')addFieldToSettings();}} style={{flex:1}}/>
-    <select value={newFieldType} onChange={function(e){setNewFieldType(e.target.value);}} style={{width:110}}>{FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}</select>
-    <button className="btn btn-ghost btn-sm" onClick={addFieldToSettings}>Add</button>
-  </div>
   {(!activeTpl||activeTpl.projectId===pid)&&(
-<div style={{paddingTop:16,borderTop:'1px solid var(--border)'}}>
-    <span className="sect-lbl">Share across projects</span>
-    {otherProjects.length===0
-      ?<div style={{fontSize:13,color:'var(--placeholder)'}}>No other projects to share with.</div>
-      :<div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>        {otherProjects.map(function(p){var checked=sharedWith.includes(p.id);return(
-<label key={p.id} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,color:'var(--text)'}}>
-  <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(checked?'var(--indigo)':'var(--border)'),background:checked?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}} onClick={function(){commitSharedWith(checked?sharedWith.filter(function(id){return id!==p.id;}):sharedWith.concat([p.id]));}}>
-    {checked&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
-  </span>
-  {p.title}
-</label>
-        );})}
-      </div>
-    }
-  </div>
+<div style={{paddingTop:24,borderTop:'1px solid var(--border)',textAlign:'center'}}>
+  <TertiaryButton onClick={function(){setDeleteCollConfirm(true);}} style={{color:'var(--danger)',display:'inline-flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:18}}>delete</span>Delete Spool</TertiaryButton>
+</div>
   )}
+  </div>
 </div>
   ):activeStrand?(
 <div style={{padding:40,position:'relative',backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.12) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
-  {!isMobile&&<button className="btn-icon" onClick={function(){setActiveStrandId(null);}} title="Back to list" style={{position:'absolute',top:16,right:16}}><span className="mi" style={{fontSize:22}}>close</span></button>}
+  {!isMobile&&<button className="btn-icon" onClick={closeDetail} title="Back to list" style={{position:'absolute',top:16,right:16}}><span className="mi" style={{fontSize:22}}>close</span></button>}
   <div style={{display:'flex',gap:20,alignItems:'flex-start',marginBottom:24}}>
     <SpoolThumbnailUpload strand={activeStrand} onClick={function(){setShowAvatarEdit(true);}}/>
     <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:24}}>
-      <input key={activeStrand.id+'-n'} defaultValue={activeStrand.name} placeholder="Name" spellCheck={false} onBlur={function(e){updateStrand(activeStrand.id,{name:e.target.value});}} style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26',border:'none',background:'transparent',outline:'none',padding:0,width:'100%',paddingRight:40}}/>
+      <input key={activeStrand.id+'-n'} defaultValue={activeStrand.name} placeholder="Title (required)" spellCheck={false} onBlur={function(e){updateStrand(activeStrand.id,{name:e.target.value});}} style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26',border:'none',background:'transparent',outline:'none',padding:0,width:'100%',paddingRight:40}}/>
       {fields[0]&&(function(){var f=fields[0];var val=activeStrand.fields&&activeStrand.fields[f.id]?activeStrand.fields[f.id]:'';return renderFieldInput(f,activeStrand.id,val);})()}
     </div>
   </div>
@@ -688,7 +837,7 @@ function StrandsPage({app,allProjects}){
     <Section label="Appears In">
       <div className="appears-chips">
         {getDraftAppearances(activeStrand.id).map(function(d){return <span key={d.id} className="appears-chip" onClick={function(){app.openDraft(d.id);}}>{d.title||'Untitled'}</span>;})}
-        {getDraftAppearances(activeStrand.id).length===0&&<span style={{fontSize:13,color:'var(--mid)'}}>Not tagged in any drafts yet.</span>}
+        {getDraftAppearances(activeStrand.id).length===0&&<span style={{fontSize:16,color:'var(--mid)'}}>Not tagged in any drafts yet.</span>}
       </div>
     </Section>
   </div>
@@ -697,21 +846,22 @@ function StrandsPage({app,allProjects}){
 <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flex:1,gap:12,color:'var(--mid)',textAlign:'center',padding:32}}>
   <span className="mi" style={{fontSize:40,color:'var(--border)'}}>auto_awesome</span>
   <div style={{fontFamily:'var(--serif)',fontSize:20,color:'var(--mid)'}}>{activeColl}</div>
-  <div style={{fontSize:13,color:'var(--placeholder)',marginBottom:4}}>No entries yet</div>
-  <button className="btn btn-primary" onClick={addStrand}>+ Add {activeColl.replace(/s$/,'')}</button>
+  <div style={{fontSize:16,color:'var(--placeholder)',marginBottom:4}}>No entries yet</div>
+  <PrimaryButton icon="add" onClick={addStrand} style={{width:'auto'}}>Add {activeColl.replace(/s$/,'')}</PrimaryButton>
 </div>
   );
   var findSelectIcon=function(collName){var t=projTemplates.find(function(t){return t.name===collName;});return (t&&t.icon)||'auto_stories';};
+  var addItemLabel='Add '+activeColl.replace(/s$/,'');
   var findSelectPanel=(
 <Drawer variant="inline" title={activeColl} width={activeStrand?undefined:'flex'}
-  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<StrandSortFilter sort={strandSort} setSort={setStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>}/>}
-  footer={<PrimaryButton icon="add" onClick={addStrand}>Add to {activeColl}</PrimaryButton>}>
+  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<StrandSortFilter sort={strandSort} setSort={updateStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>}/>}
+  footer={<div style={{display:'flex',flexDirection:'column',gap:8}}><PrimaryButton icon="add" onClick={addStrand}>{addItemLabel}</PrimaryButton><TertiaryButton onClick={openCollSettings} style={{color:'#A88060',justifyContent:'center',display:'flex',alignItems:'center',gap:8,width:'100%'}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Spool</TertiaryButton></div>}>
   {filtered.length===0?(
     <HelpText>{collStrands.length===0?'No entries yet.':'No results for "'+search+'".'}</HelpText>
   ):(
     <div>
       {filtered.map(function(st){return(
-        <StrandResultRow key={st.id} strand={st} spoolIcon={findSelectIcon(activeColl)} onClick={function(){setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}/>
+        <StrandResultRow key={st.id} strand={st} spoolIcon={findSelectIcon(activeColl)} trailingCount={getDraftAppearances(st.id).length} trailingLabel={'Tagged in '+getDraftAppearances(st.id).length+' draft'+(getDraftAppearances(st.id).length===1?'':'s')} onClick={function(){closeDetail();setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}/>
       );})}
     </div>
   )}
@@ -719,6 +869,7 @@ function StrandsPage({app,allProjects}){
   );
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+  <SpoolSwitcherStyles/>
   {!isMobile&&(
   <div className="strands-subnav">
     {collNames.map(function(coll){return(
@@ -728,25 +879,24 @@ function StrandsPage({app,allProjects}){
   onDragLeave={function(){setDragOverColl(null);}}
   onDrop={function(e){e.preventDefault();var from=e.dataTransfer.getData('collName');reorderColls(from,coll);setDragOverColl(null);}}
   style={{borderLeft:dragOverColl===coll?'2px solid var(--indigo)':'2px solid transparent'}}>
-  <CollTab coll={coll} isActive={activeColl===coll} pid={pid} app={app} activeColl={activeColl} setActiveColl={setActiveColl} setActiveStrandId={setActiveStrandId} setSearch={setSearch} setShowCollSettings={setShowCollSettings}/>
+  <CollTab coll={coll} isActive={activeColl===coll} pid={pid} app={app} activeColl={activeColl} setActiveColl={setActiveColl} closeDetail={closeDetail} setSearch={setSearch} setShowCollSettings={setShowCollSettings}/>
 </div>
     );})}
     {newColl?(
-<div style={{display:'flex',alignItems:'center',gap:4}}>
-  <input autoFocus value={newCollName} onChange={function(e){setNewCollName(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')addCollection();if(e.key==='Escape'){setNewColl(false);setNewCollName('');}}} placeholder="Name" style={{width:100,height:30,fontSize:13}}/>
-  <button style={{fontSize:13,color:'var(--teal)'}} onClick={addCollection}>ok</button>
+<div className="strands-tab-add-wrap">
+  <input autoFocus className="strands-tab-add-input" value={newCollName} onChange={function(e){setNewCollName(e.target.value);}} onBlur={function(){setNewColl(false);setNewCollName('');}} onKeyDown={function(e){if(e.key==='Enter')addCollection();if(e.key==='Escape'){setNewColl(false);setNewCollName('');}}} placeholder="Spool name"/>
 </div>
     ):(
-<div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',marginBottom:6}}>
-  <TertiaryButton onClick={openCollSettings} style={{color:'#A88060',display:'flex',alignItems:'center',gap:8}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Collection</TertiaryButton>
-  <SecondaryButton icon="add" onClick={function(){setNewColl(true);}} style={{width:'auto',color:'#A88060',borderColor:'#A88060'}}>New Spool</SecondaryButton>
-</div>
+<div className="strands-tab-add" onClick={function(){setNewColl(true);}} title="New Spool">+</div>
     )}
+    <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',marginBottom:6}}>
+      <TertiaryButton onClick={openCollSettings} style={{color:'#A88060',display:'flex',alignItems:'center',gap:8}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Spool</TertiaryButton>
+      <PrimaryButton icon="add" onClick={addStrand} style={{width:'auto'}}>{addItemLabel}</PrimaryButton>
+    </div>
   </div>
   )}
   {isMobile&&(
   <div className="spool-mobile-bar">
-    <SpoolSwitcherStyles/>
     <button className="spool-mobile-current" onClick={function(){setShowSpoolSwitcher(true);}}>
       {(function(){var t=getTpl(activeColl);return t&&t.icon?<span className="material-symbols-outlined" style={{fontSize:18,color:t.color||'#6B4A26'}}>{t.icon}</span>:null;})()}
       <span className="name">{activeColl}</span>
@@ -761,6 +911,10 @@ function StrandsPage({app,allProjects}){
     app.addTemplate(pid,nt);
     app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name.trim()]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});
     setActiveColl(name.trim());setNewColl(false);
+    // Land in the collection builder rather than an empty item list — same
+    // reasoning as addCollection() above: seed from the template we just
+    // built locally, since activeTpl won't reflect it until next render.
+    setEditingFields([...nt.fields]);setSharedWith(nt.sharedWith||[]);setEditingSpoolColor(nt.color||null);setEditingSpoolIcon(nt.icon||null);setShowCollSettings(true);
   }} onCancel={function(){setNewColl(false);}}/>}
   {isMobile&&showSpoolSwitcher&&(
     <SpoolSwitcherSheet
@@ -768,7 +922,7 @@ function StrandsPage({app,allProjects}){
       activeColl={activeColl}
       projTemplates={projTemplates}
       projStrands={projStrands}
-      onSelect={function(coll){setActiveColl(coll);setActiveStrandId(null);setSearch('');setShowCollSettings(false);setShowSpoolSwitcher(false);}}
+      onSelect={function(coll){closeDetail();setActiveColl(coll);setSearch('');setShowCollSettings(false);setShowSpoolSwitcher(false);}}
       onClose={function(){setShowSpoolSwitcher(false);}}
       onOpenSettings={function(){setShowSpoolSwitcher(false);openCollSettings();}}
       onCreateNew={function(){setShowSpoolSwitcher(false);setNewColl(true);}}
@@ -782,7 +936,7 @@ function StrandsPage({app,allProjects}){
     {isMobile&&mobileDetailOpen&&(
 <div style={{position:'fixed',inset:0,zIndex:50,background:'var(--bg1)',overflow:'auto'}}>
   <div style={{display:'flex',alignItems:'center',gap:8,padding:'14px 16px',borderBottom:'1px solid var(--border)'}}>
-    <button className="btn-icon" onClick={function(){setMobileDetailOpen(false);}}><span className="mi">arrow_back</span></button>
+    <button className="btn-icon" onClick={closeDetail}><span className="mi">arrow_back</span></button>
     <span style={{fontFamily:'var(--serif)',fontSize:17,fontWeight:600}}>{activeColl}</span>
   </div>
   {detailContent}

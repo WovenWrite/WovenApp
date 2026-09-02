@@ -111,10 +111,10 @@ function AuthScreen({onAuth}){
 
   {/* ── Right: promo ── */}
   <div className="authpage-promo-col" style={{backgroundImage:'url('+promoTexture+')'}}>
-    <div className="authpage-promo-logo"><WovenLogo size={30} color="#FDF8F0"/></div>
+    <div className="authpage-promo-logo"><WovenLogo size={60} color="#C45E28"/></div>
     <div className="authpage-promo-content">
       <img className="authpage-promo-collage" src={promoCollage} alt="Woven workspace showing a manuscript, arc view, and collaborator avatars"/>
-      <h2 className="authpage-promo-headline">Organize your context, content and collaboration together.</h2>
+      <h2 className="authpage-promo-headline">Organize your context, content, and collaboration together.</h2>
     </div>
   </div>
 </div>

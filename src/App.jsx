@@ -144,7 +144,11 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .btn-sm{padding:5px 11px;font-size:13px;}.btn-icon{padding:5px;border-radius:var(--r);color:var(--mid);display:inline-flex;align-items:center;}.btn-icon:hover{background:var(--bg2);color:var(--text);}
 .nav{display:flex;align-items:center;padding:0 14px;height:64px;background:#E2D0B8;flex-shrink:0;gap:10px;}
 .wordmark{font-family:var(--serif);font-size:22px;font-weight:600;color:var(--indigo);cursor:pointer;user-select:none;}
-.avatar{width:32px;height:32px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;cursor:pointer;overflow:hidden;}
+.avatar{width:44px;height:44px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0;cursor:pointer;overflow:hidden;position:relative;}
+.avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+.avatar-overlay{position:absolute;inset:0;background:rgba(196,94,40,.75);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s ease;}
+.avatar:hover .avatar-overlay{opacity:1;}
+.avatar-overlay .mi{color:#fff;font-size:16px;}
 .view-switcher{display:flex;align-items:center;background:#F5EDE0;border-radius:50px;padding:4px;gap:2px;border:1px solid #A88060;}
 .view-seg{height:32px;width:36px;display:flex;align-items:center;justify-content:center;border-radius:50px;cursor:pointer;transition:all .15s;color:var(--mid);position:relative;flex-shrink:0;}
 .view-seg:hover{color:var(--text);background:rgba(42,31,16,.06);}
@@ -169,21 +173,28 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .sect-lbl{font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px;display:block;}
 .dot-grid{background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;}
 .dash-layout{display:flex;flex:1;overflow:hidden;background:var(--bg0);align-items:stretch;}
-.dash-main{flex:2;overflow-y:auto;padding:40px 36px 80px;min-width:0;background-color:var(--bg0);background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;}
+.dash-main{flex:2;overflow-y:auto;padding:120px 108px 200px;min-width:0;background-color:var(--bg0);background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;}
 .dash-sidebar{flex:1;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;background:var(--bg1);padding:24px;min-width:220px;max-width:280px;}
-.dash-greeting{font-family:var(--serif);font-size:28px;font-weight:600;color:var(--text);margin-bottom:4px;}
-.dash-subtitle{font-size:14px;color:var(--mid);margin-bottom:24px;font-weight:300;}
-.proj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
-.proj-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s;box-shadow:0 1px 4px rgba(42,31,16,.05);}
-.proj-card:hover{border-color:var(--indigo);transform:translateY(-2px);box-shadow:0 8px 24px rgba(42,31,16,.10);}
-.proj-card-band{height:64px;background:linear-gradient(135deg,var(--bg3),var(--bg4));display:flex;align-items:center;padding:12px;font-family:var(--serif);font-size:26px;color:rgba(42,31,16,.2);font-weight:600;position:relative;overflow:hidden;}
-.proj-card-body{padding:12px 14px;}
-.proj-card-title{font-family:var(--serif);font-size:16px;font-weight:600;margin-bottom:5px;color:var(--text);}
-.proj-card-syn{font-size:12px;color:var(--mid);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-height:54px;margin-bottom:8px;}
-.proj-card-footer{display:flex;justify-content:space-between;font-size:11px;color:var(--placeholder);}
-.add-proj{border:2px dashed var(--border);border-radius:var(--rl);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:155px;transition:all .15s;}
-.add-proj:hover{border-color:var(--indigo);background:rgba(196,94,40,.04);}
-.stat-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
+.dash-greeting{font-family:var(--serif);font-size:44px;font-weight:600;color:var(--text);margin-bottom:4px;}
+.dash-subtitle{font-family:'DM Sans',sans-serif;font-size:24px;color:#7A5A38;margin-bottom:24px;font-weight:400;}
+.dash-section-hdr{font-family:'DM Sans',sans-serif;font-size:20px;font-weight:700;color:#2A1F10;}
+.proj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;}
+.proj-card{background:#F5EDE0;border:2px solid transparent;border-radius:15px;overflow:hidden;cursor:pointer;transition:border-color .2s,box-shadow .2s;box-shadow:0 2px 8px rgba(42,31,16,.06);}
+.proj-card:hover{border-color:#c45e28;box-shadow:0 4px 16px rgba(42,31,16,.12);}
+.proj-card-band{height:150px;background:#E2D0B8;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border-radius:13px 13px 0 0;}
+.proj-card-body{padding:10px 15px;display:flex;flex-direction:column;gap:10px;min-height:200px;}
+.proj-card-title{font-family:'Crimson Text',serif;font-size:18px;font-weight:700;color:#2a1f10;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;flex-shrink:0;}
+.proj-card-syn{font-family:'DM Sans',sans-serif;font-size:16px;color:#7A5A38;line-height:1.45;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;height:93px;flex-shrink:0;}
+.proj-card-footer{display:flex;justify-content:space-between;align-items:center;font-family:'DM Sans',sans-serif;font-size:14px;color:#a88060;margin-top:auto;flex-shrink:0;}
+.add-proj{border:2px dashed var(--border);border-radius:15px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:230px;transition:all .15s;}
+.add-proj:hover{border-color:#c45e28;background:rgba(196,94,40,.04);}
+/* Almond-colored primary buttons — "New Project" and Loose Threads'
+   "Show all". Only the resting background needs overriding here; the
+   shared .wv-btn-primary:hover rule already goes to deep brown and has
+   higher specificity than this override, so hover works correctly with
+   no extra rule needed. */
+.almond-primary-btn .wv-btn-primary{background:#A88060;}
+.stat-card{background:var(--bg0);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
 .stat-card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
 .stat-card-title{font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;}
 .stat-num{font-family:var(--serif);font-size:36px;font-weight:600;line-height:1;color:var(--text);}
@@ -361,14 +372,13 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .week-bar-tip{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg0);font-size:10px;padding:2px 6px;border-radius:3px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .1s;margin-bottom:3px;z-index:50;}
 .week-bar-wrap:hover .week-bar-tip{opacity:1;}
 .proj-card-hover:hover .proj-edit-btn{opacity:1!important;}
-.proj-card-band{position:relative;overflow:hidden;}
 @media(max-width:768px){
   .stat-hide-mobile{display:none;}
   input,textarea,select{font-size:16px!important;}
   .woven-root{height:100%;min-height:100vh;overflow-x:hidden;}
   .dash-layout{flex:none;overflow:visible;flex-direction:column;height:auto;}
-  .dash-main{flex:none;overflow-y:visible;padding:16px 16px 40px;background-color:var(--bg0);background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;order:1;}
-  .dash-sidebar{width:100%;max-width:100%;border-left:none;border-bottom:1px solid var(--border);padding:12px 14px;overflow:visible;height:auto;flex:none;min-width:0;background-color:var(--bg0)!important;background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px)!important;background-size:22px 22px!important;order:0;}
+  .dash-main{flex:none;overflow-y:visible;padding:16px 16px 40px;background-color:var(--bg0);background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;order:0;}
+  .dash-sidebar{width:100%;max-width:100%;border-left:none;border-bottom:1px solid var(--border);padding:12px 14px;overflow:visible;height:auto;flex:none;min-width:0;background-color:var(--bg0)!important;background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px)!important;background-size:22px 22px!important;order:1;}
   .stat-cards-mobile{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
   .stat-cards-mobile .stat-card{margin-bottom:0;}
   .stat-num{font-size:24px;}
@@ -480,7 +490,10 @@ function ProjectNav({app,onOpenProfile}){
   <div style={{flex:1,display:'flex',justifyContent:'center'}}>
     <ViewSwitcher view={app.view} setView={app.setView}/>
   </div>
-  <div className="avatar" onClick={function(){onOpenProfile(null);}}>{(app.profile&&app.profile.headshot)?<img src={app.profile.headshot} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:initials(((app.profile||{}).firstName||'')+' '+((app.profile||{}).lastName||''))}</div>
+  <div className="avatar" onClick={function(){onOpenProfile(null);}}>
+    {(app.profile&&app.profile.headshot)?<img src={app.profile.headshot} alt=""/>:initials(((app.profile||{}).firstName||'')+' '+((app.profile||{}).lastName||''))}
+    <div className="avatar-overlay"><span className="mi">edit</span></div>
+  </div>
 </nav>
   );
 }
@@ -1293,6 +1306,19 @@ function App(){
       return next;
     });
   }
+  function deleteStrand(pid,coll,sid){
+    var ownerPid=ownerOfCollection(pid,coll);
+    setAllStrands(function(prev){
+      var next=Object.assign({},prev);
+      var ownerPs=Object.assign({},next[ownerPid]||{});
+      var updated=(ownerPs[coll]||[]).filter(function(s){return s.id!==sid;});
+      ownerPs[coll]=updated;
+      next[ownerPid]=ownerPs;
+      saveDB('woven:strands:'+ownerPid,ownerPs);
+      propagateSharedStrands(next,ownerPid,coll,updated);
+      return next;
+    });
+  }
   function addTemplate(pid,tpl){setAllTemplates(function(prev){var next=Object.assign({},prev);next[pid]=(next[pid]||[]).concat([tpl]);saveDB('woven:templates:'+pid,next[pid]);return next;});}
   function updateTemplate(pid,tid,changes){
     // Templates already carry their own projectId — use that as the source
@@ -1406,7 +1432,7 @@ function App(){
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,deleteDraftPermanently:deleteDraftPermanently,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,promoteStrand:promoteStrand,updateStrand:updateStrand,addStrand:addStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,deleteDraftPermanently:deleteDraftPermanently,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,promoteStrand:promoteStrand,updateStrand:updateStrand,addStrand:addStrand,deleteStrand:deleteStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
 
   function signOut(){
     supabase.auth.signOut().then(function(){

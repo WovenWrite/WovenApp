@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState } from "react";
-import { Drawer } from './SharedUI'
+import { Drawer, PrimaryButton } from './SharedUI'
 import { genId, initials, todayStr, countWords } from './utils'
 
 // Plain text -> simple paragraph HTML, matching how draft bodies are stored
@@ -21,7 +21,7 @@ function WovenLogo({size,color,dark}){
   var textColor=color||(dark?'var(--text)':'var(--indigo)');var h=size||28;var symH=Math.round(h*0.75);
   return(
 <div style={{display:'inline-flex',alignItems:'center',gap:7,userSelect:'none',verticalAlign:'middle'}}>
-  <svg width={symH} height={symH} viewBox="0 0 848.94 831.84" xmlns="http://www.w3.org/2000/svg" fill="var(--indigo)">
+  <svg width={symH} height={symH} viewBox="0 0 848.94 831.84" xmlns="http://www.w3.org/2000/svg" fill={textColor}>
     <path d="M564.96,702.91c-53.18,9.44-103.06-5.16-143.76-39.96-38.56,34.9-87.88,49.1-141.72,40.7-4.12-18.08-4.13-45.56-1.92-61.83,2.5-18.43,107.47,6.04,107.44-63.63l-.06-125.7-44.3-1.48c-4.57-.15-8.32-3.69-8.72-8.25-1.68-18.87-1.68-35.22,0-54.09.4-4.55,4.15-8.1,8.72-8.25l44.3-1.48.05-125.71c.03-70.41-105.11-46.18-107.21-62.43-2.48-19.16-1.99-41.94.63-62.5,51.86-8.94,102.06,5.29,142.53,40.15,39.2-35.16,90.01-49.89,142.97-39.93,2.41,19.58,2.82,44.43.84,61.59-2.15,18.69-107.68-9.17-107.62,66.26l.09,122.21,44.46,1.87c4.58.19,8.3,3.78,8.65,8.36,1.37,18.04,1.42,33.28.5,53.08-.22,4.66-3.95,8.4-8.62,8.62l-44.91,2.15-.07,125.52c-.04,72.83,108.96,43.13,108.62,65.59l-.9,59.16Z"/>
     <rect y="382.8" width="313.51" height="67.4" rx="11.53" ry="11.53"/>
     <path d="M67.58,128.81h110.06v67.4h-110.06c-5.36,0-9.7-4.35-9.7-9.7v-47.99c0-5.36,4.35-9.7,9.7-9.7Z"/>
@@ -71,6 +71,18 @@ function StatsSection({app,onOpenProfile,greeting}){
       if(createdStr>=weekStartStr)ltCount++;
     }
   });
+  // Cumulative word count across every project — same "big number" format
+  // as Words Today, minus the reset (there's no single day to reset here).
+  // Per-status/sequenced/loose-thread breakdowns were dropped: those
+  // categories are configured per project, so they don't aggregate
+  // meaningfully across projects with different setups.
+  var allTotalWords=0;
+  Object.keys(app.allDrafts).forEach(function(pid){
+    (app.allDrafts[pid]||[]).forEach(function(d){
+      if(d.archived)return;
+      allTotalWords+=(d.wordCount||0);
+    });
+  });
   return(
 <div>
   <div className="dash-greeting dash-greeting-mobile">{greeting||''}</div>
@@ -79,14 +91,14 @@ function StatsSection({app,onOpenProfile,greeting}){
     <div className="stat-card">
       <div className="stat-card-hdr">
         <span className="stat-card-title">Words Today</span>
-        <div style={{display:'flex',gap:4}}>
-          {todayWords>0&&<button className="btn-icon" style={{padding:2}} title="Reset today's count" onClick={function(){if(window.confirm('Reset today\'s word count to 0?'))app.clearTodaySession();}}><span className="mi" style={{fontSize:16}}>refresh</span></button>}
-          <button className="btn-icon" style={{padding:2}} onClick={function(){onOpenProfile('goal');}}><span className="mi" style={{fontSize:18}}>settings</span></button>
-        </div>
       </div>
       <div className="stat-num">{todayWords.toLocaleString()}</div>
       <div className="progress-bar-bg"><div className="progress-bar-fill" style={{width:Math.min(100,pct)+'%'}}/></div>
-      <div className="stat-sub">{pct+'% of '+goal.toLocaleString()}</div>
+      <div className="stat-sub">{pct+'% of '}<input defaultValue={goal} key={goal}
+        onFocus={function(e){e.target.style.borderBottomColor='#C45E28';}}
+        onBlur={function(e){e.target.style.borderBottomColor='var(--mid)';var v=parseInt(e.target.value,10);if(!isNaN(v)&&v>0){app.setGoal(v);}else{e.target.value=goal;}}}
+        onKeyDown={function(e){if(e.key==='Enter')e.target.blur();}}
+        style={{width:52,border:'none',outline:'none',borderRadius:0,borderBottom:'1px dashed var(--mid)',background:'transparent',fontSize:16,color:'var(--mid)',padding:0,fontFamily:'inherit'}}/> words/day</div>
     </div>
     <div className="stat-card">
       <div className="stat-card-hdr">
@@ -118,6 +130,11 @@ function StatsSection({app,onOpenProfile,greeting}){
       );})}
     </div>
   </div>
+  <div className="stat-card stat-hide-mobile">
+    <div className="stat-card-hdr"><span className="stat-card-title">All Projects</span></div>
+    <div className="stat-num">{allTotalWords.toLocaleString()}</div>
+    <div className="stat-sub">{allTotalWords===1?'word written':'words written'}</div>
+  </div>
 </div>
   );
 }
@@ -141,8 +158,6 @@ function GlobalLooseThreads({app}){
     app.updateGlobalLT(ltId,{archived:true});
   }
   var ssm=useState(false);var showMore=ssm[0];var setShowMore=ssm[1];
-  // Show one row (approx 3-4 cards) collapsed, rest hidden
-  var visibleLT=showMore?allLT:allLT.slice(0,3);
   function handleAddLT(){
     var id=genId();
     setPendingLT({id:id,title:'',synopsis:'',createdAt:new Date().toISOString(),archived:false});
@@ -173,13 +188,20 @@ function GlobalLooseThreads({app}){
     setOpenLTId(null);
   }
   return(
-<div style={{marginTop:24}}>
-  <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Loose Threads</div>
-  <div style={{display:"flex",flexWrap:"nowrap",gap:10,overflowX:"auto",paddingBottom:4}}>
+<div style={{marginTop:40}}>
+  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+    <span className="dash-section-hdr">Loose Threads</span>
+    {allLT.length>0&&<span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,fontWeight:600,color:'var(--indigo)',background:'rgba(196,94,40,.10)',padding:'3px 10px',borderRadius:12,whiteSpace:'nowrap'}}>{allLT.length} {allLT.length===1?'thread':'threads'}</span>}
+    <div style={{flex:1}}/>
+    <div className="almond-primary-btn"><PrimaryButton disabled={allLT.length<=3} onClick={function(){setShowMore(!showMore);}} style={{width:'auto'}}>
+      {showMore?'Show less':'Show all'}
+    </PrimaryButton></div>
+  </div>
+  <div style={{display:'flex',flexWrap:'wrap',gap:10,overflow:showMore?'visible':'hidden',maxHeight:showMore?'none':140,paddingBottom:4}}>
     <div onClick={handleAddLT} style={{background:"transparent",border:"2px dashed #A88060",padding:"10px 15px",borderRadius:15,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,minWidth:120,flexShrink:0,minHeight:80}} onMouseEnter={function(e){e.currentTarget.style.borderColor="#c45e28";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#A88060";}}>
       <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
     </div>
-    {visibleLT.map(function(d){return(
+    {allLT.map(function(d){return(
 <div key={d.id} style={{background:'#FDF8F0',border:'1px solid #E2D0B8',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:150,maxWidth:150,flexShrink:0,transition:'border-color .2s,box-shadow .2s',outline:'1px solid transparent'}}
   onClick={function(){setOpenLTId(d.id);}}
   onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';e.currentTarget.style.boxShadow='0 4px 12px rgba(196,94,40,.12)';}}
@@ -189,13 +211,6 @@ function GlobalLooseThreads({app}){
 </div>
     );})}
   </div>
-  {allLT.length>3&&(
-<div style={{marginTop:8,textAlign:'center'}}>
-  <button className="btn btn-ghost btn-sm" onClick={function(){setShowMore(!showMore);}}>
-    {showMore?'Show less':'Show '+( allLT.length-3)+' more'}
-  </button>
-</div>
-  )}
   <button onClick={handleAddLT} title="Add a loose thread" style={{position:'fixed',bottom:28,right:28,width:52,height:52,borderRadius:'50%',background:'#DF6321',border:'none',boxShadow:'0 4px 14px rgba(42,31,16,.25)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',zIndex:400,transition:'background .15s ease'}}
     onMouseEnter={function(e){e.currentTarget.style.background='#6B4A26';}}
     onMouseLeave={function(e){e.currentTarget.style.background='#DF6321';}}>
@@ -242,7 +257,7 @@ function ArchiveDrawer({app,open,onClose}){
 <Drawer variant="overlay" open={open} title="Your Archive" topOffset={54} onClose={onClose}
   footer={selectedCount>0?(
 <div style={{display:'flex',gap:8,width:'100%',alignItems:'center'}}>
-  <span style={{fontSize:12,color:'var(--mid)',flex:1}}>{selectedCount} selected</span>
+  <span style={{fontSize:14,color:'var(--mid)',flex:1}}>{selectedCount} selected</span>
   <button className="btn btn-primary" style={{justifyContent:'center'}} onClick={restoreSelected}>
     <span className="mi" style={{fontSize:16}}>unarchive</span>Restore as Loose Thread
   </button>
@@ -252,21 +267,21 @@ function ArchiveDrawer({app,open,onClose}){
 <div style={{textAlign:'center',padding:'40px 20px',color:'var(--placeholder)'}}>
   <span className="mi" style={{fontSize:48,display:'block',marginBottom:12}}>inventory_2</span>
   <div style={{fontFamily:'var(--serif)',fontSize:18,marginBottom:6}}>Your archive is empty</div>
-  <div style={{fontSize:13}}>Archived drafts and projects will appear here.</div>
+  <div style={{fontSize:16}}>Archived drafts and projects will appear here.</div>
 </div>
   )}
   {archivedDrafts.length>0&&(
 <div style={{marginBottom:20}}>
-  <span className="sect-lbl">Archived Drafts</span>
+  <span className="wv-field-lbl">Archived Drafts</span>
   {archivedDrafts.map(function(d){var isSelected=!!selected[d.id];return(
 <div key={d.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
   <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(isSelected?'var(--indigo)':'var(--border)'),background:isSelected?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:2,transition:'all .15s',cursor:'pointer'}} onClick={function(){toggleDraft(d.id);}}>
-    {isSelected&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
+    {isSelected&&<span className="mi" style={{fontSize:14,color:'#fff'}}>check</span>}
   </span>
   <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={function(){toggleDraft(d.id);}}>
     <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)',marginBottom:2}}>{d.title||'Untitled'}</div>
-    <div style={{fontSize:11,color:'var(--indigo)',marginBottom:3}}>{d.projectTitle}</div>
-    {d.synopsis&&<div style={{fontSize:12,color:'var(--mid)',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.synopsis}</div>}
+    <div style={{fontSize:14,color:'var(--indigo)',marginBottom:3}}>{d.projectTitle}</div>
+    {d.synopsis&&<div style={{fontSize:16,color:'var(--mid)',lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{d.synopsis}</div>}
   </div>
   <button className="btn-icon" style={{color:'var(--danger)',flexShrink:0}} title="Delete permanently" onClick={function(){deleteDraft(d);}}>
     <span className="mi" style={{fontSize:16}}>delete</span>
@@ -277,12 +292,12 @@ function ArchiveDrawer({app,open,onClose}){
   )}
   {archivedProjects.length>0&&(
 <div>
-  <span className="sect-lbl">Archived Projects</span>
+  <span className="wv-field-lbl">Archived Projects</span>
   {archivedProjects.map(function(p){return(
 <div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
   <div style={{flex:1}}>
     <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)',marginBottom:2}}>{p.title||'Untitled'}</div>
-    {p.synopsis&&<div style={{fontSize:12,color:'var(--mid)'}}>{p.synopsis}</div>}
+    {p.synopsis&&<div style={{fontSize:16,color:'var(--mid)'}}>{p.synopsis}</div>}
   </div>
   <button className="btn btn-ghost btn-sm" onClick={function(){app.unarchiveProject(p.id);}}>
     <span className="mi" style={{fontSize:14}}>unarchive</span>Restore
@@ -299,7 +314,7 @@ function ArchiveDrawer({app,open,onClose}){
 export default function Dashboard({app,onOpenProfile,onNewProject}){
   var profile=app.profile||{};
   var firstName=profile.firstName||'';
-  var greeting=getGreeting()+(firstName?', '+firstName:'');
+  var greeting=getGreeting()+(firstName?', '+firstName:'')+'.';
   var sep=useState(null);var editingProjId=sep[0];var setEditingProjId=sep[1];
   var sar=useState(false);var archiveOpen=sar[0];var setArchiveOpen=sar[1];
   var archivedCount=Object.values(app.allDrafts).flat().filter(function(d){return d.archived;}).length+(app.projects.filter(function(p){return p.archived;}).length);
@@ -309,53 +324,52 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
   <nav className="nav" style={{justifyContent:'space-between'}}>
-    <WovenLogo size={26}/>
-    <div style={{display:'flex',alignItems:'center',gap:8}}>
-      <div className="avatar" onClick={function(){onOpenProfile(null);}}>{profile.headshot?<img src={profile.headshot} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:initials(firstName+' '+(profile.lastName||''))}</div>
+    <WovenLogo size={26} color="#2A1F10"/>
+    <div className="avatar" onClick={function(){onOpenProfile(null);}}>
+      {profile.headshot?<img src={profile.headshot} alt=""/>:initials(firstName+' '+(profile.lastName||''))}
+      <div className="avatar-overlay"><span className="mi">edit</span></div>
     </div>
   </nav>
   <div className="dash-layout">
     <div className="dash-main dot-grid">
       <div className="dash-greeting dash-greeting-desktop">{greeting}</div>
       <div className="dash-subtitle dash-greeting-desktop">What will you weave today?</div>
-      <div style={{fontSize:12,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Your Projects</div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+        <span className="dash-section-hdr">Your Projects</span>
+        <div className="almond-primary-btn"><PrimaryButton icon="add" onClick={onNewProject} style={{width:'auto'}}>New Project</PrimaryButton></div>
+      </div>
       <div className="proj-grid">
         {app.projects.filter(function(p){return !p.archived;}).map(function(p){var wc=getWC(p.id);return(
 <div key={p.id} className="proj-card proj-card-hover" style={{position:'relative'}}>
   <div className="proj-card-band" onClick={function(){openProject(p.id);}}>
     {p.image?<img src={p.image} alt={p.title} style={{width:'100%',height:'100%',objectFit:'cover',position:'absolute',inset:0}}/>:null}
-    {!p.image&&<span className="mi" style={{position:'relative',zIndex:1,fontSize:28,color:'rgba(42,31,16,.25)'}}>photo_camera</span>}
+    {!p.image&&<span className="mi" style={{position:'relative',zIndex:1,fontSize:32,color:'rgba(42,31,16,.25)'}}>photo_camera</span>}
   </div>
   <div className="proj-card-body" onClick={function(){openProject(p.id);}}>
     <div className="proj-card-title">{p.title||'Untitled'}</div>
     <div className="proj-card-syn">{p.synopsis||'No synopsis yet.'}</div>
-    <div className="proj-card-footer"><span>{p.type||'Fiction'}</span><span>{wc>0?wc.toLocaleString()+' words':'Empty'}</span></div>
+    <div className="proj-card-footer"><span>{p.type||'Fiction'}</span><span>{wc>0?wc.toLocaleString()+'w':'Empty'}</span></div>
   </div>
   <button className="proj-edit-btn btn-icon" style={{position:'absolute',top:8,right:8,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:6,opacity:0,transition:'opacity .15s',color:'var(--mid)'}} onClick={function(e){e.stopPropagation();setEditingProjId(p.id);}} title="Edit project">
     <span className="mi" style={{fontSize:16}}>edit</span>
   </button>
 </div>
-        );})}<div className="add-proj" onClick={onNewProject}>
-          <span className="mi" style={{fontSize:28,color:'var(--mid)'}}>add_circle_outline</span>
-          <div style={{fontSize:13,color:'var(--mid)'}}>New project</div>
-        </div>
+        );})}
       </div>
       <GlobalLooseThreads app={app}/>
-      <div style={{marginTop:20,border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'12px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,background:'var(--bg1)',transition:'border-color .15s'}} onClick={function(){setArchiveOpen(true);}}>
+      <div style={{marginTop:40,border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'12px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,background:'var(--bg1)',transition:'border-color .15s'}} onClick={function(){setArchiveOpen(true);}}>
         <span className="mi" style={{fontSize:24,color:'var(--placeholder)',flexShrink:0}}>inventory_2</span>
         <div style={{flex:1}}>
-          <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>Your Archive</div>
-          <div style={{fontSize:12,color:'var(--mid)'}}>Where shelved ideas stay safe.{archivedCount>0?' '+archivedCount+' item'+(archivedCount!==1?'s':'')+' archived.':''}</div>
+          <div className="dash-section-hdr">Your Archive</div>
+          <div style={{fontSize:16,color:'var(--mid)'}}>Where shelved ideas stay safe.{archivedCount>0?' '+archivedCount+' item'+(archivedCount!==1?'s':'')+' archived.':''}</div>
         </div>
         <span className="mi" style={{fontSize:20,color:'var(--border)'}}>chevron_right</span>
       </div>
     </div>
     <div className="dash-sidebar" style={{display:'flex',flexDirection:'column'}}>
       <div style={{flex:1}}><StatsSection app={app} onOpenProfile={onOpenProfile} greeting={greeting}/></div>
-      <div style={{paddingTop:16,borderTop:'1px solid var(--border)',marginTop:16}}>
-        <button className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}} onClick={function(){app.signOut();}}>
-          <span className="mi" style={{fontSize:16}}>logout</span>Sign out
-        </button>
+      <div className="almond-primary-btn" style={{paddingTop:16,borderTop:'1px solid var(--border)',marginTop:16}}>
+        <PrimaryButton icon="logout" onClick={function(){app.signOut();}} style={{width:'100%'}}>Sign out</PrimaryButton>
       </div>
     </div>
   </div>

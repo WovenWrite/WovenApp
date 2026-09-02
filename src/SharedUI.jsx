@@ -128,7 +128,7 @@ var DRAWER_CSS = `
 .wv-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
   box-sizing:border-box;padding:12px 15px;border-radius:8px;cursor:pointer;
   font-family:'DM Sans',sans-serif;font-weight:700;font-size:16px;
-  transition:background .15s ease,color .15s ease,border-color .15s ease;}
+  transition:background .5s ease,color .5s ease,border-color .5s ease;}
 .wv-btn .mi{font-size:18px;}
 .wv-btn:disabled{opacity:.5;cursor:not-allowed;}
 .wv-btn-primary{background:#DF6321;border:none;color:#F5EDE0;}
@@ -139,9 +139,11 @@ var DRAWER_CSS = `
 .wv-btn-tertiary:hover:not(:disabled){opacity:.75;}
 
 /* Strand result row — used in browse/tag lists (StrandsDrawer, etc.) */
-.wv-strand-result{display:flex;align-items:center;height:50px;box-sizing:border-box;
+.wv-strand-result{display:flex;align-items:center;min-height:50px;padding:5px 0;box-sizing:border-box;
   cursor:pointer;}
 .wv-strand-result + .wv-strand-result{margin-top:5px;}
+.wv-strand-result-count{font-family:'DM Sans',sans-serif;font-size:13px;color:#A88060;
+  flex-shrink:0;margin-right:10px;min-width:16px;text-align:right;}
 .wv-strand-result-left{display:flex;align-items:center;gap:6px;flex:1;min-width:0;}
 .wv-strand-result-title{font-family:var(--serif,'Crimson Text',serif);font-weight:600;
   font-size:20px;line-height:1.5;color:#684a26;white-space:nowrap;overflow:hidden;
@@ -173,7 +175,8 @@ var DRAWER_CSS = `
 .wv-search-box:focus-within{background:#FFFCF8;border-color:#C45E28;}
 .wv-search-icon{font-size:16px;color:#A88060;flex-shrink:0;}
 .wv-search-input{border:none;background:none;outline:none;flex:1;min-width:0;
-  font-family:var(--serif,'Crimson Text',serif);font-size:14px;color:#6B4A26;padding:0;}
+  font-family:'DM Sans',sans-serif;font-size:16px;color:#6B4A26;padding:0;}
+.wv-search-input:focus{outline:none;border:none;box-shadow:none;background:none;}
 .wv-search-input::placeholder{font-style:italic;color:var(--placeholder,#A88060);}
 
 /* Checkbox */
@@ -651,7 +654,7 @@ export function TertiaryButton({ children, onClick, disabled, type, style }) {
 }
 
 // A row for browse/tag lists — strand thumbnail, name, small spool icon, forward chevron.
-export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
+export function StrandResultRow({ strand, onClick, onAdd, spoolIcon, trailingCount, trailingLabel }) {
   return (
     <div className="wv-strand-result" onClick={onClick}>
       <div className="wv-strand-result-left">
@@ -659,6 +662,9 @@ export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
         <span className="wv-strand-result-title">{strand.name}</span>
         <span className="mi wv-strand-result-icon" style={{ fontSize: 20 }}>{spoolIcon || 'auto_stories'}</span>
       </div>
+      {(trailingCount !== undefined && trailingCount !== null) && (
+        <span className="wv-strand-result-count" title={trailingLabel}>{trailingCount}</span>
+      )}
       <span className="mi wv-strand-result-arrow">arrow_forward_ios</span>
       {onAdd && (
         <span
@@ -888,7 +894,7 @@ export function DraftThumbnailUpload({ image, onUpload }) {
   );
 }
 
-export function SearchSortBar({ value, onChange, placeholder, sortSlot }) {
+export function SearchSortBar({ value, onChange, placeholder, sortSlot, trailingSlot }) {
   return (
     <div className="wv-drawer-toolbar">
       <div className="wv-search-box">
@@ -902,6 +908,7 @@ export function SearchSortBar({ value, onChange, placeholder, sortSlot }) {
         />
       </div>
       {sortSlot}
+      {trailingSlot}
     </div>
   );
 }
@@ -941,7 +948,7 @@ export function OptionsEditor({ options, onChange }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
           {opts.map(function (o, i) {
             return (
-              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 6px 3px 10px', borderRadius: 12, background: 'rgba(196,94,40,.08)', border: '1px solid rgba(196,94,40,.25)', fontFamily: 'DM Sans, sans-serif', fontSize: 12, color: '#6B4A26' }}>
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 6px 3px 10px', borderRadius: 12, background: 'rgba(196,94,40,.08)', border: '1px solid rgba(196,94,40,.25)', fontFamily: 'DM Sans, sans-serif', fontSize: 16, color: '#6B4A26' }}>
                 {o}
                 <span className="mi" style={{ fontSize: 13, cursor: 'pointer', color: '#A88060' }} onClick={function () { remove(i); }}>close</span>
               </span>

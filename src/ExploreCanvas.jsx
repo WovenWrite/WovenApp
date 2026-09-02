@@ -124,7 +124,7 @@ const CANVAS_CSS = `
   border-bottom:1px solid var(--border);cursor:grab;user-select:none;transition:background .12s;}
 .ex-edrawer-row:hover{background:var(--bg2);}
 .ex-edrawer-row:active{cursor:grabbing;}
-.ex-spool-row{cursor:grab;}
+.ex-spool-row{cursor:grab;padding:0 14px;}
 .ex-spool-row:active{cursor:grabbing;}
 .ex-edrawer-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;
   justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0;overflow:hidden;}
@@ -304,6 +304,7 @@ const SHAPE_VARIANTS = [
   { id: 'diamond',   icon: 'diamond',         label: 'Diamond'   },
   { id: 'triangle',  icon: 'change_history',  label: 'Triangle'  },
   { id: 'arrow',     icon: 'arrow_right_alt', label: 'Arrow'     },
+  { id: 'line',      icon: 'horizontal_rule', label: 'Line'      },
 ]
 // Static drawer buttons — Spool collections are added dynamically per
 // project (see the `collections` prop built in the root component).
@@ -677,6 +678,8 @@ function ShapeNode({ id, data, selected }) {
     ? 'polygon(50% 0%, 100% 100%, 0% 100%)'
     : variant === 'arrow'
     ? 'polygon(0% 35%, 65% 35%, 65% 10%, 100% 50%, 65% 90%, 65% 65%, 0% 65%)'
+    : variant === 'line'
+    ? 'inset(42% 0% 42% 0%)'
     : 'none'
   const borderRadius = variant === 'ellipse' ? '50%' : variant === 'rectangle' ? 8 : 0
 
@@ -1146,6 +1149,7 @@ function CanvasTabs({ tabs, activeTab, onSelect, onAdd, onRename, onDeleteReques
 // ─────────────────────────────────────────────────────────────
 function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, collections }) {
   const [shapePickerOpen, setShapePickerOpen] = useState(false)
+  const [shapePickerPos, setShapePickerPos] = useState({ top: 0, left: 0 })
   const shapeWrapRef = useRef(null)
   const shapeActive = activeTool.startsWith('shape:')
 
@@ -1158,8 +1162,20 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, colle
     return () => document.removeEventListener('mousedown', onAny, true)
   }, [shapePickerOpen])
 
-  function handleClick(t) {
-    if (t.id === 'shape') { setShapePickerOpen(o => !o); return }
+  function handleClick(t, e) {
+    if (t.id === 'shape') {
+      if (!shapePickerOpen) {
+        const rect = e.currentTarget.getBoundingClientRect()
+        // Fixed positioning (not the CSS class's absolute+right:64px) so
+        // this escapes .ex-toolbar's overflow:hidden — that overflow rule
+        // is needed for the scrollable collections list below, but it was
+        // silently clipping this popover since it renders outside the
+        // toolbar's own 60px width.
+        setShapePickerPos({ top: rect.top, left: rect.left - 58 })
+      }
+      setShapePickerOpen(o => !o)
+      return
+    }
     onToolSelect(t.id)
   }
   function pickShape(variant) {
@@ -1172,12 +1188,12 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, colle
       {TOOL_ITEMS.map(t => (
         <div key={t.id} style={{ position: 'relative' }} ref={t.id === 'shape' ? shapeWrapRef : null}>
           <div className={`ex-tool ${(t.id === 'shape' ? shapeActive : activeTool === t.id) ? 'active' : ''}`}
-            onClick={() => handleClick(t)}
+            onClick={e => handleClick(t, e)}
             onMouseEnter={e => showTt(e, t.label)} onMouseLeave={hideTt}>
             <span className="material-symbols-outlined">{t.icon}</span>
           </div>
           {t.id === 'shape' && shapePickerOpen && (
-            <div className="ex-shape-popover">
+            <div className="ex-shape-popover" style={{ position: 'fixed', top: shapePickerPos.top, left: shapePickerPos.left, right: 'auto' }}>
               {SHAPE_VARIANTS.map(v => (
                 <div key={v.id} className="ex-shape-popover-item"
                   onClick={() => pickShape(v.id)}
@@ -1383,8 +1399,17 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     }
     if (activeTool.startsWith('shape:')) {
       const variant = activeTool.split(':')[1]
+      const defaultSize = {
+        rectangle: { width: 140, height: 100 },
+        ellipse:   { width: 120, height: 120 },
+        diamond:   { width: 120, height: 120 },
+        triangle:  { width: 120, height: 104 },
+        arrow:     { width: 160, height: 60 },
+        line:      { width: 160, height: 40 },
+      }[variant] || { width: 120, height: 120 }
       setNodes(nds => [...nds, {
         id: genId(), type: 'shapeNode', position,
+        style: defaultSize,
         data: { variant, colorId: 'sky' },
       }])
     }

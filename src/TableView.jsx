@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import BindDrawer from './BindDrawer'
 import StrandsDrawer from './StrandsDrawer'
-import { StatusSelect, StrandSearchDropdown, FloatingPanel } from './SharedUI'
+import { StatusSelect, StrandSearchDropdown, FloatingPanel, PrimaryButton } from './SharedUI'
 import { genId, stripHtml, initials } from './utils'
 import { projIsNumbered, projSequence, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
 import { buildTree, applyFS, loadFilterState, persistFilterState, ViewHeader, DraftLoadingSpinner, EmptyDrafts, TaggedSpoolsEditor, saveDB, loadDB } from './App'
@@ -451,7 +451,7 @@ function TableView({app}){
   var minTableWidth=28+(tblNumbered?36:0)+(tblByDate?96:0)+visCols.reduce(function(sum,col){return sum+minColW+(col==='title'?34:0);},0)+46;
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onBind={function(){setBindOpen(true);}} hideStructure={true} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onBind={function(){setBindOpen(true);}} onAddDraft={addDraft} hideStructure={true} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
   <div className="table-wrap" style={{display:'flex',flexDirection:'column',flex:1,overflow:'auto',padding:20}}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div>
@@ -516,7 +516,7 @@ function TableView({app}){
       })}
     </tbody>
   </table>
-  <div style={{padding:'9px 12px'}}><button className="btn btn-ghost btn-sm" onClick={addDraft}>+ Add draft</button></div>
+  <div style={{padding:'9px 12px'}}><PrimaryButton icon="add" onClick={addDraft} style={{width:'auto'}}>Add draft</PrimaryButton></div>
 
 </div>
     )}

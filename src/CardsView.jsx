@@ -9,7 +9,7 @@
 import { useState, useEffect, useRef } from "react";
 import BindDrawer from './BindDrawer'
 import LooseThreadDrawer from './LooseThreadDrawer'
-import { Popover, Check, Avatar, StatusDotWithArchive, ArchiveConfirmModal } from './SharedUI'
+import { Popover, Check, Avatar, StatusDotWithArchive, ArchiveConfirmModal, PrimaryButton, TertiaryButton } from './SharedUI'
 import { genId, stripHtml, initials, uploadImage } from './utils'
 import { sortDraftsBySequence, projIsNumbered, projIsManualOrder, projSequence, projThumbnails, draftDateOf, formatDraftDate, projStatuses, projStatus, projLabel } from './projectConfig'
 
@@ -101,7 +101,7 @@ export function applyFS(drafts,filterObj,sort,proj){
 }
 
 // ── ViewHeader ──
-export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,structureMode,onStructureToggle,searchQ,onSearch,hideStructure,resultCount}){
+export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,onAddDraft,structureMode,onStructureToggle,searchQ,onSearch,hideStructure,resultCount}){
   var filter=filterProp||emptyFilterState();
   var sf=useState(false);var filterOpen=sf[0];var setFilterOpen=sf[1];
   var srt=useState(false);var sortOpen=srt[0];var setSortOpen=srt[1];
@@ -312,11 +312,8 @@ export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,
     </div>
   </div>
   <div style={{display:'flex',alignItems:'center',gap:8}}>
-    <button onClick={onBind} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:'var(--indigo)',color:'#fff',border:'none',borderRadius:8,fontSize:14,fontFamily:'DM Sans, sans-serif',fontWeight:600,cursor:'pointer',transition:'background .15s'}}
-      onMouseOver={function(e){e.currentTarget.style.background='#2A1F10';}}
-      onMouseOut={function(e){e.currentTarget.style.background='var(--indigo)';}}>
-      <span className="material-symbols-outlined" style={{fontSize:18}}>collections_bookmark</span>Bind {projLabel(app.currentProject,'drafts')}
-    </button>
+    <TertiaryButton onClick={onBind} style={{width:'auto',display:'flex',alignItems:'center',gap:6,color:'#A88060'}}><span className="mi" style={{fontSize:18}}>collections_bookmark</span>Bind {projLabel(app.currentProject,'drafts')}</TertiaryButton>
+    {onAddDraft&&<PrimaryButton icon="add" onClick={onAddDraft} style={{width:'auto'}}>New {projLabel(app.currentProject,'drafts').replace(/s$/,'')}</PrimaryButton>}
   </div>
 </div>
   );
@@ -730,7 +727,7 @@ export function LooseThreadsSection({threads,app,view,structureMode,filter}){
   return(
 <div
   id="loose-threads-inline"
-  style={{background:'#F5EDE0',padding:'16px 16px 24px',marginTop:0}}
+  style={{background:'#F5EDE0',padding:'16px 16px 24px',marginTop:0,flex:'0 0 auto'}}
   onDragOver={function(e){e.preventDefault();}}
   onDrop={function(e){
     e.preventDefault();var fromId=e.dataTransfer.getData('draftId');if(!fromId)return;
@@ -771,7 +768,7 @@ export function EmptyDrafts({onAdd}){
   <span className="mi" style={{fontSize:48,color:'var(--placeholder)'}}>edit_note</span>
   <div style={{fontFamily:'var(--serif)',fontSize:22,color:'var(--mid)'}}>No drafts yet</div>
   <div style={{fontSize:14,color:'var(--mid)',marginBottom:12}}>Start writing by adding your first draft.</div>
-  <button className="btn btn-primary" onClick={onAdd}><span className="mi" style={{fontSize:16}}>add</span>Add first draft</button>
+  <PrimaryButton icon="add" onClick={onAdd} style={{width:'auto'}}>Add first draft</PrimaryButton>
 </div>
   );
 }
@@ -815,7 +812,7 @@ export default function CardsView({app}){
   });
   return(
 <div className="view-layout">
-  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onBind={function(){setBindOpen(true);}} structureMode={structureMode} onStructureToggle={function(v){setStructureMode(v);}} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
+  <ViewHeader app={app} filter={filter} setFilter={setFilter} sort={sort} setSort={setSort} onBind={function(){setBindOpen(true);}} onAddDraft={addDraft} structureMode={structureMode} onStructureToggle={function(v){setStructureMode(v);}} searchQ={searchQ} onSearch={setSearchQ} resultCount={displayed.length}/>
   <div className="view-area dot-grid" ref={viewAreaRef} onScroll={handleViewAreaScroll}>
     {app.dataLoading?<DraftLoadingSpinner/>:tree.length===0?<EmptyDrafts onAdd={addDraft}/>:(
 <div className="cards-grid"
