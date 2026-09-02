@@ -242,7 +242,7 @@ var DRAWER_CSS = `
 
 /* Mobile — inline drawers become full-screen sheets */
 @media(max-width:768px){
-  .wv-drawer--inline{position:fixed;top:54px;bottom:0;left:0;right:0;z-index:50;
+  .wv-drawer--inline{position:fixed;top:64px;bottom:0;left:0;right:0;z-index:50;
     width:100%;border-left:none;}
   .wv-drawer--overlay{width:100%;max-width:100%;border-left:none;}
 }

@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState, useEffect, useRef } from "react";
-import { AvatarEditModal, Drawer, HelpText, PrimaryButton, SecondaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio, Field, InputField, SelectField, Section, SpoolThumbnailUpload, DeleteConfirmModal } from './SharedUI'
+import { AvatarEditModal, Drawer, HelpText, PrimaryButton, SecondaryButton, TertiaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio, Field, InputField, SelectField, Section, SpoolThumbnailUpload, DeleteConfirmModal } from './SharedUI'
 import { FIELD_TYPES, defaultFields, initials, uploadImage } from './utils'
 import { saveDB, loadDB } from './App'
 
@@ -290,7 +290,7 @@ function StrandRefField({f,sid,val,pid,app,onUpdate}){
 
 // ── Mobile spool-switcher styles (scoped to this file — new classnames only, doesn't touch shared global CSS) ──
 var SPOOL_SWITCHER_CSS=`
-.spool-mobile-bar{display:flex;align-items:center;gap:8px;padding:0 12px;height:54px;box-sizing:border-box;border-bottom:1px solid #A88060;background:#EDE0CC;flex-shrink:0;}
+.spool-mobile-bar{display:flex;align-items:center;gap:8px;padding:0 12px;height:64px;box-sizing:border-box;border-bottom:1px solid #A88060;background:#EDE0CC;flex-shrink:0;}
 .spool-mobile-current{display:flex;align-items:center;gap:8px;flex:1;min-width:0;padding:8px 12px;border-radius:10px;border:1px solid #A88060;background:#FDF8F0;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;color:#6B4A26;}
 .spool-mobile-current span.name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;}
 .spool-switcher-overlay{position:fixed;inset:0;z-index:60;background:var(--bg1);display:flex;flex-direction:column;}
@@ -307,6 +307,20 @@ var SPOOL_SWITCHER_CSS=`
 .spool-switcher-ic{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .spool-switcher-name{flex:1;min-width:0;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .spool-switcher-count{font-size:12px;color:var(--mid);flex-shrink:0;}
+/* The list panel now sits on the left of the split view (Webflow-style —
+   list, then detail beside it), reversing Drawer's default right-hand
+   placement, so its divider border needs to flip sides to sit between the
+   two panels rather than on the outer edge. Scoped to this page only. */
+.strands-layout .wv-drawer--inline{border-left:none;border-right:1px solid var(--border);}
+.strands-layout .wv-drawer--flexw{border-right:none;}
+@media(max-width:768px){
+  /* On this page the global .nav bar AND our own .spool-mobile-bar both sit
+     above the strand-list Drawer, so its default single-bar mobile offset
+     (SharedUI's .wv-drawer--inline, calibrated for .nav alone) needs to
+     account for both stacked bars here. Scoped to .strands-layout so it
+     doesn't affect Drawer usage on any other page. */
+  .strands-layout .wv-drawer--inline{top:128px;}
+}
 `;
 function SpoolSwitcherStyles(){return <style dangerouslySetInnerHTML={{__html:SPOOL_SWITCHER_CSS}}/>;}
 
@@ -411,7 +425,9 @@ function StrandsPage({app,allProjects}){
   var filtered=(search?collStrands.filter(function(s){return s.name&&s.name.toLowerCase().includes(search.toLowerCase());}):collStrands)
     .filter(function(s){if(!strandFilter)return true;var val=s.fields&&s.fields[strandFilter.fieldId];return val&&val.toLowerCase().includes(strandFilter.value.toLowerCase());})
     .slice().sort(function(a,b){if(strandSort==='name')return (a.name||'').localeCompare(b.name||'');if(strandSort==='recent')return (b.createdAt||'').localeCompare(a.createdAt||'');return 0;});
-  var activeStrand=activeStrandId?filtered.find(function(s){return s.id===activeStrandId;})||null:filtered.length>0?filtered[0]:null;
+  // No default selection — landing on a collection shows the list; opening
+  // an item is an explicit action (click a row, or create a new one).
+  var activeStrand=activeStrandId?(filtered.find(function(s){return s.id===activeStrandId;})||null):null;
   function getTpl(coll){return projTemplates.find(function(t){return t.name===coll;})||null;}
   var activeTpl=getTpl(activeColl);
   var fields=activeTpl?activeTpl.fields:defaultFields(activeColl);
@@ -671,7 +687,7 @@ function StrandsPage({app,allProjects}){
   );
   var findSelectIcon=function(collName){var t=projTemplates.find(function(t){return t.name===collName;});return (t&&t.icon)||'auto_stories';};
   var findSelectPanel=(
-<Drawer variant="inline" title={activeColl}
+<Drawer variant="inline" title={activeColl} width={activeStrand?undefined:'flex'}
   toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<StrandSortFilter sort={strandSort} setSort={setStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>}/>}
   footer={<PrimaryButton icon="add" onClick={addStrand}>Add to {activeColl}</PrimaryButton>}>
   {filtered.length===0?(
@@ -706,8 +722,8 @@ function StrandsPage({app,allProjects}){
 </div>
     ):(
 <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',marginBottom:6}}>
-  <SecondaryButton icon="settings" onClick={openCollSettings} style={{width:'auto'}}>Edit Collection</SecondaryButton>
-  <SecondaryButton icon="add" onClick={function(){setNewColl(true);}} style={{width:'auto'}}>Create Spool</SecondaryButton>
+  <TertiaryButton onClick={openCollSettings} style={{color:'#A88060',display:'flex',alignItems:'center',gap:8}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Collection</TertiaryButton>
+  <SecondaryButton icon="add" onClick={function(){setNewColl(true);}} style={{width:'auto',color:'#A88060',borderColor:'#A88060'}}>New Spool</SecondaryButton>
 </div>
     )}
   </div>
@@ -743,8 +759,9 @@ function StrandsPage({app,allProjects}){
     />
   )}
   <div className="strands-layout">
-    {!isMobile&&<div style={{flex:1,overflowY:'auto'}}>{detailContent}</div>}
+    {!isMobile&&showCollSettings&&<div style={{flex:1,overflowY:'auto'}}>{detailContent}</div>}
     {!isMobile&&!showCollSettings&&findSelectPanel}
+    {!isMobile&&!showCollSettings&&activeStrand&&<div style={{flex:1,overflowY:'auto'}}>{detailContent}</div>}
     {isMobile&&!mobileDetailOpen&&!showCollSettings&&findSelectPanel}
     {isMobile&&mobileDetailOpen&&(
 <div style={{position:'fixed',inset:0,zIndex:50,background:'var(--bg1)',overflow:'auto'}}>
