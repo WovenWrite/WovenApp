@@ -139,9 +139,11 @@ var DRAWER_CSS = `
 .wv-btn-tertiary:hover:not(:disabled){opacity:.75;}
 
 /* Strand result row — used in browse/tag lists (StrandsDrawer, etc.) */
-.wv-strand-result{display:flex;align-items:center;height:50px;box-sizing:border-box;
+.wv-strand-result{display:flex;align-items:center;min-height:50px;padding:5px 0;box-sizing:border-box;
   cursor:pointer;}
 .wv-strand-result + .wv-strand-result{margin-top:5px;}
+.wv-strand-result-count{font-family:'DM Sans',sans-serif;font-size:13px;color:#A88060;
+  flex-shrink:0;margin-right:10px;min-width:16px;text-align:right;}
 .wv-strand-result-left{display:flex;align-items:center;gap:6px;flex:1;min-width:0;}
 .wv-strand-result-title{font-family:var(--serif,'Crimson Text',serif);font-weight:600;
   font-size:20px;line-height:1.5;color:#684a26;white-space:nowrap;overflow:hidden;
@@ -652,7 +654,7 @@ export function TertiaryButton({ children, onClick, disabled, type, style }) {
 }
 
 // A row for browse/tag lists — strand thumbnail, name, small spool icon, forward chevron.
-export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
+export function StrandResultRow({ strand, onClick, onAdd, spoolIcon, trailingCount, trailingLabel }) {
   return (
     <div className="wv-strand-result" onClick={onClick}>
       <div className="wv-strand-result-left">
@@ -660,6 +662,9 @@ export function StrandResultRow({ strand, onClick, onAdd, spoolIcon }) {
         <span className="wv-strand-result-title">{strand.name}</span>
         <span className="mi wv-strand-result-icon" style={{ fontSize: 20 }}>{spoolIcon || 'auto_stories'}</span>
       </div>
+      {(trailingCount !== undefined && trailingCount !== null) && (
+        <span className="wv-strand-result-count" title={trailingLabel}>{trailingCount}</span>
+      )}
       <span className="mi wv-strand-result-arrow">arrow_forward_ios</span>
       {onAdd && (
         <span

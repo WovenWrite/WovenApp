@@ -722,7 +722,7 @@ function StrandsPage({app,allProjects}){
   ):(
     <div>
       {filtered.map(function(st){return(
-        <StrandResultRow key={st.id} strand={st} spoolIcon={findSelectIcon(activeColl)} onClick={function(){setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}/>
+        <StrandResultRow key={st.id} strand={st} spoolIcon={findSelectIcon(activeColl)} trailingCount={getDraftAppearances(st.id).length} trailingLabel={'Tagged in '+getDraftAppearances(st.id).length+' draft'+(getDraftAppearances(st.id).length===1?'':'s')} onClick={function(){setActiveStrandId(st.id);setShowCollSettings(false);if(isMobile)setMobileDetailOpen(true);}}/>
       );})}
     </div>
   )}
