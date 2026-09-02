@@ -313,6 +313,9 @@ var SPOOL_SWITCHER_CSS=`
    two panels rather than on the outer edge. Scoped to this page only. */
 .strands-layout .wv-drawer--inline{border-left:none;border-right:1px solid var(--border);}
 .strands-layout .wv-drawer--flexw{border-right:none;}
+/* The list's own Drawer header just repeats the active tab's name — the
+   tab bar above it already shows that, so it's a redundant title + stroke. */
+.strands-layout .wv-drawer-hdr{display:none;}
 @media(max-width:768px){
   /* On this page the global .nav bar AND our own .spool-mobile-bar both sit
      above the strand-list Drawer, so its default single-bar mobile offset
@@ -410,6 +413,18 @@ function StrandsPage({app,allProjects}){
   var collNames=collOrder===null?rawColl:collOrder.filter(function(c){return rawColl.includes(c);}).concat(rawColl.filter(function(c){return !collOrder.includes(c);}));
   if(collNames.length===0)collNames=['Characters'];
   var sac=useState(function(){ return app.strandsFocusColl && collNames.includes(app.strandsFocusColl) ? app.strandsFocusColl : collNames[0]; });var activeColl=sac[0];var setActiveColl=sac[1];
+  // The initializer above runs once, before the persisted collOrder has
+  // loaded — it only has rawColl's (unordered) key order to guess from. Once
+  // the real order arrives, correct the default tab to match it — but only
+  // once, so we don't clobber a tab the user already clicked in the interim.
+  var collOrderAppliedRef=useRef(false);
+  useEffect(function(){
+    if(collOrderAppliedRef.current)return;
+    if(collOrder===null)return;
+    collOrderAppliedRef.current=true;
+    var proper=app.strandsFocusColl && collNames.includes(app.strandsFocusColl) ? app.strandsFocusColl : collNames[0];
+    if(proper&&proper!==activeColl)setActiveColl(proper);
+  },[collOrder]);
   var sasi=useState(null);var activeStrandId=sasi[0];var setActiveStrandId=sasi[1];
   var ssc=useState('');var search=ssc[0];var setSearch=ssc[1];
   var sss=useState('name');var strandSort=sss[0];var setStrandSort=sss[1];
@@ -654,11 +669,12 @@ function StrandsPage({app,allProjects}){
   )}
 </div>
   ):activeStrand?(
-<div style={{padding:40,backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.12) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
+<div style={{padding:40,position:'relative',backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.12) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
+  {!isMobile&&<button className="btn-icon" onClick={function(){setActiveStrandId(null);}} title="Back to list" style={{position:'absolute',top:16,right:16}}><span className="mi" style={{fontSize:22}}>close</span></button>}
   <div style={{display:'flex',gap:20,alignItems:'flex-start',marginBottom:24}}>
     <SpoolThumbnailUpload strand={activeStrand} onClick={function(){setShowAvatarEdit(true);}}/>
     <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:24}}>
-      <input key={activeStrand.id+'-n'} defaultValue={activeStrand.name} placeholder="Name" spellCheck={false} onBlur={function(e){updateStrand(activeStrand.id,{name:e.target.value});}} style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26',border:'none',background:'transparent',outline:'none',padding:0,width:'100%'}}/>
+      <input key={activeStrand.id+'-n'} defaultValue={activeStrand.name} placeholder="Name" spellCheck={false} onBlur={function(e){updateStrand(activeStrand.id,{name:e.target.value});}} style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26',border:'none',background:'transparent',outline:'none',padding:0,width:'100%',paddingRight:40}}/>
       {fields[0]&&(function(){var f=fields[0];var val=activeStrand.fields&&activeStrand.fields[f.id]?activeStrand.fields[f.id]:'';return renderFieldInput(f,activeStrand.id,val);})()}
     </div>
   </div>
