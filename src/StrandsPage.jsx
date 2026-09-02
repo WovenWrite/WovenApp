@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState, useEffect, useRef } from "react";
-import { AvatarEditModal, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio } from './SharedUI'
+import { AvatarEditModal, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio, Field, InputField, SelectField, Section, SpoolThumbnailUpload } from './SharedUI'
 import { FIELD_TYPES, defaultFields, initials, uploadImage } from './utils'
 import { saveDB } from './App'
 
@@ -247,18 +247,12 @@ function StrandRefField({f,sid,val,pid,app,onUpdate}){
     var st=refStrands.find(function(s){return s.id===r.id;});
     if(!st)return null;
     return(
-<div key={r.id+i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:10,background:spoolColor+'14',border:'1px solid '+spoolColor+'44'}}>
-  {/* Circle avatar */}
-  <div style={{width:24,height:24,borderRadius:'50%',background:st.color||spoolColor,border:'2px solid '+spoolColor,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,boxSizing:'border-box'}}>
-    {st.image?<img src={st.image} alt={st.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontFamily:'DM Sans,sans-serif',fontSize:9,fontWeight:700,color:'#fff'}}>{initials(st.name)}</span>}
-  </div>
-  <div style={{flex:1,minWidth:0}}>
-    <div style={{fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:600,color:spoolColor}}>{st.name}</div>
-    {/* Inline label edit */}
-    <input value={r.label} onChange={function(e){updateLabel(i,e.target.value);}} placeholder="Add relationship label…" style={{fontFamily:'DM Sans,sans-serif',fontSize:11,color:'var(--mid)',background:'transparent',border:'none',outline:'none',padding:0,width:'100%',fontStyle:r.label?'normal':'italic'}}/>
-  </div>
-  <button onClick={function(){removeRef(i);}} style={{background:'none',border:'none',cursor:'pointer',padding:2,color:spoolColor,opacity:.6,display:'flex',alignItems:'center'}}>
-    <span className="material-symbols-outlined" style={{fontSize:14}}>close</span>
+<div key={r.id+i} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 0',borderBottom:'1px solid #E2D0B8'}}>
+  <span style={{fontFamily:"'DM Sans',sans-serif",fontSize:16,color:'#7A5A38',flexShrink:0}}>{st.name}</span>
+  <span className="mi" style={{fontSize:16,color:'#A88060',flexShrink:0}}>arrow_forward</span>
+  <input value={r.label} onChange={function(e){updateLabel(i,e.target.value);}} placeholder="Add relationship…" style={{flex:1,minWidth:0,fontFamily:"'DM Sans',sans-serif",fontSize:16,color:'#A88060',background:'transparent',border:'none',outline:'none',padding:0,fontStyle:r.label?'normal':'italic'}}/>
+  <button onClick={function(){removeRef(i);}} style={{background:'none',border:'none',cursor:'pointer',padding:2,color:'#A88060',opacity:.6,display:'flex',alignItems:'center',flexShrink:0}}>
+    <span className="material-symbols-outlined" style={{fontSize:16}}>close</span>
   </button>
 </div>
     );
@@ -405,21 +399,34 @@ function StrandsPage({app,allProjects}){
   function handleImageUpload(e,sid){var file=e.target.files&&e.target.files[0];if(!file)return;uploadImage(file).then(function(url){if(url)updateStrand(sid,{image:url});});}
   function getDraftAppearances(sid){return(app.allDrafts[pid]||[]).filter(function(d){return(d.strandTags||[]).includes(sid);});}
   function renderFieldInput(f,sid,val){
-    if(f.type==='long_text')return <textarea key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} rows={3} onBlur={function(e){updateField(sid,f.id,e.target.value);}} style={{resize:'vertical',minHeight:72,cursor:'default'}}/>;
+    if(f.type==='long_text')return <Field key={sid+'-'+f.id} label={f.label} defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} resizeMode="manual" rows={5} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
     if(f.type==='boolean')return(
-<div key={sid+'-'+f.id} style={{display:'flex',gap:16}}>
-  {['Yes','No'].map(function(opt){return(
-    <Radio key={opt} on={val===opt} label={opt} onClick={function(){updateField(sid,f.id,opt);}}/>
-  );})}
+<div key={sid+'-'+f.id} className="wv-field-wrap">
+  <label className="wv-field-lbl">{f.label}</label>
+  <div style={{display:'flex',gap:16}}>
+    {['Yes','No'].map(function(opt){return(
+      <Radio key={opt} on={val===opt} label={opt} onClick={function(){updateField(sid,f.id,opt);}}/>
+    );})}
+  </div>
 </div>
     );
-    if(f.type==='select')return(<select key={sid+'-'+f.id} defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}><option value="">Select...</option>{(f.options||[]).map(function(o){return <option key={o} value={o}>{o}</option>;})}</select>);
-    if(f.type==='date')return(<input key={sid+'-'+f.id} type="date" defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}/>);
+    if(f.type==='select')return(
+<SelectField key={sid+'-'+f.id} label={f.label} defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}>
+  <option value="">Select...</option>
+  {(f.options||[]).map(function(o){return <option key={o} value={o}>{o}</option>;})}
+</SelectField>
+    );
+    if(f.type==='date')return <InputField key={sid+'-'+f.id} label={f.label} type="date" defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}/>;
+    if(f.type==='number')return <InputField key={sid+'-'+f.id} label={f.label} type="number" defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
     if(f.type==='strand_ref'){
-      return <StrandRefField key={sid+'-'+f.id} f={f} sid={sid} val={val} pid={pid} app={app} onUpdate={function(newVal){updateField(sid,f.id,newVal);}}/>;
+      return(
+<div key={sid+'-'+f.id} className="wv-field-wrap">
+  <label className="wv-field-lbl">{f.label}</label>
+  <StrandRefField f={f} sid={sid} val={val} pid={pid} app={app} onUpdate={function(newVal){updateField(sid,f.id,newVal);}}/>
+</div>
+      );
     }
-    return <input key={sid+'-'+f.id} defaultValue={val} placeholder={'Enter '+f.label.toLowerCase()+'...'} type={f.type==='number'?'number':'text'} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
-
+    return <Field key={sid+'-'+f.id} label={f.label} defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
   }
   // Collection settings editing
   var sef=useState(null);var editingFields=sef[0];var setEditingFields=sef[1];
@@ -600,33 +607,26 @@ function StrandsPage({app,allProjects}){
 </div>
   ):activeStrand?(
 <div style={{padding:24,backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.12) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
-  <div className="strand-detail-hdr" style={{alignItems:'center'}}>
-    <div className="strand-av-wrap" style={{background:activeStrand.color}} onClick={function(){setShowAvatarEdit(true);}}>
-      <div className="strand-av-overlay"><span className="mi" style={{fontSize:18,color:'#fff'}}>edit</span></div>
-      {activeStrand.image
-        ?<img src={activeStrand.image} alt={activeStrand.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>
-        :activeStrand.emoji
-          ?<span style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>{activeStrand.emoji}</span>
-          :<span style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,fontWeight:600,color:'#fff',fontFamily:'var(--serif)'}}>{initials(activeStrand.name)}</span>
-      }
-    </div>
-    <div style={{flex:1}}>
-      <input key={activeStrand.id+'-n'} className="strand-name-inp" defaultValue={activeStrand.name} placeholder="Name" spellCheck={false} onBlur={function(e){updateStrand(activeStrand.id,{name:e.target.value});}}/>
+  <div style={{display:'flex',gap:20,alignItems:'flex-start',marginBottom:24}}>
+    <SpoolThumbnailUpload strand={activeStrand} onClick={function(){setShowAvatarEdit(true);}}/>
+    <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:24}}>
+      <input key={activeStrand.id+'-n'} defaultValue={activeStrand.name} placeholder="Name" spellCheck={false} onBlur={function(e){updateStrand(activeStrand.id,{name:e.target.value});}} style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26',border:'none',background:'transparent',outline:'none',padding:0,width:'100%'}}/>
+      {fields[0]&&(function(){var f=fields[0];var val=activeStrand.fields&&activeStrand.fields[f.id]?activeStrand.fields[f.id]:'';return renderFieldInput(f,activeStrand.id,val);})()}
     </div>
   </div>
   {showAvatarEdit&&<AvatarEditModal strand={activeStrand} onClose={function(){setShowAvatarEdit(false);}} onSave={function(updates){updateStrand(activeStrand.id,updates);setShowAvatarEdit(false);}}/>}
-  {fields.map(function(f){var val=activeStrand.fields&&activeStrand.fields[f.id]?activeStrand.fields[f.id]:'';return(
-<div key={f.id} className="strand-field-row">
-  <span className="edrawer-lbl">{f.label}</span>
-  {renderFieldInput(f,activeStrand.id,val)}
-</div>
-  );})}
+  {fields.length>1&&(
+  <div style={{display:'flex',flexDirection:'column',gap:24}}>
+    {fields.slice(1).map(function(f){var val=activeStrand.fields&&activeStrand.fields[f.id]?activeStrand.fields[f.id]:'';return renderFieldInput(f,activeStrand.id,val);})}
+  </div>
+  )}
   <div className="appears-section">
-    <span className="edrawer-lbl">Appears In</span>
-    <div className="appears-chips">
-      {getDraftAppearances(activeStrand.id).map(function(d){return <span key={d.id} className="appears-chip" onClick={function(){app.openDraft(d.id);}}>{d.title||'Untitled'}</span>;})}
-      {getDraftAppearances(activeStrand.id).length===0&&<span style={{fontSize:13,color:'var(--mid)'}}>Not tagged in any drafts yet.</span>}
-    </div>
+    <Section label="Appears In">
+      <div className="appears-chips">
+        {getDraftAppearances(activeStrand.id).map(function(d){return <span key={d.id} className="appears-chip" onClick={function(){app.openDraft(d.id);}}>{d.title||'Untitled'}</span>;})}
+        {getDraftAppearances(activeStrand.id).length===0&&<span style={{fontSize:13,color:'var(--mid)'}}>Not tagged in any drafts yet.</span>}
+      </div>
+    </Section>
   </div>
 </div>
   ):(
