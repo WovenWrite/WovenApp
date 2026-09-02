@@ -62,7 +62,7 @@ function EditableTitle({value,onChange,color}){
   useEffect(function(){if(editing&&ref.current){ref.current.focus();ref.current.select();}},[editing]);
   function commit(){setEditing(false);if(val.trim()&&val.trim()!==value)onChange(val.trim());else setVal(value);}
   // Shared text style so span and input look identical
-  var textStyle={fontFamily:'Crimson Text, serif',fontSize:16,fontWeight:600,color:color||T.textDark,padding:'2px 8px',borderRadius:6,whiteSpace:'nowrap'};
+  var textStyle={fontFamily:'Crimson Text, serif',fontSize:17,fontWeight:600,color:color||T.textDark,padding:'2px 4px',borderRadius:6,whiteSpace:'nowrap'};
   return(
 <div style={{position:'relative',display:'inline-flex',maxWidth:'40ch',minWidth:'4ch'}}>
   {/* Hidden measuring span — always rendered, sizes the container */}
@@ -947,7 +947,7 @@ function DraftEditor({app}){
   <input ref={fileInputRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleImageFile}/>
 
   {/* ── Nav (slides up in flow mode; always full width, never covered by a drawer) ── */}
-  <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:T.navBg,padding:'10px 20px',gap:10,borderBottom:'1px solid rgba(42,31,16,.1)',flexShrink:0,transform:flowMode?'translateY(-110%)':'translateY(0)',transition:'transform .3s cubic-bezier(.4,0,.2,1)',pointerEvents:flowMode?'none':'auto',position:flowMode?'absolute':'relative',width:'100%',zIndex:20}}>
+  <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:T.navBg,padding:'0 14px',height:64,gap:10,borderBottom:'1px solid rgba(42,31,16,.1)',flexShrink:0,transform:flowMode?'translateY(-110%)':'translateY(0)',transition:'transform .3s cubic-bezier(.4,0,.2,1)',pointerEvents:flowMode?'none':'auto',position:flowMode?'absolute':'relative',width:'100%',zIndex:20}}>
     <div style={{display:'flex',alignItems:'center',gap:10,flex:1,minWidth:0}}>
       <IconBtn icon="arrow_back" title="Back to sequence" onClick={function(){if(app&&app.setView)app.setView('cards');if(app&&app.setDraftId)app.setDraftId(null);}} style={{flexShrink:0}}/>
       <EditableTitle value={title} onChange={function(v){setTitle(v);if(app&&app.updateDraft)app.updateDraft(pid,did,{title:v});}}/>

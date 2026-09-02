@@ -71,7 +71,7 @@ function Dropdown({options,selected,onChange,placeholder,multi,emptyText}){
   }
   return(
 <div ref={ref} style={{position:'relative'}}>
-  <button type="button" className="wv-field-box" onClick={function(){setOpen(!open);}} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',textAlign:'left',fontSize:16}}>
+  <button type="button" className="wv-field-box" onClick={function(){setOpen(!open);}} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',textAlign:'left',fontSize:16,fontFamily:"'DM Sans',sans-serif"}}>
     <span style={{color:selectedArr.length?'var(--text)':'var(--placeholder)',fontStyle:selectedArr.length?'normal':'italic'}}>{summary}</span>
     <span className="mi" style={{fontSize:18,color:'var(--mid)',flexShrink:0}}>expand_more</span>
   </button>
@@ -601,7 +601,7 @@ function StrandsPage({app,allProjects}){
 </div>
     );
     if(f.type==='select')return(
-<SelectField key={sid+'-'+f.id} label={f.label} defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}>
+<SelectField key={sid+'-'+f.id} label={f.label} defaultValue={val} style={{fontFamily:"'DM Sans',sans-serif"}} onChange={function(e){updateField(sid,f.id,e.target.value);}}>
   <option value="">Select...</option>
   {(f.options||[]).map(function(o){return <option key={o} value={o}>{o}</option>;})}
 </SelectField>
@@ -697,16 +697,14 @@ function StrandsPage({app,allProjects}){
     return <div style={{fontSize:16,color:'var(--mid)',marginBottom:16}}>Shared from {srcProj?srcProj.title:'another project'} — fields and items are editable here, but the collection itself (rename, delete, sharing) is managed from its source.</div>;
   })()}
 
-  {/* Hero: icon/colour thumbnail (click opens combined icon+colour picker) + name */}
+  {/* Hero: icon/colour thumbnail (click opens combined icon+colour picker) + name, with the field list stacked directly beneath the title, to the right of the thumbnail */}
   <div style={{display:'flex',gap:20,alignItems:'flex-start',marginBottom:32,position:'relative'}}>
     <CollectionIconThumb color={editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'} icon={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onClick={function(){setShowIconSearch(true);}}/>
     {showIconSearch&&<IconSearchPopup currentIcon={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} currentColor={editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'} onSelectIcon={function(ic){commitIcon(ic);}} onSelectColor={function(c){commitColor(c);}} onClose={function(){setShowIconSearch(false);}}/>}
     <div style={{flex:1,minWidth:0,paddingTop:8}}>
-      <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26'}}>{activeColl}</div>
-    </div>
-  </div>
+      <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26',marginBottom:24}}>{activeColl}</div>
 
-  {pendingDeleteFieldIdx!==null&&(
+      {pendingDeleteFieldIdx!==null&&(
 <DeleteConfirmModal
   itemName={editingFields[pendingDeleteFieldIdx]&&editingFields[pendingDeleteFieldIdx].label}
   message="This field will be removed from the template."
@@ -714,11 +712,11 @@ function StrandsPage({app,allProjects}){
   onConfirm={confirmDeleteField}
   onCancel={function(){setPendingDeleteFieldIdx(null);}}
 />
-  )}
-  {fieldDeleteBlockedIdx!==null&&(function(){
-    var f=editingFields[fieldDeleteBlockedIdx];
-    var count=f?fieldContentCount(f.id):0;
-    return(
+      )}
+      {fieldDeleteBlockedIdx!==null&&(function(){
+        var f=editingFields[fieldDeleteBlockedIdx];
+        var count=f?fieldContentCount(f.id):0;
+        return(
 <div className="modal-overlay">
   <div className="modal-backdrop" onClick={function(){setFieldDeleteBlockedIdx(null);}}/>
   <div className="modal-box" style={{maxWidth:400}}>
@@ -727,18 +725,18 @@ function StrandsPage({app,allProjects}){
     <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={function(){setFieldDeleteBlockedIdx(null);}}>Got it</button>
   </div>
 </div>
-    );
-  })()}
+        );
+      })()}
 
-  <div className="wv-field-wrap" style={{marginBottom:24}}>
-  <label className="wv-field-lbl">Fields</label>
-  <div style={{marginTop:12}}>
-  {editingFields.map(function(f,i){return(
+      <div className="wv-field-wrap">
+      <label className="wv-field-lbl">Fields</label>
+      <div style={{marginTop:12}}>
+      {editingFields.map(function(f,i){return(
 <div key={f.id} draggable={true}
   onDragStart={function(e){e.dataTransfer.setData('fieldIdx',''+i);}}
   onDragOver={function(e){e.preventDefault();}}
   onDrop={function(e){e.preventDefault();var from=parseInt(e.dataTransfer.getData('fieldIdx'),10);if(isNaN(from)||from===i)return;var nf=editingFields.slice();var item=nf.splice(from,1)[0];nf.splice(i,0,item);commitFields(nf);}}
-  style={{borderBottom:'1px solid var(--bg2)',padding:'10px 0'}}>
+  style={{borderBottom:'1px solid var(--bg2)',padding:'16px 0'}}>
   <div style={{display:'flex',alignItems:'center',gap:10}}>
     <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab',flexShrink:0}}>drag_indicator</span>
     <span className="material-symbols-outlined" style={{fontSize:18,color:'#A88060',flexShrink:0}}>{(FIELD_TYPE_INFO[f.type]||{}).icon||'text_fields'}</span>
@@ -788,6 +786,8 @@ function StrandsPage({app,allProjects}){
   <PrimaryButton onClick={addFieldToSettings} style={{width:'auto'}}>Add</PrimaryButton>
 </div>
     )}
+  </div>
+  </div>
   </div>
   </div>
   </div>
