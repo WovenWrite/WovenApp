@@ -128,7 +128,7 @@ var DRAWER_CSS = `
 .wv-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
   box-sizing:border-box;padding:12px 15px;border-radius:8px;cursor:pointer;
   font-family:'DM Sans',sans-serif;font-weight:700;font-size:16px;
-  transition:background .15s ease,color .15s ease,border-color .15s ease;}
+  transition:background .5s ease,color .5s ease,border-color .5s ease;}
 .wv-btn .mi{font-size:18px;}
 .wv-btn:disabled{opacity:.5;cursor:not-allowed;}
 .wv-btn-primary{background:#DF6321;border:none;color:#F5EDE0;}

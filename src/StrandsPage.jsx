@@ -15,6 +15,69 @@ function useIsMobile(){var s=useState(window.innerWidth<768);var isMobile=s[0];v
 // cursor rather than rendering a full WYSIWYG editor. onMouseDown+
 // preventDefault on the toolbar buttons keeps the textarea's selection
 // intact (a plain onClick would blur the textarea first and lose it).
+// ── Field type metadata for the Webflow-style type picker cards ──
+var FIELD_TYPE_INFO={
+  short_text:{icon:'short_text',help:'A single line — names, titles, short labels.'},
+  long_text:{icon:'notes',help:'Multiple lines with light formatting — backstory, notes, descriptions.'},
+  number:{icon:'123',help:'A numeric value — age, count, quantity.'},
+  date:{icon:'calendar_month',help:'A specific date — birthday, event, deadline.'},
+  boolean:{icon:'toggle_on',help:'A simple yes/no choice.'},
+  select:{icon:'list',help:'Pick one option from a defined list.'},
+  strand_ref:{icon:'hub',help:'Link to another spool item — relationships, connections.'}
+};
+
+// ── CollectionIconThumb ──
+// Matches SpoolThumbnailUpload's exact footprint (150x150, semi-opaque
+// amber pencil overlay) so a collection's icon/colour preview reads as the
+// same "thumbnail" pattern used on individual spool items — just centered
+// on a material icon instead of an image/emoji/initials, since a
+// collection doesn't have those.
+function CollectionIconThumb({color,icon,onClick}){
+  return(
+<div className="wv-thumb-upload" style={{background:color||'#A88060',cursor:'pointer'}} onClick={onClick}>
+  <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <span className="material-symbols-outlined" style={{fontSize:56,color:'#fff'}}>{icon||'auto_stories'}</span>
+  </div>
+  <div className="wv-thumb-upload-overlay">
+    <span className="mi">edit</span>
+  </div>
+</div>
+  );
+}
+
+// ── MultiSelectDropdown ──
+// A compact "N selected" trigger that expands into a checkbox list —
+// same visual language as the rest of the fields (wv-field-box), for
+// choosing which other projects a collection is shared with.
+function MultiSelectDropdown({options,selected,onChange,placeholder}){
+  var so=useState(false);var open=so[0];var setOpen=so[1];
+  var ref=useRef(null);
+  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
+  var summary=selected.length===0?(placeholder||'None selected'):selected.length===1?(function(){var o=options.find(function(o){return o.id===selected[0];});return o?o.label:'1 selected';})():selected.length+' projects selected';
+  return(
+<div ref={ref} style={{position:'relative'}}>
+  <button type="button" className="wv-field-box" onClick={function(){setOpen(!open);}} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',textAlign:'left'}}>
+    <span style={{color:selected.length?'var(--text)':'var(--placeholder)',fontStyle:selected.length?'normal':'italic'}}>{summary}</span>
+    <span className="mi" style={{fontSize:18,color:'var(--mid)',flexShrink:0}}>expand_more</span>
+  </button>
+  {open&&(
+<div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,zIndex:100,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:10,boxShadow:'0 8px 28px rgba(42,31,16,.14)',padding:6,maxHeight:220,overflowY:'auto'}}>
+  {options.length===0?<div style={{fontSize:13,color:'var(--placeholder)',padding:8}}>No other projects to share with.</div>:options.map(function(o){var checked=selected.includes(o.id);return(
+<label key={o.id} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:14,fontFamily:'DM Sans,sans-serif',color:'var(--text)',padding:'7px 6px',borderRadius:6}}
+  onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
+  onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+  <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(checked?'var(--indigo)':'var(--border)'),background:checked?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}} onClick={function(){onChange(checked?selected.filter(function(id){return id!==o.id;}):selected.concat([o.id]));}}>
+    {checked&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
+  </span>
+  {o.label}
+</label>
+    );})}
+</div>
+  )}
+</div>
+  );
+}
+
 function LongTextField({f,sid,val,onCommit}){
   var taRef=useRef(null);
   function wrap(pre,post,placeholder){
@@ -362,7 +425,7 @@ var SPOOL_SWITCHER_CSS=`
 /* When the list is full-page (no item selected — desktop full-width, or
    mobile's always-full-screen list), the footer's Add button shouldn't
    stretch edge to edge with it. */
-.strands-layout .wv-drawer--flexw .wv-btn{max-width:400px;margin:0 auto;}
+.strands-layout .wv-drawer--flexw .wv-btn{max-width:400px;margin:0;}
 /* "New Spool" tab-add icon — same treatment as the Canvas board-add tab,
    so creating a new collection reads as "adding another tab" consistently
    across the app. */
@@ -578,7 +641,8 @@ function StrandsPage({app,allProjects}){
   var sesi=useState(null);var editingSpoolIcon=sesi[0];var setEditingSpoolIcon=sesi[1];
   var ssis=useState(false);var showIconSearch=ssis[0];var setShowIconSearch=ssis[1];
   var snfn=useState('');var newFieldName=snfn[0];var setNewFieldName=snfn[1];
-  var snft=useState('short_text');var newFieldType=snft[0];var setNewFieldType=snft[1];
+  var sftp=useState(false);var showFieldTypePicker=sftp[0];var setShowFieldTypePicker=sftp[1];
+  var sfct=useState(null);var chosenFieldType=sfct[0];var setChosenFieldType=sfct[1];
   var ssw=useState([]);var sharedWith=ssw[0];var setSharedWith=ssw[1];
   var spd=useState(null);var pendingDeleteFieldIdx=spd[0];var setPendingDeleteFieldIdx=spd[1];
   function openCollSettings(){setEditingFields(activeTpl?[...activeTpl.fields]:[]);setSharedWith(activeTpl?activeTpl.sharedWith||[]:[]);setEditingSpoolColor(activeTpl?activeTpl.color||null:null);setEditingSpoolIcon(activeTpl?activeTpl.icon||null:null);setShowCollSettings(true);}
@@ -628,7 +692,7 @@ function StrandsPage({app,allProjects}){
     if(remaining.length>0)setActiveColl(remaining[0]);
     setShowCollSettings(false);setDeleteCollConfirm(false);
   }
-  function addFieldToSettings(){if(!newFieldName.trim()||!editingFields)return;commitFields(editingFields.concat([{id:genId(),label:newFieldName.trim(),type:newFieldType}]));setNewFieldName('');}
+  function addFieldToSettings(){if(!newFieldName.trim()||!chosenFieldType)return;commitFields(editingFields.concat([{id:genId(),label:newFieldName.trim(),type:chosenFieldType}]));setNewFieldName('');setChosenFieldType(null);setShowFieldTypePicker(false);}
   var otherProjects=allProjects.filter(function(p){return p.id!==pid;});
   var sco2=useState(null);var dragOverColl=sco2[0];var setDragOverColl=sco2[1];
   function reorderColls(fromColl,toColl){
@@ -644,7 +708,8 @@ function StrandsPage({app,allProjects}){
   }
   var detailContent=showCollSettings&&editingFields?(
 <div style={{padding:40}}>
-  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+  <div style={{maxWidth:900,margin:'0 auto'}}>
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:32}}>
     <div>
       <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>{activeColl} — Settings</div>
       {activeTpl&&activeTpl.projectId!==pid&&(function(){
@@ -657,39 +722,24 @@ function StrandsPage({app,allProjects}){
       <SecondaryButton onClick={function(){setShowCollSettings(false);}} style={{width:'auto'}}>Done</SecondaryButton>
     </div>
   </div>
-  {/* Spool colour + icon */}
-  {/* Preview */}
-  <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
-    <div style={{width:40,height:40,borderRadius:10,background:editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-      <span className="material-symbols-outlined" style={{fontSize:22,color:'#fff'}}>{editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'}</span>
-    </div>
-    <span style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,color:'var(--text)'}}>{activeColl}</span>
-  </div>
-  {/* Colour */}
-  <div style={{marginBottom:16}}>
-    <span className="sect-lbl">Colour</span>
-    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
-      {SPOOL_COLORS.map(function(c){var isActive=(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')===c;return(
-<div key={c} onClick={function(){commitColor(c);}} style={{width:22,height:22,borderRadius:'50%',background:c,cursor:'pointer',flexShrink:0,transform:isActive?'scale(1.25)':'scale(1)',boxShadow:isActive?'0 0 0 2px var(--bg1),0 0 0 3.5px '+c:'none',transition:'transform .15s'}}/>
-      );})}
-    </div>
-  </div>
-  {/* Icon */}
-  <div style={{marginBottom:16}}>
-    <span className="sect-lbl">Icon</span>
-    <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:6}}>
-      {SPOOL_ICONS.slice(0,10).map(function(ic){var isActive=(editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories')===ic;return(
-<button key={ic} onClick={function(){commitIcon(ic);}} style={{width:32,height:32,borderRadius:6,border:'1.5px solid '+(isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--border)'),background:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')+'22':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-  <span className="material-symbols-outlined" style={{fontSize:16,color:isActive?(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'):'var(--mid)'}}>{ic}</span>
-</button>
-      );})}
-      <button onClick={function(){setShowIconSearch(true);}} style={{padding:'0 10px',height:32,borderRadius:6,border:'1px solid var(--border)',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontFamily:'DM Sans, sans-serif',color:'var(--mid)',whiteSpace:'nowrap'}}>
-        Search more
-      </button>
-    </div>
+
+  {/* Hero: icon/colour thumbnail + name, same layout rhythm as a spool item's own thumbnail + title + first field */}
+  <div style={{display:'flex',gap:20,alignItems:'flex-start',marginBottom:32,position:'relative'}}>
+    <CollectionIconThumb color={editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'} icon={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onClick={function(){setShowIconSearch(true);}}/>
     {showIconSearch&&<IconSearchPopup current={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onSelect={function(ic){commitIcon(ic);}} onClose={function(){setShowIconSearch(false);}}/>}
+    <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:24,paddingTop:8}}>
+      <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26'}}>{activeColl}</div>
+      <div className="wv-field-wrap">
+        <label className="wv-field-lbl">Colour</label>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:6}}>
+          {SPOOL_COLORS.map(function(c){var isActive=(editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28')===c;return(
+<div key={c} onClick={function(){commitColor(c);}} style={{width:24,height:24,borderRadius:'50%',background:c,cursor:'pointer',flexShrink:0,transform:isActive?'scale(1.25)':'scale(1)',boxShadow:isActive?'0 0 0 2px var(--bg1),0 0 0 3.5px '+c:'none',transition:'transform .15s'}}/>
+          );})}
+        </div>
+      </div>
+    </div>
   </div>
-  <div style={{fontFamily:'var(--serif)',fontSize:16,fontWeight:600,marginBottom:12,color:'var(--text)'}}>Fields</div>
+
   {deleteCollConfirm&&(
 <DeleteConfirmModal
   itemName={activeColl}
@@ -722,6 +772,9 @@ function StrandsPage({app,allProjects}){
 </div>
     );
   })()}
+
+  <Section label="Fields">
+  <div style={{marginTop:12}}>
   {editingFields.map(function(f,i){return(
 <div key={f.id} draggable={true}
   onDragStart={function(e){e.dataTransfer.setData('fieldIdx',''+i);}}
@@ -730,6 +783,7 @@ function StrandsPage({app,allProjects}){
   style={{borderBottom:'1px solid var(--bg2)',padding:'8px 0'}}>
   <div style={{display:'flex',alignItems:'center',gap:7}}>
     <span className="mi" style={{fontSize:18,color:'var(--border)',cursor:'grab',flexShrink:0}}>drag_indicator</span>
+    <span className="material-symbols-outlined" style={{fontSize:16,color:'#A88060',flexShrink:0}}>{(FIELD_TYPE_INFO[f.type]||{}).icon||'text_fields'}</span>
     <input defaultValue={f.label} style={{maxWidth:160,fontSize:13}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});commitFields(nf);}}/>
     <select value={f.type} style={{width:110,fontSize:13}} onChange={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:e.target.value,refSpool:null,refMultiple:false,options:null});commitFields(nf);}}>
       {FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}
@@ -754,28 +808,52 @@ function StrandsPage({app,allProjects}){
   )}
 </div>
   );})}
-  <div style={{display:'flex',gap:8,marginTop:12,marginBottom:24}}>
-    <input value={newFieldName} onChange={function(e){setNewFieldName(e.target.value);}} placeholder="New field name" onKeyDown={function(e){if(e.key==='Enter')addFieldToSettings();}} style={{flex:1}}/>
-    <select value={newFieldType} onChange={function(e){setNewFieldType(e.target.value);}} style={{width:110}}>{FIELD_TYPES.map(function(t){return <option key={t.id} value={t.id}>{t.label}</option>;})}</select>
-    <button className="btn btn-ghost btn-sm" onClick={addFieldToSettings}>Add</button>
+
+  {/* Webflow-style field-type picker — replaces the old typebox + dropdown */}
+  <div style={{marginTop:16}}>
+    {!showFieldTypePicker?(
+      <TertiaryButton onClick={function(){setShowFieldTypePicker(true);}} style={{color:'#A88060',display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:18}}>add</span>Add Field</TertiaryButton>
+    ):!chosenFieldType?(
+<div style={{border:'1px solid var(--border)',borderRadius:12,padding:16,background:'var(--bg1)'}}>
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+    <span className="wv-field-lbl">Choose a field type</span>
+    <button className="btn-icon" onClick={function(){setShowFieldTypePicker(false);}}><span className="mi" style={{fontSize:18}}>close</span></button>
   </div>
+  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))',gap:10}}>
+    {FIELD_TYPES.map(function(t){var info=FIELD_TYPE_INFO[t.id]||{icon:'text_fields',help:''};return(
+<button key={t.id} type="button" onClick={function(){setChosenFieldType(t.id);}} style={{display:'flex',flexDirection:'column',alignItems:'center',textAlign:'center',gap:6,padding:'16px 12px',borderRadius:12,border:'1.5px solid var(--border)',background:'var(--bg1)',cursor:'pointer',transition:'all .5s ease'}}
+  onMouseOver={function(e){e.currentTarget.style.borderColor='#C45E28';e.currentTarget.style.background='rgba(196,94,40,.05)';}}
+  onMouseOut={function(e){e.currentTarget.style.borderColor='var(--border)';e.currentTarget.style.background='var(--bg1)';}}>
+  <span className="material-symbols-outlined" style={{fontSize:28,color:'#C45E28'}}>{info.icon}</span>
+  <span style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:14,color:'#6B4A26'}}>{t.label}</span>
+  <span style={{fontFamily:"'DM Sans',sans-serif",fontSize:11,color:'var(--mid)',lineHeight:1.35}}>{info.help}</span>
+</button>
+    );})}
+  </div>
+</div>
+    ):(
+<div style={{display:'flex',gap:8,alignItems:'center',border:'1px solid var(--border)',borderRadius:12,padding:16,background:'var(--bg1)'}}>
+  <span className="material-symbols-outlined" style={{fontSize:22,color:'#C45E28',flexShrink:0}}>{(FIELD_TYPE_INFO[chosenFieldType]||{}).icon}</span>
+  <input autoFocus value={newFieldName} onChange={function(e){setNewFieldName(e.target.value);}} placeholder="Field name" onKeyDown={function(e){if(e.key==='Enter')addFieldToSettings();if(e.key==='Escape'){setChosenFieldType(null);}}} style={{flex:1}}/>
+  <button className="btn-icon" title="Back" onClick={function(){setChosenFieldType(null);}}><span className="mi" style={{fontSize:18}}>arrow_back</span></button>
+  <PrimaryButton onClick={addFieldToSettings} style={{width:'auto'}}>Add</PrimaryButton>
+</div>
+    )}
+  </div>
+  </div>
+  </Section>
+
   {(!activeTpl||activeTpl.projectId===pid)&&(
-<div style={{paddingTop:16,borderTop:'1px solid var(--border)'}}>
-    <span className="sect-lbl">Share across projects</span>
-    {otherProjects.length===0
-      ?<div style={{fontSize:13,color:'var(--placeholder)'}}>No other projects to share with.</div>
-      :<div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>        {otherProjects.map(function(p){var checked=sharedWith.includes(p.id);return(
-<label key={p.id} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,color:'var(--text)'}}>
-  <span style={{width:18,height:18,borderRadius:4,border:'1px solid '+(checked?'var(--indigo)':'var(--border)'),background:checked?'var(--indigo)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}} onClick={function(){commitSharedWith(checked?sharedWith.filter(function(id){return id!==p.id;}):sharedWith.concat([p.id]));}}>
-    {checked&&<span className="mi" style={{fontSize:13,color:'#fff'}}>check</span>}
-  </span>
-  {p.title}
-</label>
-        );})}
+<div style={{paddingTop:24,marginTop:24,borderTop:'1px solid var(--border)'}}>
+    <div className="wv-field-wrap">
+      <label className="wv-field-lbl">Share across projects</label>
+      <div style={{marginTop:6}}>
+        <MultiSelectDropdown options={otherProjects.map(function(p){return{id:p.id,label:p.title};})} selected={sharedWith} onChange={commitSharedWith} placeholder="Not shared with any other project"/>
       </div>
-    }
+    </div>
   </div>
   )}
+  </div>
 </div>
   ):activeStrand?(
 <div style={{padding:40,position:'relative',backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.12) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
@@ -814,7 +892,7 @@ function StrandsPage({app,allProjects}){
   var addItemLabel='Add '+activeColl.replace(/s$/,'');
   var findSelectPanel=(
 <Drawer variant="inline" title={activeColl} width={activeStrand?undefined:'flex'}
-  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<StrandSortFilter sort={strandSort} setSort={updateStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>} trailingSlot={<PrimaryButton icon="add" onClick={addStrand} style={{width:'auto'}}>{addItemLabel}</PrimaryButton>}/>}
+  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<StrandSortFilter sort={strandSort} setSort={updateStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>}/>}
   footer={<div style={{display:'flex',flexDirection:'column',gap:8}}><PrimaryButton icon="add" onClick={addStrand}>{addItemLabel}</PrimaryButton><TertiaryButton onClick={openCollSettings} style={{color:'#A88060',justifyContent:'center',display:'flex',alignItems:'center',gap:8,width:'100%'}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Spool</TertiaryButton></div>}>
   {filtered.length===0?(
     <HelpText>{collStrands.length===0?'No entries yet.':'No results for "'+search+'".'}</HelpText>
