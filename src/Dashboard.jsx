@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState } from "react";
-import { Drawer } from './SharedUI'
+import { Drawer, PrimaryButton } from './SharedUI'
 import { genId, initials, todayStr, countWords } from './utils'
 
 // Plain text -> simple paragraph HTML, matching how draft bodies are stored
@@ -71,19 +71,16 @@ function StatsSection({app,onOpenProfile,greeting}){
       if(createdStr>=weekStartStr)ltCount++;
     }
   });
-  // Cumulative progress across every project — mirrors the per-project
-  // progress widget's word/sequenced/loose-thread stats (ProjectDrawer.jsx),
-  // just summed across app.allDrafts instead of one project's drafts.
-  // The per-status colour breakdown doesn't carry over here since status
-  // sets are configured per project and aren't necessarily comparable
-  // across projects with different setups.
-  var allTotalWords=0,allSequenced=0,allLoose=0;
+  // Cumulative word count across every project — same "big number" format
+  // as Words Today, minus the reset (there's no single day to reset here).
+  // Per-status/sequenced/loose-thread breakdowns were dropped: those
+  // categories are configured per project, so they don't aggregate
+  // meaningfully across projects with different setups.
+  var allTotalWords=0;
   Object.keys(app.allDrafts).forEach(function(pid){
     (app.allDrafts[pid]||[]).forEach(function(d){
       if(d.archived)return;
       allTotalWords+=(d.wordCount||0);
-      if(d.status==='loose_thread')allLoose++;
-      else allSequenced++;
     });
   });
   return(
@@ -94,14 +91,10 @@ function StatsSection({app,onOpenProfile,greeting}){
     <div className="stat-card">
       <div className="stat-card-hdr">
         <span className="stat-card-title">Words Today</span>
-        <div style={{display:'flex',gap:4}}>
-          {todayWords>0&&<button className="btn-icon" style={{padding:2}} title="Reset today's count" onClick={function(){if(window.confirm('Reset today\'s word count to 0?'))app.clearTodaySession();}}><span className="mi" style={{fontSize:16}}>refresh</span></button>}
-          <button className="btn-icon" style={{padding:2}} onClick={function(){onOpenProfile('goal');}}><span className="mi" style={{fontSize:18}}>settings</span></button>
-        </div>
       </div>
       <div className="stat-num">{todayWords.toLocaleString()}</div>
       <div className="progress-bar-bg"><div className="progress-bar-fill" style={{width:Math.min(100,pct)+'%'}}/></div>
-      <div className="stat-sub">{pct+'% of '+goal.toLocaleString()}</div>
+      <div className="stat-sub">{pct+'% of '}<input defaultValue={goal} key={goal} onBlur={function(e){var v=parseInt(e.target.value,10);if(!isNaN(v)&&v>0){app.setGoal(v);}else{e.target.value=goal;}}} onKeyDown={function(e){if(e.key==='Enter')e.target.blur();}} style={{width:52,border:'none',borderBottom:'1px dashed var(--mid)',background:'transparent',fontSize:16,color:'var(--mid)',padding:0,fontFamily:'inherit'}}/> words/day</div>
     </div>
     <div className="stat-card">
       <div className="stat-card-hdr">
@@ -135,20 +128,8 @@ function StatsSection({app,onOpenProfile,greeting}){
   </div>
   <div className="stat-card stat-hide-mobile">
     <div className="stat-card-hdr"><span className="stat-card-title">All Projects</span></div>
-    <div style={{display:'flex',gap:10,marginTop:4}}>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600,color:'var(--text)',lineHeight:1.1}}>{allTotalWords.toLocaleString()}</div>
-        <div style={{fontSize:14,color:'var(--mid)',marginTop:2}}>{allTotalWords===1?'word':'words'}</div>
-      </div>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600,color:'var(--text)',lineHeight:1.1}}>{allSequenced}</div>
-        <div style={{fontSize:14,color:'var(--mid)',marginTop:2}}>{allSequenced===1?'draft':'drafts'}</div>
-      </div>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:600,color:'var(--text)',lineHeight:1.1}}>{allLoose}</div>
-        <div style={{fontSize:14,color:'var(--mid)',marginTop:2}}>{allLoose===1?'loose thread':'loose threads'}</div>
-      </div>
-    </div>
+    <div className="stat-num">{allTotalWords.toLocaleString()}</div>
+    <div className="stat-sub">{allTotalWords===1?'word written':'words written'}</div>
   </div>
 </div>
   );
@@ -209,12 +190,12 @@ function GlobalLooseThreads({app}){
     {allLT.length>0&&<span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,fontWeight:600,color:'var(--indigo)',background:'rgba(196,94,40,.10)',padding:'3px 10px',borderRadius:12,whiteSpace:'nowrap'}}>{allLT.length} {allLT.length===1?'thread':'threads'}</span>}
     <div style={{flex:1}}/>
     {allLT.length>3&&(
-    <button className="btn btn-ghost btn-sm" onClick={function(){setShowMore(!showMore);}}>
+    <div className="almond-primary-btn"><PrimaryButton onClick={function(){setShowMore(!showMore);}} style={{width:'auto'}}>
       {showMore?'Show less':'Show all'}
-    </button>
+    </PrimaryButton></div>
     )}
   </div>
-  <div style={{display:'flex',flexWrap:'wrap',gap:10,overflow:showMore?'visible':'hidden',maxHeight:showMore?'none':100,paddingBottom:4}}>
+  <div style={{display:'flex',flexWrap:'wrap',gap:10,overflow:showMore?'visible':'hidden',maxHeight:showMore?'none':140,paddingBottom:4}}>
     <div onClick={handleAddLT} style={{background:"transparent",border:"2px dashed #A88060",padding:"10px 15px",borderRadius:15,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,minWidth:120,flexShrink:0,minHeight:80}} onMouseEnter={function(e){e.currentTarget.style.borderColor="#c45e28";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#A88060";}}>
       <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
     </div>
@@ -340,17 +321,17 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
   var editProj=editingProjId?app.projects.find(function(p){return p.id===editingProjId;}):null;
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
-  <nav className="nav" style={{justifyContent:'space-between'}}>
+  <nav className="nav">
     <WovenLogo size={26}/>
-    <div style={{display:'flex',alignItems:'center',gap:8}}>
-      <div className="avatar" onClick={function(){onOpenProfile(null);}}>{profile.headshot?<img src={profile.headshot} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:initials(firstName+' '+(profile.lastName||''))}</div>
-    </div>
   </nav>
   <div className="dash-layout">
     <div className="dash-main dot-grid">
       <div className="dash-greeting dash-greeting-desktop">{greeting}</div>
       <div className="dash-subtitle dash-greeting-desktop">What will you weave today?</div>
-      <div className="wv-field-lbl" style={{marginBottom:12}}>Your Projects</div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+        <span className="wv-field-lbl" style={{marginBottom:0}}>Your Projects</span>
+        <div className="almond-primary-btn"><PrimaryButton icon="add" onClick={onNewProject} style={{width:'auto'}}>New Project</PrimaryButton></div>
+      </div>
       <div className="proj-grid">
         {app.projects.filter(function(p){return !p.archived;}).map(function(p){var wc=getWC(p.id);return(
 <div key={p.id} className="proj-card proj-card-hover" style={{position:'relative'}}>
@@ -361,16 +342,13 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
   <div className="proj-card-body" onClick={function(){openProject(p.id);}}>
     <div className="proj-card-title">{p.title||'Untitled'}</div>
     <div className="proj-card-syn">{p.synopsis||'No synopsis yet.'}</div>
-    <div className="proj-card-footer"><span>{p.type||'Fiction'}</span><span>{wc>0?wc.toLocaleString()+' words':'Empty'}</span></div>
+    <div className="proj-card-footer"><span>{p.type||'Fiction'}</span><span>{wc>0?wc.toLocaleString()+'w':'Empty'}</span></div>
   </div>
   <button className="proj-edit-btn btn-icon" style={{position:'absolute',top:8,right:8,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:6,opacity:0,transition:'opacity .15s',color:'var(--mid)'}} onClick={function(e){e.stopPropagation();setEditingProjId(p.id);}} title="Edit project">
     <span className="mi" style={{fontSize:16}}>edit</span>
   </button>
 </div>
-        );})}<div className="add-proj" onClick={onNewProject}>
-          <span className="mi" style={{fontSize:28,color:'var(--mid)'}}>add_circle_outline</span>
-          <div style={{fontSize:14,color:'var(--mid)'}}>New project</div>
-        </div>
+        );})}
       </div>
       <GlobalLooseThreads app={app}/>
       <div style={{marginTop:20,border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'12px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,background:'var(--bg1)',transition:'border-color .15s'}} onClick={function(){setArchiveOpen(true);}}>
@@ -383,11 +361,15 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
       </div>
     </div>
     <div className="dash-sidebar" style={{display:'flex',flexDirection:'column'}}>
+      <div className="wv-thumb-upload" style={{background:'var(--indigo)',margin:'0 auto 20px'}} onClick={function(){onOpenProfile(null);}} title="Your profile">
+        {profile.headshot
+          ?<img src={profile.headshot} alt="Profile"/>
+          :<div className="wv-thumb-upload-initials">{initials(firstName+' '+(profile.lastName||''))}</div>}
+        <div className="wv-thumb-upload-overlay"><span className="mi">edit</span></div>
+      </div>
       <div style={{flex:1}}><StatsSection app={app} onOpenProfile={onOpenProfile} greeting={greeting}/></div>
-      <div style={{paddingTop:16,borderTop:'1px solid var(--border)',marginTop:16}}>
-        <button className="btn btn-ghost" style={{width:'100%',justifyContent:'center'}} onClick={function(){app.signOut();}}>
-          <span className="mi" style={{fontSize:16}}>logout</span>Sign out
-        </button>
+      <div className="almond-primary-btn" style={{paddingTop:16,borderTop:'1px solid var(--border)',marginTop:16}}>
+        <PrimaryButton icon="logout" onClick={function(){app.signOut();}} style={{width:'100%'}}>Sign out</PrimaryButton>
       </div>
     </div>
   </div>

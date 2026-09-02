@@ -727,7 +727,7 @@ export function LooseThreadsSection({threads,app,view,structureMode,filter}){
   return(
 <div
   id="loose-threads-inline"
-  style={{background:'#F5EDE0',padding:'16px 16px 24px',marginTop:0}}
+  style={{background:'#F5EDE0',padding:'16px 16px 24px',marginTop:0,flex:'0 0 auto'}}
   onDragOver={function(e){e.preventDefault();}}
   onDrop={function(e){
     e.preventDefault();var fromId=e.dataTransfer.getData('draftId');if(!fromId)return;

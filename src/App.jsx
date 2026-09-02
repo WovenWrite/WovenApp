@@ -169,21 +169,27 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .sect-lbl{font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px;display:block;}
 .dot-grid{background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;}
 .dash-layout{display:flex;flex:1;overflow:hidden;background:var(--bg0);align-items:stretch;}
-.dash-main{flex:2;overflow-y:auto;padding:40px 36px 80px;min-width:0;background-color:var(--bg0);background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;}
+.dash-main{flex:2;overflow-y:auto;padding:120px 108px 200px;min-width:0;background-color:var(--bg0);background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;}
 .dash-sidebar{flex:1;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;background:var(--bg1);padding:24px;min-width:220px;max-width:280px;}
-.dash-greeting{font-family:var(--serif);font-size:28px;font-weight:600;color:var(--text);margin-bottom:4px;}
-.dash-subtitle{font-size:14px;color:var(--mid);margin-bottom:24px;font-weight:300;}
+.dash-greeting{font-family:var(--serif);font-size:38px;font-weight:600;color:var(--text);margin-bottom:4px;}
+.dash-subtitle{font-family:var(--serif);font-size:24px;color:var(--text);margin-bottom:24px;font-weight:600;}
 .proj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
 .proj-card{background:#F5EDE0;border:2px solid transparent;border-radius:15px;overflow:hidden;cursor:pointer;transition:border-color .2s,box-shadow .2s;box-shadow:0 2px 8px rgba(42,31,16,.06);}
 .proj-card:hover{border-color:#c45e28;box-shadow:0 4px 16px rgba(42,31,16,.12);}
 .proj-card-band{height:150px;background:#E2D0B8;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border-radius:13px 13px 0 0;}
-.proj-card-body{padding:10px 15px;display:flex;flex-direction:column;gap:10px;}
-.proj-card-title{font-family:'Crimson Text',serif;font-size:18px;font-weight:700;color:#2a1f10;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
-.proj-card-syn{font-family:'DM Sans',sans-serif;font-size:16px;color:#7A5A38;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
-.proj-card-footer{display:flex;justify-content:space-between;align-items:center;font-family:'DM Sans',sans-serif;font-size:14px;color:#a88060;}
+.proj-card-body{padding:10px 15px;display:flex;flex-direction:column;gap:10px;min-height:220px;}
+.proj-card-title{font-family:'Crimson Text',serif;font-size:18px;font-weight:700;color:#2a1f10;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;flex-shrink:0;}
+.proj-card-syn{font-family:'DM Sans',sans-serif;font-size:16px;color:#7A5A38;line-height:1.45;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;flex:1;}
+.proj-card-footer{display:flex;justify-content:space-between;align-items:center;font-family:'DM Sans',sans-serif;font-size:14px;color:#a88060;margin-top:auto;flex-shrink:0;}
 .add-proj{border:2px dashed var(--border);border-radius:15px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:230px;transition:all .15s;}
 .add-proj:hover{border-color:#c45e28;background:rgba(196,94,40,.04);}
-.stat-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
+/* Almond-colored primary buttons — "New Project" and Loose Threads'
+   "Show all". Only the resting background needs overriding here; the
+   shared .wv-btn-primary:hover rule already goes to deep brown and has
+   higher specificity than this override, so hover works correctly with
+   no extra rule needed. */
+.almond-primary-btn .wv-btn-primary{background:#A88060;}
+.stat-card{background:var(--bg0);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 4px rgba(42,31,16,.04);}
 .stat-card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
 .stat-card-title{font-size:11px;font-weight:600;color:var(--indigo);text-transform:uppercase;letter-spacing:.08em;}
 .stat-num{font-family:var(--serif);font-size:36px;font-weight:600;line-height:1;color:var(--text);}

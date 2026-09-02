@@ -949,7 +949,16 @@ function DraftEditor({app}){
   {/* ── Nav (slides up in flow mode; always full width, never covered by a drawer) ── */}
   <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:T.navBg,padding:'0 14px',height:64,gap:10,borderBottom:'1px solid rgba(42,31,16,.1)',flexShrink:0,transform:flowMode?'translateY(-110%)':'translateY(0)',transition:'transform .3s cubic-bezier(.4,0,.2,1)',pointerEvents:flowMode?'none':'auto',position:flowMode?'absolute':'relative',width:'100%',zIndex:20}}>
     <div style={{display:'flex',alignItems:'center',gap:10,flex:1,minWidth:0}}>
-      <IconBtn icon="arrow_back" title="Back to sequence" onClick={function(){if(app&&app.setView)app.setView('cards');if(app&&app.setDraftId)app.setDraftId(null);}} style={{flexShrink:0}}/>
+      <IconBtn icon="arrow_back" title="Back to sequence" onClick={function(){
+        // If this draft was created and abandoned without ever adding a
+        // title or any words — and has never been saved/edited since
+        // creation — delete it instead of leaving an empty entry behind.
+        // The createdAt===updatedAt check is what keeps this from ever
+        // touching a draft the user deliberately left blank on a past visit.
+        var isUntouchedEmpty=(!draft.title||!draft.title.trim())&&(draft.wordCount||0)===0&&draft.createdAt&&draft.createdAt===draft.updatedAt;
+        if(isUntouchedEmpty&&app&&app.deleteDraftPermanently)app.deleteDraftPermanently(pid,did);
+        if(app&&app.setView)app.setView('cards');if(app&&app.setDraftId)app.setDraftId(null);
+      }} style={{flexShrink:0}}/>
       <EditableTitle value={title} onChange={function(v){setTitle(v);if(app&&app.updateDraft)app.updateDraft(pid,did,{title:v});}}/>
       <span className="wc-label" data-short={wordCount.toLocaleString()+'w'} style={{fontSize:11,color:T.text,whiteSpace:'nowrap',flexShrink:0,fontFamily:'DM Sans, sans-serif',opacity:.6}}>
         <span className="wc-full">{wordCount.toLocaleString()} words</span>
