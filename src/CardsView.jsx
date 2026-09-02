@@ -312,7 +312,7 @@ export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,
     </div>
   </div>
   <div style={{display:'flex',alignItems:'center',gap:8}}>
-    <TertiaryButton onClick={onBind} style={{width:'auto',display:'flex',alignItems:'center',gap:6}}><span className="mi" style={{fontSize:18}}>collections_bookmark</span>Bind {projLabel(app.currentProject,'drafts')}</TertiaryButton>
+    <TertiaryButton onClick={onBind} style={{width:'auto',display:'flex',alignItems:'center',gap:6,color:'#A88060'}}><span className="mi" style={{fontSize:18}}>collections_bookmark</span>Bind {projLabel(app.currentProject,'drafts')}</TertiaryButton>
     {onAddDraft&&<PrimaryButton icon="add" onClick={onAddDraft} style={{width:'auto'}}>New {projLabel(app.currentProject,'drafts').replace(/s$/,'')}</PrimaryButton>}
   </div>
 </div>
