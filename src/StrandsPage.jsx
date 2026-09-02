@@ -343,7 +343,6 @@ function SpoolSwitcherSheet({collNames,activeColl,projTemplates,projStrands,onSe
   if(sortMode==='az')list=list.slice().sort(function(a,b){return a.localeCompare(b);});
   return(
 <div className="spool-switcher-overlay">
-  <SpoolSwitcherStyles/>
   <div className="spool-switcher-hdr">
     <button className="btn-icon" onClick={onClose}><span className="mi">arrow_back</span></button>
     <span style={{fontFamily:'var(--serif)',fontSize:17,fontWeight:600,flex:1}}>Switch Spool</span>
@@ -731,6 +730,7 @@ function StrandsPage({app,allProjects}){
   );
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+  <SpoolSwitcherStyles/>
   {!isMobile&&(
   <div className="strands-subnav">
     {collNames.map(function(coll){return(
@@ -758,7 +758,6 @@ function StrandsPage({app,allProjects}){
   )}
   {isMobile&&(
   <div className="spool-mobile-bar">
-    <SpoolSwitcherStyles/>
     <button className="spool-mobile-current" onClick={function(){setShowSpoolSwitcher(true);}}>
       {(function(){var t=getTpl(activeColl);return t&&t.icon?<span className="material-symbols-outlined" style={{fontSize:18,color:t.color||'#6B4A26'}}>{t.icon}</span>:null;})()}
       <span className="name">{activeColl}</span>
