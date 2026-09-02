@@ -14,8 +14,7 @@
 //   <ProfileDrawer app={app} focusField={profileFocus} open={showProfile} onClose={...} />
 
 import { useState, useEffect, useRef } from 'react';
-import { Drawer, Field, HelpText, SecondaryButton } from './SharedUI';
-import { initials, uploadImage } from './utils';
+import { Drawer, Field, HelpText, SecondaryButton, SpoolThumbnailUpload } from './SharedUI';
 
 export default function ProfileDrawer({ app, focusField, open, onClose, topOffset }) {
   var profile = app.profile || {};
@@ -54,13 +53,6 @@ export default function ProfileDrawer({ app, focusField, open, onClose, topOffse
     app.setProfile(updated);
   }
 
-  function handlePhoto(e) {
-    var file = e.target.files && e.target.files[0];
-    if (!file) return;
-    if (file.size > 3 * 1024 * 1024) { alert('Please use an image under 3 MB.'); return; }
-    uploadImage(file).then(function (url) { if (url) { setHeadshot(url); autoSave({ headshot: url }); } });
-  }
-
   var footer = (
     <SecondaryButton icon="logout" onClick={function () { app.signOut(); }}>
       Sign out
@@ -72,23 +64,16 @@ export default function ProfileDrawer({ app, focusField, open, onClose, topOffse
 
       <div>
         <span className="wv-field-lbl">Profile photo</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 6 }}>
-          <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--indigo)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, border: '2px solid var(--border)' }}>
-            {headshot
-              ? <img src={headshot} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <span style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600, color: '#fff' }}>{initials((firstName || '') + ' ' + (lastName || ''))}</span>}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label style={{ cursor: 'pointer' }}>
-              <span className="btn btn-ghost btn-sm">{headshot ? 'Change photo' : 'Upload photo'}</span>
-              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhoto} />
-            </label>
-            {headshot && (
-              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={function () { setHeadshot(null); autoSave({ headshot: null }); }}>
-                Remove
-              </button>
-            )}
-          </div>
+        <div style={{ marginTop: 6 }}>
+          <SpoolThumbnailUpload
+            strand={{ color: 'var(--indigo)', image: headshot, name: (firstName || '') + ' ' + (lastName || '') }}
+            onUpload={function (url) { setHeadshot(url); autoSave({ headshot: url }); }}
+          />
+          {headshot && (
+            <button className="btn btn-ghost btn-sm" style={{ marginTop: 10, color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={function () { setHeadshot(null); autoSave({ headshot: null }); }}>
+              Remove
+            </button>
+          )}
         </div>
       </div>
 

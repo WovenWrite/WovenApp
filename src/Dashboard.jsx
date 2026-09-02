@@ -184,7 +184,7 @@ function GlobalLooseThreads({app}){
     setOpenLTId(null);
   }
   return(
-<div style={{marginTop:24}}>
+<div style={{marginTop:40}}>
   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
     <span className="wv-field-lbl" style={{marginBottom:0}}>Loose Threads</span>
     {allLT.length>0&&<span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,fontWeight:600,color:'var(--indigo)',background:'rgba(196,94,40,.10)',padding:'3px 10px',borderRadius:12,whiteSpace:'nowrap'}}>{allLT.length} {allLT.length===1?'thread':'threads'}</span>}
@@ -321,8 +321,12 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
   var editProj=editingProjId?app.projects.find(function(p){return p.id===editingProjId;}):null;
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
-  <nav className="nav">
+  <nav className="nav" style={{justifyContent:'space-between'}}>
     <WovenLogo size={26}/>
+    <div className="avatar" onClick={function(){onOpenProfile(null);}}>
+      {profile.headshot?<img src={profile.headshot} alt=""/>:initials(firstName+' '+(profile.lastName||''))}
+      <div className="avatar-overlay"><span className="mi">edit</span></div>
+    </div>
   </nav>
   <div className="dash-layout">
     <div className="dash-main dot-grid">
@@ -351,7 +355,7 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
         );})}
       </div>
       <GlobalLooseThreads app={app}/>
-      <div style={{marginTop:20,border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'12px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,background:'var(--bg1)',transition:'border-color .15s'}} onClick={function(){setArchiveOpen(true);}}>
+      <div style={{marginTop:40,border:'1px solid var(--border)',borderRadius:'var(--rl)',padding:'12px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,background:'var(--bg1)',transition:'border-color .15s'}} onClick={function(){setArchiveOpen(true);}}>
         <span className="mi" style={{fontSize:24,color:'var(--placeholder)',flexShrink:0}}>inventory_2</span>
         <div style={{flex:1}}>
           <div style={{fontFamily:'var(--serif)',fontSize:14,fontWeight:600,color:'var(--text)'}}>Your Archive</div>
@@ -361,12 +365,6 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
       </div>
     </div>
     <div className="dash-sidebar" style={{display:'flex',flexDirection:'column'}}>
-      <div className="wv-thumb-upload" style={{background:'var(--indigo)',margin:'0 auto 20px'}} onClick={function(){onOpenProfile(null);}} title="Your profile">
-        {profile.headshot
-          ?<img src={profile.headshot} alt="Profile"/>
-          :<div className="wv-thumb-upload-initials">{initials(firstName+' '+(profile.lastName||''))}</div>}
-        <div className="wv-thumb-upload-overlay"><span className="mi">edit</span></div>
-      </div>
       <div style={{flex:1}}><StatsSection app={app} onOpenProfile={onOpenProfile} greeting={greeting}/></div>
       <div className="almond-primary-btn" style={{paddingTop:16,borderTop:'1px solid var(--border)',marginTop:16}}>
         <PrimaryButton icon="logout" onClick={function(){app.signOut();}} style={{width:'100%'}}>Sign out</PrimaryButton>

@@ -144,7 +144,11 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .btn-sm{padding:5px 11px;font-size:13px;}.btn-icon{padding:5px;border-radius:var(--r);color:var(--mid);display:inline-flex;align-items:center;}.btn-icon:hover{background:var(--bg2);color:var(--text);}
 .nav{display:flex;align-items:center;padding:0 14px;height:64px;background:#E2D0B8;flex-shrink:0;gap:10px;}
 .wordmark{font-family:var(--serif);font-size:22px;font-weight:600;color:var(--indigo);cursor:pointer;user-select:none;}
-.avatar{width:32px;height:32px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;cursor:pointer;overflow:hidden;}
+.avatar{width:44px;height:44px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0;cursor:pointer;overflow:hidden;position:relative;}
+.avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+.avatar-overlay{position:absolute;inset:0;background:rgba(196,94,40,.75);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s ease;}
+.avatar:hover .avatar-overlay{opacity:1;}
+.avatar-overlay .mi{color:#fff;font-size:16px;}
 .view-switcher{display:flex;align-items:center;background:#F5EDE0;border-radius:50px;padding:4px;gap:2px;border:1px solid #A88060;}
 .view-seg{height:32px;width:36px;display:flex;align-items:center;justify-content:center;border-radius:50px;cursor:pointer;transition:all .15s;color:var(--mid);position:relative;flex-shrink:0;}
 .view-seg:hover{color:var(--text);background:rgba(42,31,16,.06);}
@@ -171,9 +175,9 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
 .dash-layout{display:flex;flex:1;overflow:hidden;background:var(--bg0);align-items:stretch;}
 .dash-main{flex:2;overflow-y:auto;padding:120px 108px 200px;min-width:0;background-color:var(--bg0);background-image:radial-gradient(circle, rgba(160,120,70,0.18) 1px, transparent 1px);background-size:22px 22px;}
 .dash-sidebar{flex:1;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;background:var(--bg1);padding:24px;min-width:220px;max-width:280px;}
-.dash-greeting{font-family:var(--serif);font-size:38px;font-weight:600;color:var(--text);margin-bottom:4px;}
-.dash-subtitle{font-family:var(--serif);font-size:24px;color:var(--text);margin-bottom:24px;font-weight:600;}
-.proj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
+.dash-greeting{font-family:var(--serif);font-size:44px;font-weight:600;color:var(--text);margin-bottom:4px;}
+.dash-subtitle{font-family:'DM Sans',sans-serif;font-size:28px;color:#7A5A38;margin-bottom:24px;font-weight:600;}
+.proj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;}
 .proj-card{background:#F5EDE0;border:2px solid transparent;border-radius:15px;overflow:hidden;cursor:pointer;transition:border-color .2s,box-shadow .2s;box-shadow:0 2px 8px rgba(42,31,16,.06);}
 .proj-card:hover{border-color:#c45e28;box-shadow:0 4px 16px rgba(42,31,16,.12);}
 .proj-card-band{height:150px;background:#E2D0B8;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border-radius:13px 13px 0 0;}
@@ -485,7 +489,10 @@ function ProjectNav({app,onOpenProfile}){
   <div style={{flex:1,display:'flex',justifyContent:'center'}}>
     <ViewSwitcher view={app.view} setView={app.setView}/>
   </div>
-  <div className="avatar" onClick={function(){onOpenProfile(null);}}>{(app.profile&&app.profile.headshot)?<img src={app.profile.headshot} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:initials(((app.profile||{}).firstName||'')+' '+((app.profile||{}).lastName||''))}</div>
+  <div className="avatar" onClick={function(){onOpenProfile(null);}}>
+    {(app.profile&&app.profile.headshot)?<img src={app.profile.headshot} alt=""/>:initials(((app.profile||{}).firstName||'')+' '+((app.profile||{}).lastName||''))}
+    <div className="avatar-overlay"><span className="mi">edit</span></div>
+  </div>
 </nav>
   );
 }
