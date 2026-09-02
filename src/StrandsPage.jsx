@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState, useEffect, useRef } from "react";
-import { AvatarEditModal, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio, Field, InputField, SelectField, Section, SpoolThumbnailUpload } from './SharedUI'
+import { AvatarEditModal, Drawer, HelpText, PrimaryButton, SecondaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio, Field, InputField, SelectField, Section, SpoolThumbnailUpload } from './SharedUI'
 import { FIELD_TYPES, defaultFields, initials, uploadImage } from './utils'
 import { saveDB } from './App'
 
@@ -488,7 +488,7 @@ function StrandsPage({app,allProjects}){
     }
   }
   var detailContent=showCollSettings&&editingFields?(
-<div style={{padding:24}}>
+<div style={{padding:40}}>
   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
     <div>
       <div style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:600}}>{activeColl} — Settings</div>
@@ -606,7 +606,7 @@ function StrandsPage({app,allProjects}){
   )}
 </div>
   ):activeStrand?(
-<div style={{padding:24,backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.12) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
+<div style={{padding:40,backgroundImage:'radial-gradient(circle, rgba(160,120,70,0.12) 1px, transparent 1px)',backgroundSize:'22px 22px'}}>
   <div style={{display:'flex',gap:20,alignItems:'flex-start',marginBottom:24}}>
     <SpoolThumbnailUpload strand={activeStrand} onClick={function(){setShowAvatarEdit(true);}}/>
     <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:24}}>
@@ -673,18 +673,9 @@ function StrandsPage({app,allProjects}){
   <button style={{fontSize:13,color:'var(--teal)'}} onClick={addCollection}>ok</button>
 </div>
     ):(
-<div style={{display:'flex',alignItems:'center',gap:4,marginLeft:'auto'}}>
-  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
-    <button className="btn-icon" onClick={openCollSettings} title="Spool settings"><span className="mi" style={{fontSize:18}}>settings</span></button>
-    <button className="btn btn-ghost btn-sm" onClick={function(){setNewColl(true);}}>+ Create Spool</button>
-  {newColl&&<NewSpoolModal onConfirm={function(name,icon,color){
-    if(!name.trim())return;
-    var nt={id:genId(),projectId:pid,name:name.trim(),icon:icon,color:color,fields:defaultFields(name.trim()),sharedWith:[]};
-    app.addTemplate(pid,nt);
-    app.setAllStrands(function(prev){var n=Object.assign({},prev);var ps=Object.assign({},n[pid]||{});ps[name.trim()]=[];n[pid]=ps;saveDB('woven:strands:'+pid,ps);return n;});
-    setActiveColl(name.trim());setNewColl(false);
-  }} onCancel={function(){setNewColl(false);}}/>}
-  </div>
+<div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',marginBottom:6}}>
+  <SecondaryButton icon="settings" onClick={openCollSettings} style={{width:'auto'}}>Edit Collection</SecondaryButton>
+  <SecondaryButton icon="add" onClick={function(){setNewColl(true);}} style={{width:'auto'}}>Create Spool</SecondaryButton>
 </div>
     )}
   </div>
