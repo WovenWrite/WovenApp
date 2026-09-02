@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import BindDrawer from './BindDrawer'
 import StrandsDrawer from './StrandsDrawer'
-import { StatusSelect, StrandSearchDropdown, FloatingPanel } from './SharedUI'
+import { StatusSelect, StrandSearchDropdown, FloatingPanel, PrimaryButton } from './SharedUI'
 import { genId, stripHtml, initials } from './utils'
 import { projIsNumbered, projSequence, sortDraftsBySequence, draftDateOf, formatDraftDate } from './projectConfig'
 import { buildTree, applyFS, loadFilterState, persistFilterState, ViewHeader, DraftLoadingSpinner, EmptyDrafts, TaggedSpoolsEditor, saveDB, loadDB } from './App'
@@ -516,7 +516,7 @@ function TableView({app}){
       })}
     </tbody>
   </table>
-  <div style={{padding:'9px 12px'}}><button className="btn btn-ghost btn-sm" onClick={addDraft}>+ Add draft</button></div>
+  <div style={{padding:'9px 12px'}}><PrimaryButton icon="add" onClick={addDraft} style={{width:'auto'}}>Add draft</PrimaryButton></div>
 
 </div>
     )}

@@ -313,6 +313,17 @@ var SPOOL_SWITCHER_CSS=`
    two panels rather than on the outer edge. Scoped to this page only. */
 .strands-layout .wv-drawer--inline{border-left:none;border-right:1px solid var(--border);}
 .strands-layout .wv-drawer--flexw{border-right:none;}
+/* When the list is full-page (no item selected — desktop full-width, or
+   mobile's always-full-screen list), the footer's Add button shouldn't
+   stretch edge to edge with it. */
+.strands-layout .wv-drawer--flexw .wv-btn{max-width:400px;margin:0 auto;}
+/* "New Spool" toolbar button: almond at rest. The shared SecondaryButton's
+   default hover (amber fill) was previously fought with an inline color
+   override, which inline styles can never win against a stylesheet's
+   :hover rule — text stayed almond on an amber fill, illegible. Styling
+   both states here in CSS instead fixes that properly. */
+.new-spool-btn .wv-btn-secondary{color:#A88060;border-color:#A88060;}
+.new-spool-btn .wv-btn-secondary:hover:not(:disabled){background:#6B4A26;border-color:#6B4A26;color:#F5EDE0;}
 /* The list's own Drawer header just repeats the active tab's name — the
    tab bar above it already shows that, so it's a redundant title + stroke. */
 .strands-layout .wv-drawer-hdr{display:none;}
@@ -750,8 +761,8 @@ function StrandsPage({app,allProjects}){
 </div>
     ):(
 <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',marginBottom:6}}>
-  <TertiaryButton onClick={openCollSettings} style={{color:'#A88060',display:'flex',alignItems:'center',gap:8}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Collection</TertiaryButton>
-  <SecondaryButton icon="add" onClick={function(){setNewColl(true);}} style={{width:'auto',color:'#A88060',borderColor:'#A88060'}}>New Spool</SecondaryButton>
+  <TertiaryButton onClick={openCollSettings} style={{color:'#A88060',display:'flex',alignItems:'center',gap:8}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Spool</TertiaryButton>
+  <div className="new-spool-btn"><SecondaryButton icon="add" onClick={function(){setNewColl(true);}} style={{width:'auto'}}>New Spool</SecondaryButton></div>
 </div>
     )}
   </div>

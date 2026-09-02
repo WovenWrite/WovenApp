@@ -9,7 +9,7 @@
 import { useState, useEffect, useRef } from "react";
 import BindDrawer from './BindDrawer'
 import LooseThreadDrawer from './LooseThreadDrawer'
-import { Popover, Check, Avatar, StatusDotWithArchive, ArchiveConfirmModal } from './SharedUI'
+import { Popover, Check, Avatar, StatusDotWithArchive, ArchiveConfirmModal, PrimaryButton } from './SharedUI'
 import { genId, stripHtml, initials, uploadImage } from './utils'
 import { sortDraftsBySequence, projIsNumbered, projIsManualOrder, projSequence, projThumbnails, draftDateOf, formatDraftDate, projStatuses, projStatus, projLabel } from './projectConfig'
 
@@ -771,7 +771,7 @@ export function EmptyDrafts({onAdd}){
   <span className="mi" style={{fontSize:48,color:'var(--placeholder)'}}>edit_note</span>
   <div style={{fontFamily:'var(--serif)',fontSize:22,color:'var(--mid)'}}>No drafts yet</div>
   <div style={{fontSize:14,color:'var(--mid)',marginBottom:12}}>Start writing by adding your first draft.</div>
-  <button className="btn btn-primary" onClick={onAdd}><span className="mi" style={{fontSize:16}}>add</span>Add first draft</button>
+  <PrimaryButton icon="add" onClick={onAdd} style={{width:'auto'}}>Add first draft</PrimaryButton>
 </div>
   );
 }
