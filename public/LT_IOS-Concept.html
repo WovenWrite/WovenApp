@@ -623,6 +623,7 @@
 var PROJECTS = [];
 var projectsLoaded = false;
 var projectStrandsCache = {}; // pid -> { CollectionName: [strand,...] }
+var projectTagFreq = {};      // pid -> { strandId: timesTaggedAcrossDrafts }
 var loadingSpoolsFor = null;  // pid currently being fetched, or null
 
 var SYSTEM_COLORS = ['#c45e28','#e8a030','#2f9966','#2f76e0','#ce2fe0','#e02f79','#64e02f','#2fe07f'];
@@ -650,7 +651,8 @@ function loadRealProjects(userId){
   if(!client) return;
   projectsLoaded = false;
   client.from('wf_data').select('value').eq('key','woven:projects').eq('user_id',userId).maybeSingle().then(function(r){
-    PROJECTS = (r.data && Array.isArray(r.data.value)) ? r.data.value : [];
+    var all = (r.data && Array.isArray(r.data.value)) ? r.data.value : [];
+    PROJECTS = all.filter(function(p){ return !p.archived; });
     projectsLoaded = true;
     renderProjects();
   }).catch(function(){
@@ -665,12 +667,22 @@ function fetchProjectStrands(pid){
   if(!client || !currentUserId) return;
   loadingSpoolsFor = pid;
   renderSpools();
-  client.from('wf_data').select('value').eq('key','woven:strands:'+pid).eq('user_id',currentUserId).maybeSingle().then(function(r){
-    projectStrandsCache[pid] = (r.data && r.data.value && typeof r.data.value === 'object') ? r.data.value : {};
+  Promise.all([
+    client.from('wf_data').select('value').eq('key','woven:strands:'+pid).eq('user_id',currentUserId).maybeSingle(),
+    client.from('wf_data').select('value').eq('key','woven:drafts:'+pid).eq('user_id',currentUserId).maybeSingle()
+  ]).then(function(results){
+    projectStrandsCache[pid] = (results[0].data && results[0].data.value && typeof results[0].data.value === 'object') ? results[0].data.value : {};
+    var drafts = (results[1].data && Array.isArray(results[1].data.value)) ? results[1].data.value : [];
+    var freq = {};
+    drafts.forEach(function(d){
+      (d.strandTags || []).forEach(function(sid){ freq[sid] = (freq[sid] || 0) + 1; });
+    });
+    projectTagFreq[pid] = freq;
     loadingSpoolsFor = null;
     renderSpools();
   }).catch(function(){
     projectStrandsCache[pid] = {};
+    projectTagFreq[pid] = {};
     loadingSpoolsFor = null;
     renderSpools();
   });
@@ -771,12 +783,56 @@ function renderSpools(){
     return;
   }
   var spools = projectStrandsCache[proj.id] || {};
+  var freq = projectTagFreq[proj.id] || {};
   var q = document.getElementById('spoolSearch').value.trim().toLowerCase();
-  var anyResults = false;
 
+  function makeRow(sp, coll){
+    var tagged = isTagged(sp.id);
+    var row = document.createElement('div');
+    row.className = 'spool-row' + (tagged ? ' tagged' : '');
+    row.onclick = function(){ toggleSpool(sp, coll); };
+    row.innerHTML =
+      '<div class="spool-av" style="background:'+(sp.color||'#A88060')+'">'+initials(sp.name)+'</div>' +
+      '<span class="spool-name">'+(sp.name || 'Untitled')+'</span>' +
+      '<div class="spool-add">' + (tagged ? checkSvg() : plusSvg()) + '</div>';
+    return row;
+  }
+
+  // No search yet — smart default: your 5 most-tagged Spools, flat, no
+  // collection headers, sorted by how often they've actually been used.
+  if(!q){
+    var flat = [];
+    Object.keys(spools).forEach(function(coll){
+      (spools[coll] || []).forEach(function(sp){ flat.push({ sp: sp, coll: coll, count: freq[sp.id] || 0 }); });
+    });
+    if(flat.length === 0){
+      area.innerHTML = '<div class="spool-empty">No spools in this project yet.</div>';
+      return;
+    }
+    flat.sort(function(a, b){
+      if(b.count !== a.count) return b.count - a.count;
+      return (a.sp.name || '').localeCompare(b.sp.name || '');
+    });
+    var top = flat.slice(0, 5);
+    var anyTagged = top.some(function(f){ return f.count > 0; });
+
+    var lbl = document.createElement('div');
+    lbl.className = 'spool-cat-lbl';
+    lbl.textContent = anyTagged ? 'Frequently tagged' : 'Spools';
+    area.appendChild(lbl);
+
+    var list = document.createElement('div');
+    list.className = 'spool-list';
+    top.forEach(function(f){ list.appendChild(makeRow(f.sp, f.coll)); });
+    area.appendChild(list);
+    return;
+  }
+
+  // Searching — full results across every collection, grouped as before.
+  var anyResults = false;
   Object.keys(spools).forEach(function(coll){
     var items = (spools[coll] || []).filter(function(sp){
-      return !q || (sp.name || '').toLowerCase().indexOf(q) >= 0;
+      return (sp.name || '').toLowerCase().indexOf(q) >= 0;
     });
     if(items.length === 0) return;
     anyResults = true;
@@ -788,24 +844,14 @@ function renderSpools(){
 
     var list = document.createElement('div');
     list.className = 'spool-list';
-    items.forEach(function(sp){
-      var tagged = isTagged(sp.id);
-      var row = document.createElement('div');
-      row.className = 'spool-row' + (tagged ? ' tagged' : '');
-      row.onclick = function(){ toggleSpool(sp, coll); };
-      row.innerHTML =
-        '<div class="spool-av" style="background:'+(sp.color||'#A88060')+'">'+initials(sp.name)+'</div>' +
-        '<span class="spool-name">'+(sp.name || 'Untitled')+'</span>' +
-        '<div class="spool-add">' + (tagged ? checkSvg() : plusSvg()) + '</div>';
-      list.appendChild(row);
-    });
+    items.forEach(function(sp){ list.appendChild(makeRow(sp, coll)); });
     area.appendChild(list);
   });
 
   if(!anyResults){
     var empty = document.createElement('div');
     empty.className = 'spool-empty';
-    empty.textContent = q ? 'No spools match "'+q+'".' : 'No spools in this project yet.';
+    empty.textContent = 'No spools match "'+q+'".';
     area.appendChild(empty);
   }
 }
@@ -916,10 +962,16 @@ function resetForm(){
 // ── Voice-to-text (Web Speech API) ──
 var recognition = null;
 var isListening = false;
+var micIntentOn = false; // true while the user wants the mic on — survives iOS's auto-restart cycles
 var notesBaseText = ''; // committed text at the start of the current listening session
 
 function getSpeechRecognitionCtor(){
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function isIOS(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS reporting as Mac
 }
 
 // Hide the mic button entirely on unsupported browsers (mainly Firefox)
@@ -936,10 +988,12 @@ function getSpeechRecognitionCtor(){
 function toggleMic(){
   var SR = getSpeechRecognitionCtor();
   if(!SR) return;
-  if(isListening){
+  if(micIntentOn){
+    micIntentOn = false;
     if(recognition){ try{ recognition.stop(); }catch(e){} }
     return;
   }
+  micIntentOn = true;
   startListening(SR);
 }
 
@@ -959,7 +1013,12 @@ function startListening(SR){
   if(notesBaseText && !/\s$/.test(notesBaseText)) notesBaseText += ' ';
 
   recognition = new SR();
-  recognition.continuous = true;
+  // iOS Safari's `continuous: true` has a long-documented WebKit bug where
+  // it silently stops delivering results after the first phrase, with no
+  // error or end event. Single-utterance mode + auto-restart on iOS is the
+  // standard, reliable workaround; other browsers keep real continuous mode.
+  var useContinuous = !isIOS();
+  recognition.continuous = useContinuous;
   recognition.interimResults = true;
   recognition.lang = 'en-US';
 
@@ -979,8 +1038,13 @@ function startListening(SR){
   };
 
   recognition.onerror = function(e){
-    setListening(false);
     var reason = (e && e.error) ? e.error : 'unknown';
+    // In restart-based (non-continuous) mode, 'no-speech' fires constantly
+    // during normal pauses between phrases — that's expected, not a real
+    // error, so let onend's auto-restart handle it silently.
+    if(reason === 'no-speech' && !useContinuous) return;
+    micIntentOn = false;
+    setListening(false);
     var messages = {
       'not-allowed': 'Mic permission denied — check your browser/site settings.',
       'service-not-allowed': 'Mic permission denied — check your browser/site settings.',
@@ -990,11 +1054,21 @@ function startListening(SR){
     };
     showToast(messages[reason] || ('Mic error: ' + reason), '#b83220');
   };
-  recognition.onend = function(){ setListening(false); };
+
+  recognition.onend = function(){
+    if(micIntentOn && !useContinuous){
+      // Expected end of a single utterance on iOS — restart to keep the
+      // "continuous" feel without hitting the buggy continuous mode.
+      setTimeout(function(){ if(micIntentOn) startListening(SR); }, 250);
+    } else {
+      setListening(false);
+    }
+  };
 
   try{
     recognition.start();
   } catch(err){
+    micIntentOn = false;
     setListening(false);
     showToast('Could not start the mic — try tapping again.', '#b83220');
   }
@@ -1087,6 +1161,7 @@ function initGoalAuthCheck(){
       currentUserId = null;
       PROJECTS = [];
       projectStrandsCache = {};
+      projectTagFreq = {};
       setNotifSignedOut();
       renderProjects();
     }
