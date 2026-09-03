@@ -384,7 +384,10 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
   .stat-num{font-size:24px;}
   .stat-card{padding:10px 12px;}
   .proj-grid{grid-template-columns:1fr;}
-  .cards-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:7px;}
+  .cards-grid{flex-direction:column;gap:10px;padding:12px;}
+  .draft-card{width:100%!important;height:auto!important;}
+  .loose-thread-tile{width:100%!important;max-width:100%!important;}
+  .viewheader-new-btn{display:none!important;}
   .draft-card{height:auto;min-height:140px;}
   .strands-left{width:100%;}
   .editor-body,.editor-md{padding:20px;}

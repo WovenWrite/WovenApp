@@ -12,6 +12,7 @@ function textToHtml(text){
 }
 import LooseThreadDrawer from './LooseThreadDrawer'
 import ProjectDrawer from './ProjectDrawer'
+import LooseThreadsQuickAccess from './LooseThreadsQuickAccess'
 
 function dayLbl(offset){var days=['Su','Mo','Tu','We','Th','Fr','Sa'];var d=new Date();d.setDate(d.getDate()-offset);return days[d.getDay()];}
 function getGreeting(){var h=new Date().getHours();if(h<12)return 'Good morning';if(h<17)return 'Good afternoon';return 'Good evening';}
@@ -188,7 +189,7 @@ function GlobalLooseThreads({app}){
     setOpenLTId(null);
   }
   return(
-<div style={{marginTop:40}}>
+<div id="dash-loose-threads" style={{marginTop:40}}>
   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
     <span className="dash-section-hdr">Loose Threads</span>
     {allLT.length>0&&<span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,fontWeight:600,color:'var(--indigo)',background:'rgba(196,94,40,.10)',padding:'3px 10px',borderRadius:12,whiteSpace:'nowrap'}}>{allLT.length} {allLT.length===1?'thread':'threads'}</span>}
@@ -198,11 +199,11 @@ function GlobalLooseThreads({app}){
     </PrimaryButton></div>
   </div>
   <div style={{display:'flex',flexWrap:'wrap',gap:10,overflow:showMore?'visible':'hidden',maxHeight:showMore?'none':140,paddingBottom:4}}>
-    <div onClick={handleAddLT} style={{background:"transparent",border:"2px dashed #A88060",padding:"10px 15px",borderRadius:15,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,minWidth:120,flexShrink:0,minHeight:80}} onMouseEnter={function(e){e.currentTarget.style.borderColor="#c45e28";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#A88060";}}>
+    <div className="loose-thread-tile" onClick={handleAddLT} style={{background:"transparent",border:"2px dashed #A88060",padding:"10px 15px",borderRadius:15,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,minWidth:120,flexShrink:0,minHeight:80}} onMouseEnter={function(e){e.currentTarget.style.borderColor="#c45e28";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#A88060";}}>
       <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
     </div>
     {allLT.map(function(d){return(
-<div key={d.id} style={{background:'#FDF8F0',border:'1px solid #E2D0B8',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:150,maxWidth:150,flexShrink:0,transition:'border-color .2s,box-shadow .2s',outline:'1px solid transparent'}}
+<div key={d.id} className="loose-thread-tile" style={{background:'#FDF8F0',border:'1px solid #E2D0B8',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',gap:8,width:150,maxWidth:150,flexShrink:0,transition:'border-color .2s,box-shadow .2s',outline:'1px solid transparent'}}
   onClick={function(){setOpenLTId(d.id);}}
   onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';e.currentTarget.style.boxShadow='0 4px 12px rgba(196,94,40,.12)';}}
   onMouseLeave={function(e){e.currentTarget.style.borderColor='#E2D0B8';e.currentTarget.style.boxShadow='none';}}>
@@ -375,6 +376,7 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
   </div>
   {editProj&&<ProjectDrawer proj={editProj} app={app} open={true} variant="overlay" topOffset={54} onClose={function(){setEditingProjId(null);}}/>}
   <ArchiveDrawer app={app} open={archiveOpen} onClose={function(){setArchiveOpen(false);}}/>
+  <LooseThreadsQuickAccess app={app} targetId="dash-loose-threads" count={Object.values(app.globalLT||{}).filter(function(d){return !d.archived;}).length}/>
 </div>
   );
 }
