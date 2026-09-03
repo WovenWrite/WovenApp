@@ -1191,7 +1191,9 @@ initGoalAuthCheck();
 
 // TODO(Kasia): point this at your real Woven app URL (the one you log into
 // pre-demo) so tapping the notification actually opens the dashboard.
-var WOVEN_APP_URL = 'https://wovenwrite.com';
+// NOTE: this is the branch preview URL — update once loose-threads-concept
+// merges into Testing (swap for app.wovenwrite.com or wherever it lands).
+var WOVEN_APP_URL = 'https://loose-threads-concept--wovenwrite.netlify.app';
 function openWovenApp(){
   window.location.href = WOVEN_APP_URL;
 }
