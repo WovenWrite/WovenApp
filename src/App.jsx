@@ -389,6 +389,14 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
   .proj-card-body{min-height:0!important;}
   .proj-card-syn{height:auto!important;}
   .loose-thread-tile{width:100%!important;max-width:100%!important;}
+  /* Dashboard's row: 2-column grid on mobile instead of single-column
+     stacking, and the desktop single-row height clip has to go — with only
+     4 tiles now rendered when collapsed (JS-capped, see GlobalLooseThreads),
+     a fixed max-height was still cutting the second grid row off. */
+  .loose-threads-row{display:grid!important;grid-template-columns:1fr 1fr!important;max-height:none!important;overflow:visible!important;}
+  /* Sequence page's own Loose Threads grid: same 2-column sizing, no
+     JS-side item cap needed here — nothing to hide, it's already sorted. */
+  .loose-threads-grid{display:grid!important;grid-template-columns:1fr 1fr!important;}
   .viewheader-new-btn{display:none!important;}
   .draft-card{height:auto;min-height:140px;}
   .strands-left{width:100%;}

@@ -796,9 +796,9 @@ export function LooseThreadsSection({threads,app,view,structureMode,filter}){
   </div>
   {/* Tile grid — always shows everything; this is the "scrolled all the
       way down" destination, so there's no point hiding anything here. */}
-  <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
+  <div className="loose-threads-grid" style={{display:'flex',flexWrap:'wrap',gap:10}}>
     {/* Ghost add tile */}
-    <div onClick={openCreateFlow} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
+    <div className="loose-thread-tile" onClick={openCreateFlow} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
       onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';}}
       onMouseLeave={function(e){e.currentTarget.style.borderColor='#A88060';}}>
       <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
