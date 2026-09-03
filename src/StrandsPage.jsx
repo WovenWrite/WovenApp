@@ -129,6 +129,50 @@ function LongTextField({f,sid,val,onCommit}){
 }
 
 // ── StrandSortFilter ──
+// ── StrandFieldFilter ──
+// "Filter" sits beside "Sort" and narrows the list by any custom select
+// (dropdown) field's value — the strandFilter state and the actual
+// filtering logic already existed further down in this file; this is the
+// missing UI to actually set it.
+function StrandFieldFilter({fields,strandFilter,setStrandFilter}){
+  var so=useState(false);var open=so[0];var setOpen=so[1];
+  var sp=useState({top:0,left:0});var pos=sp[0];var setPos=sp[1];
+  var ref=useRef(null);
+  useEffect(function(){if(!open)return;function onDown(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}document.addEventListener('mousedown',onDown);return function(){document.removeEventListener('mousedown',onDown);};},[open]);
+  var selectFields=fields.filter(function(f){return f.type==='select'&&(f.options||[]).length>0;});
+  var hasActive=!!strandFilter;
+  var activeField=strandFilter?fields.find(function(f){return f.id===strandFilter.fieldId;}):null;
+  if(selectFields.length===0)return null;
+  return(
+<div ref={ref} style={{position:'relative',flexShrink:0}}>
+  <TertiaryButton onClick={function(e){var r=e.currentTarget.getBoundingClientRect();setPos({top:r.bottom+4,left:r.right-240});setOpen(!open);}} style={{color:hasActive?'var(--indigo)':'#A88060',display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap'}}>
+    <span className="mi" style={{fontSize:18}}>filter_alt</span>{hasActive&&activeField?activeField.label+': '+strandFilter.value:'Filter'}
+  </TertiaryButton>
+  {open&&(
+<div style={{position:'fixed',top:pos.top,left:pos.left,zIndex:400,background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:'var(--rl)',boxShadow:'0 8px 28px rgba(42,31,16,.14)',minWidth:240,maxHeight:360,overflowY:'auto',padding:10}}>
+  <div style={{fontSize:14,fontWeight:600,color:'var(--indigo)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>Filter by</div>
+  {selectFields.map(function(f){return(
+<div key={f.id} style={{marginBottom:10}}>
+  <div style={{fontSize:14,fontWeight:600,color:'#6B4A26',marginBottom:4}}>{f.label}</div>
+  <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+    {(f.options||[]).map(function(opt){
+      var active=strandFilter&&strandFilter.fieldId===f.id&&strandFilter.value===opt;
+      return(
+<span key={opt} onClick={function(){setStrandFilter(active?null:{fieldId:f.id,value:opt});}} style={{display:'inline-flex',alignItems:'center',padding:'4px 12px',borderRadius:12,fontSize:14,fontWeight:500,cursor:'pointer',background:active?'rgba(196,94,40,.12)':'var(--bg2)',color:active?'var(--indigo)':'var(--text)',border:'1px solid '+(active?'rgba(196,94,40,.4)':'var(--border)')}}>
+  {opt}
+</span>
+      );
+    })}
+  </div>
+</div>
+  );})}
+  {hasActive&&<button className="btn btn-ghost btn-sm" style={{width:'100%',justifyContent:'center',marginTop:4}} onClick={function(){setStrandFilter(null);}}>Clear filter</button>}
+</div>
+  )}
+</div>
+  );
+}
+
 function StrandSortFilter({sort,setSort,strandFilter,setStrandFilter,fields}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
   var sp=useState({top:0,left:0});var pos=sp[0];var setPos=sp[1];
@@ -854,7 +898,7 @@ function StrandsPage({app,allProjects}){
   var addItemLabel='Add '+activeColl.replace(/s$/,'');
   var findSelectPanel=(
 <Drawer variant="inline" title={activeColl} width={activeStrand?undefined:'flex'}
-  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<StrandSortFilter sort={strandSort} setSort={updateStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/>}/>}
+  toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<><StrandFieldFilter fields={fields} strandFilter={strandFilter} setStrandFilter={setStrandFilter}/><StrandSortFilter sort={strandSort} setSort={updateStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/></>}/>}
   footer={<div style={{display:'flex',flexDirection:'column',gap:8}}><PrimaryButton icon="add" onClick={addStrand}>{addItemLabel}</PrimaryButton><TertiaryButton onClick={openCollSettings} style={{color:'#A88060',justifyContent:'center',display:'flex',alignItems:'center',gap:8,width:'100%'}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Spool</TertiaryButton></div>}>
   {filtered.length===0?(
     <HelpText>{collStrands.length===0?'No entries yet.':'No results for "'+search+'".'}</HelpText>
