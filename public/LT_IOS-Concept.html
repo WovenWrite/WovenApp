@@ -95,6 +95,24 @@
     z-index:100;
   }
 
+  /* On an actual phone, the mocked-up frame around a mocked-up phone is
+     redundant — just show the app, edge to edge, filling the real screen. */
+  @media (max-width:480px){
+    body{
+      padding:0;background:none;
+      align-items:stretch;justify-content:stretch;
+    }
+    body::after{content:none;}
+    .caption{display:none;}
+    .phone{
+      width:100vw;height:100vh;height:100dvh;
+      padding:0;border-radius:0;
+      background:none;box-shadow:none;
+    }
+    .screen{border-radius:0;}
+    .notch{display:none;}
+  }
+
   /* ── Status bar (real iOS chrome — system font) ── */
   .statusbar{
     position:absolute;top:0;left:0;right:0;height:47px;
@@ -918,11 +936,24 @@ function getSpeechRecognitionCtor(){
 function toggleMic(){
   var SR = getSpeechRecognitionCtor();
   if(!SR) return;
-  if(isListening){ recognition && recognition.stop(); return; }
+  if(isListening){
+    if(recognition){ try{ recognition.stop(); }catch(e){} }
+    return;
+  }
   startListening(SR);
 }
 
 function startListening(SR){
+  // Clean up any stale instance first — a leftover recognition object from
+  // a previous tap is the most common cause of a silent, no-op start().
+  if(recognition){
+    try{
+      recognition.onresult = null; recognition.onerror = null; recognition.onend = null; recognition.onstart = null;
+      recognition.stop();
+    }catch(e){}
+    recognition = null;
+  }
+
   var notesEl = document.getElementById('ltNotes');
   notesBaseText = notesEl.value;
   if(notesBaseText && !/\s$/.test(notesBaseText)) notesBaseText += ' ';
@@ -931,6 +962,10 @@ function startListening(SR){
   recognition.continuous = true;
   recognition.interimResults = true;
   recognition.lang = 'en-US';
+
+  // Only flip the UI to "listening" once the browser actually confirms it
+  // started — calling .start() successfully isn't the same as it running.
+  recognition.onstart = function(){ setListening(true); };
 
   recognition.onresult = function(e){
     var interim = '', final = '';
@@ -942,11 +977,27 @@ function startListening(SR){
     if(final) notesBaseText += final;
     notesEl.value = notesBaseText + interim;
   };
-  recognition.onerror = function(){ setListening(false); };
+
+  recognition.onerror = function(e){
+    setListening(false);
+    var reason = (e && e.error) ? e.error : 'unknown';
+    var messages = {
+      'not-allowed': 'Mic permission denied — check your browser/site settings.',
+      'service-not-allowed': 'Mic permission denied — check your browser/site settings.',
+      'no-speech': 'No speech detected — try again.',
+      'audio-capture': 'No microphone found.',
+      'network': 'Voice recognition needs an internet connection.'
+    };
+    showToast(messages[reason] || ('Mic error: ' + reason), '#b83220');
+  };
   recognition.onend = function(){ setListening(false); };
 
-  recognition.start();
-  setListening(true);
+  try{
+    recognition.start();
+  } catch(err){
+    setListening(false);
+    showToast('Could not start the mic — try tapping again.', '#b83220');
+  }
 }
 
 function setListening(on){
