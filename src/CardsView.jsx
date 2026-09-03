@@ -110,7 +110,14 @@ export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,
   var sq=useState('');var searchQ=sq[0];var setSearchQ=sq[1];
   var st=useState(structureMode||false);var structureOn=st[0];var setStructureOn=st[1];
   var sfs=useState('');var filterSearch=sfs[0];var setFilterSearch=sfs[1];
-  var filterRef=useRef(null);var searchRef=useRef(null);
+  var filterRef=useRef(null);var searchRef=useRef(null);var moreRef=useRef(null);
+  // Mobile: Sort + Structure condense into one 3-dot menu, and search opens
+  // as an overlay popup instead of expanding inline (an inline 200px input
+  // has nowhere to go on a narrow toolbar without pushing everything else
+  // off-screen).
+  var sim=useState(window.innerWidth<768);var isMobile=sim[0];var setIsMobile=sim[1];
+  useEffect(function(){function onResize(){setIsMobile(window.innerWidth<768);}window.addEventListener('resize',onResize);return function(){window.removeEventListener('resize',onResize);};},[]);
+  var smo=useState(false);var moreOpen=smo[0];var setMoreOpen=smo[1];
   var pid=app.projId;
   var projStrands=app.allStrands[pid]||{};
   var draftFieldDefs=(app.currentProject&&app.currentProject.draftFieldDefs)||[];
@@ -269,6 +276,7 @@ export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,
 
       </Popover>
     </div>
+    {!isMobile&&(
     <div style={{position:'relative'}}>
       <button ref={sortRef} onClick={function(){setSortOpen(!sortOpen);}} style={{display:'flex',alignItems:'center',gap:7,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer',position:'relative'}}>
         <span className="material-symbols-outlined" style={{fontSize:20,color:'#6B4A26'}}>sort</span>
@@ -288,32 +296,78 @@ export function ViewHeader({app,filter:filterProp,setFilter,sort,setSort,onBind,
         })}
       </Popover>
     </div>
+    )}
     {hasFilter&&(
       <span style={{fontFamily:'DM Sans, sans-serif',fontSize:12,fontWeight:600,color:'var(--indigo)',background:'rgba(196,94,40,.10)',padding:'3px 10px',borderRadius:12,marginLeft:4,whiteSpace:'nowrap'}}>
         {resultCount} {resultCount===1?'result':'results'}
       </span>
     )}
-    {!hideStructure&&SEP}
-    {!hideStructure&&<button onClick={function(){var nv=!structureOn;setStructureOn(nv);if(onStructureToggle)onStructureToggle(nv);}} style={{display:'flex',alignItems:'center',gap:8,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer'}}>
+    {!isMobile&&!hideStructure&&SEP}
+    {!isMobile&&!hideStructure&&<button onClick={function(){var nv=!structureOn;setStructureOn(nv);if(onStructureToggle)onStructureToggle(nv);}} style={{display:'flex',alignItems:'center',gap:8,padding:'0 12px',height:55,background:'transparent',border:'none',cursor:'pointer'}}>
       <div style={{width:34,height:18,borderRadius:9,background:structureOn?'#7A5A38':'#A88060',position:'relative',transition:'background .2s',flexShrink:0}}>
         <div style={{position:'absolute',top:2,left:structureOn?16:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
       </div>
       <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:16,color:'#7A5A38'}}>Structure</span>
     </button>}
+    {isMobile&&(
+    <div style={{position:'relative'}}>
+      <button ref={moreRef} onClick={function(){setMoreOpen(!moreOpen);}} style={{display:'flex',alignItems:'center',justifyContent:'center',width:44,height:55,background:'transparent',border:'none',cursor:'pointer'}}>
+        <span className="material-symbols-outlined" style={{fontSize:22,color:'#6B4A26'}}>more_vert</span>
+      </button>
+      <Popover anchorRef={moreRef} open={moreOpen} onClose={function(){setMoreOpen(false);}} title="Sort &amp; structure" width={220}>
+        <div style={sectLbl}>Sort by</div>
+        {sortOptions.map(function(o){
+          var active=sort===o.id;
+          return(
+<div key={o.id} onClick={function(){setSort(o.id);}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',cursor:'pointer',borderRadius:6,background:active?'rgba(196,94,40,.08)':'transparent',color:active?'var(--indigo)':'var(--text)',fontWeight:active?600:400,fontSize:13}}>
+  <span className="material-symbols-outlined" style={{fontSize:16,visibility:active?'visible':'hidden'}}>check</span>
+  {o.label}
+</div>
+          );
+        })}
+        {!hideStructure&&(
+<div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--border)'}}>
+  <button onClick={function(){var nv=!structureOn;setStructureOn(nv);if(onStructureToggle)onStructureToggle(nv);}} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'transparent',border:'none',cursor:'pointer',width:'100%'}}>
+    <div style={{width:34,height:18,borderRadius:9,background:structureOn?'#7A5A38':'#A88060',position:'relative',transition:'background .2s',flexShrink:0}}>
+      <div style={{position:'absolute',top:2,left:structureOn?16:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
+    </div>
+    <span style={{fontFamily:'DM Sans, sans-serif',fontWeight:600,fontSize:14,color:'#7A5A38'}}>Structure</span>
+  </button>
+</div>
+        )}
+      </Popover>
+    </div>
+    )}
     {SEP}
-    <div style={{display:'flex',alignItems:'center',padding:'0 12px',height:55}}>
-      {searchOpen?(
+    <div style={{position:'relative',display:'flex',alignItems:'center',padding:'0 12px',height:55}}>
+      {!isMobile&&(searchOpen?(
 <input ref={searchRef} value={searchQ||''} onChange={function(e){setSearchQ(e.target.value);if(onSearch)onSearch(e.target.value);}} placeholder="Search drafts…" onBlur={function(){if(!searchQ)setSearchOpen(false);}} style={{width:200,padding:'6px 10px',fontSize:14,border:'1px solid var(--border)',borderRadius:20,fontFamily:'DM Sans, sans-serif',background:'var(--bg1)',color:'var(--text)',outline:'none'}}/>
       ):(
 <button onClick={function(){setSearchOpen(true);}} style={{display:'flex',alignItems:'center',background:'transparent',border:'none',cursor:'pointer',padding:0}}>
   <span className="material-symbols-outlined" style={{fontSize:22,color:'#6B4A26'}}>search</span>
 </button>
+      ))}
+      {isMobile&&(
+<button onClick={function(){setSearchOpen(true);}} style={{display:'flex',alignItems:'center',background:'transparent',border:'none',cursor:'pointer',padding:0}}>
+  <span className="material-symbols-outlined" style={{fontSize:22,color:'#6B4A26'}}>search</span>
+</button>
+      )}
+      {isMobile&&searchOpen&&(
+<div style={{position:'fixed',top:55,left:0,right:0,zIndex:200,background:'var(--bg1)',borderBottom:'1px solid var(--border)',padding:'10px 16px',boxShadow:'0 8px 20px rgba(42,31,16,.12)'}}>
+  <div style={{display:'flex',alignItems:'center',gap:8,background:'var(--bg2)',borderRadius:20,padding:'8px 14px'}}>
+    <span className="material-symbols-outlined" style={{fontSize:20,color:'var(--mid)'}}>search</span>
+    <input ref={searchRef} autoFocus value={searchQ||''} onChange={function(e){setSearchQ(e.target.value);if(onSearch)onSearch(e.target.value);}} placeholder="Search drafts…" style={{flex:1,border:'none',background:'transparent',fontSize:16,fontFamily:'DM Sans, sans-serif',color:'var(--text)',outline:'none'}}/>
+    <button onClick={function(){setSearchOpen(false);setSearchQ('');if(onSearch)onSearch('');}} style={{display:'flex',alignItems:'center',background:'transparent',border:'none',cursor:'pointer',padding:0}}>
+      <span className="mi" style={{fontSize:20,color:'var(--mid)'}}>close</span>
+    </button>
+  </div>
+</div>
       )}
     </div>
   </div>
   <div style={{display:'flex',alignItems:'center',gap:8}}>
     <TertiaryButton onClick={onBind} style={{width:'auto',display:'flex',alignItems:'center',gap:6,color:'#A88060'}}><span className="mi" style={{fontSize:18}}>collections_bookmark</span>Bind {projLabel(app.currentProject,'drafts')}</TertiaryButton>
-    {onAddDraft&&<PrimaryButton icon="add" onClick={onAddDraft} style={{width:'auto'}}>New {projLabel(app.currentProject,'drafts').replace(/s$/,'')}</PrimaryButton>}
+    {onAddDraft&&<div className="viewheader-new-btn"><PrimaryButton icon="add" onClick={onAddDraft} style={{width:'auto'}}>New {projLabel(app.currentProject,'drafts').replace(/s$/,'')}</PrimaryButton></div>}
   </div>
 </div>
   );
@@ -449,6 +503,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
 
   return(
 <div
+  className="draft-card"
   style={{width:270,borderRadius:15,overflow:'visible',background:'var(--bg1)',border:'2px solid transparent',display:'flex',flexDirection:'column',cursor:structureMode?'default':'pointer',boxShadow:'0 2px 8px rgba(42,31,16,.06)',transition:'box-shadow .2s,border-color .2s',flexShrink:0,position:'relative',height:structureMode?'auto':(projThumbnails(cardProj)?400:250)}}
   draggable={structureMode}
   onDragStart={structureMode?function(e){e.dataTransfer.setData('draftId',draft.id);}:undefined}
@@ -524,7 +579,7 @@ function DraftCard({draft,label,app,onMoveUp,onMoveDown,structureMode}){
   {draft.synopsis?(
 <div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'#7A5A38',lineHeight:1.45,display:'-webkit-box',WebkitLineClamp:5,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{draft.synopsis}</div>
   ):bodyPreview?(
-<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'rgba(122,90,56,.75)',fontStyle:'italic',lineHeight:1.45,display:'-webkit-box',WebkitLineClamp:5,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{bodyPreview}</div>
+<div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'rgba(122,90,56,.75)',fontStyle:'italic',lineHeight:1.45,minHeight:46,display:'-webkit-box',WebkitLineClamp:5,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{bodyPreview}</div>
   ):(
 <div style={{fontFamily:'DM Sans, sans-serif',fontSize:16,color:'rgba(122,90,56,.4)',fontStyle:'italic',lineHeight:1.45}}>{structureMode?'Click to add synopsis…':'Start writing…'}</div>
   )}
@@ -630,7 +685,7 @@ export function LooseThreadTile({d,app,pid,inStructure}){
   function showTt(e,name){var tt=document.getElementById('woven-tt');if(tt){var r=e.currentTarget.getBoundingClientRect();tt.textContent=name;tt.style.display='block';tt.style.left=(r.left+r.width/2)+'px';tt.style.top=(r.bottom+6)+'px';}}
   function hideTt(){var tt=document.getElementById('woven-tt');if(tt)tt.style.display='none';}
   return(
-<div style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:inStructure?'grab':'pointer',display:'flex',flexDirection:'column',gap:8,width:220,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
+<div className="loose-thread-tile" style={{background:'#FDF8F0',border:'2px solid transparent',padding:'10px 15px',borderRadius:15,cursor:inStructure?'grab':'pointer',display:'flex',flexDirection:'column',gap:8,width:220,flexShrink:0,transition:'border-color .2s,box-shadow .2s'}}
   draggable={true}
   onDragStart={function(e){e.dataTransfer.setData('draftId',d.id);}}
   onClick={function(){if(!inStructure)app.openDraft(d.id);}}
@@ -741,9 +796,9 @@ export function LooseThreadsSection({threads,app,view,structureMode,filter}){
   </div>
   {/* Tile grid — always shows everything; this is the "scrolled all the
       way down" destination, so there's no point hiding anything here. */}
-  <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
+  <div className="loose-threads-grid" style={{display:'flex',flexWrap:'wrap',gap:10}}>
     {/* Ghost add tile */}
-    <div onClick={openCreateFlow} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
+    <div className="loose-thread-tile" onClick={openCreateFlow} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
       onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';}}
       onMouseLeave={function(e){e.currentTarget.style.borderColor='#A88060';}}>
       <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>

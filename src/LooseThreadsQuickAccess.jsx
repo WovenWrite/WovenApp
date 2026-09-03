@@ -13,24 +13,28 @@
 // version, so the shortcut has nothing left to add.
 import { useState, useEffect } from "react";
 
-export default function LooseThreadsQuickAccess({app}){
+export default function LooseThreadsQuickAccess({app,targetId,count}){
   var pid=app.projId;
-  var allDrafts=app.allDrafts[pid]||[];
-  var count=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';}).length;
+  var resolvedTargetId=targetId||'loose-threads-inline';
+  // count is an explicit override so this can be reused in contexts (like
+  // the Dashboard) whose loose threads aren't scoped to a single project's
+  // app.allDrafts — falls back to the original per-project computation
+  // when not provided, so the existing Storyboard usage is untouched.
+  var resolvedCount=count!==undefined?count:(app.allDrafts[pid]||[]).filter(function(d){return !d.archived&&d.status==='loose_thread';}).length;
 
   var sh=useState(false);var hidden=sh[0];var setHidden=sh[1];
   useEffect(function(){
-    var target=document.getElementById('loose-threads-inline');
+    var target=document.getElementById(resolvedTargetId);
     if(!target)return;
     var observer=new IntersectionObserver(function(entries){
       setHidden(entries[0].isIntersecting);
     },{threshold:0.1});
     observer.observe(target);
     return function(){observer.disconnect();};
-  },[]);
+  },[resolvedTargetId]);
 
   function scrollToLooseThreads(){
-    var target=document.getElementById('loose-threads-inline');
+    var target=document.getElementById(resolvedTargetId);
     if(target)target.scrollIntoView({behavior:'smooth',block:'start'});
   }
 
@@ -42,7 +46,7 @@ export default function LooseThreadsQuickAccess({app}){
   onMouseOut={function(e){e.currentTarget.style.background='var(--bg1)';}}>
   <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--teal)'}}>push_pin</span>
   <span style={{fontFamily:'DM Sans, sans-serif',fontSize:13,fontWeight:600,color:'#6B4A26'}}>Loose Threads</span>
-  {count>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:20,height:20,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{count}</span>}
+  {resolvedCount>0&&<span style={{background:'var(--indigo)',color:'#fff',borderRadius:'50%',width:20,height:20,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{resolvedCount}</span>}
   <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--mid)'}}>arrow_downward</span>
 </button>
   );
