@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Drawer, PrimaryButton } from './SharedUI'
 import { genId, initials, todayStr, countWords } from './utils'
 
