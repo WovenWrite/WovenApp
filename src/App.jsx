@@ -386,6 +386,8 @@ textarea{resize:vertical;}[contenteditable]:focus{outline:none;}
   .proj-grid{grid-template-columns:1fr;}
   .cards-grid{flex-direction:column;gap:10px;padding:12px;}
   .draft-card{width:100%!important;height:auto!important;}
+  .proj-card-body{min-height:0!important;}
+  .proj-card-syn{height:auto!important;}
   .loose-thread-tile{width:100%!important;max-width:100%!important;}
   .viewheader-new-btn{display:none!important;}
   .draft-card{height:auto;min-height:140px;}
