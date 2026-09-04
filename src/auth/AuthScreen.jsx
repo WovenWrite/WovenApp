@@ -5,6 +5,7 @@ import WovenLogo from "../components/WovenLogo";
 import AuthStyles from "./authStyles";
 import promoTexture from "../assets/auth/promo-texture.png";
 import promoCollage from "../assets/auth/promo-collage.png";
+import LegalFooter from "../LegalFooter";
 
 // ── AuthScreen ──
 // Two-column layout: 720px form column (left) + flexible promo column (right,
@@ -21,9 +22,11 @@ function AuthScreen({onAuth}){
   var sm=useState('');var msg=sm[0];var setMsg=sm[1];
   var smode=useState('signin');var mode=smode[0];var setMode=smode[1];
   var ssv=useState(false);var showPw=ssv[0];var setShowPw=ssv[1];
+  var sag=useState(false);var agreed=sag[0];var setAgreed=sag[1];
 
   async function handleSubmit(){
     if(!email.trim()||!password.trim()){setMsg('Please enter email and password.');return;}
+    if(mode==='signup'&&!agreed){setMsg('Please agree to the Terms of Service and Privacy Policy to continue.');return;}
     setLoading(true);setMsg('');
     var res;
     if(mode==='signup'){
@@ -93,7 +96,16 @@ function AuthScreen({onAuth}){
 
         {msg&&<div className={'authpage-msg '+msgClass}>{msg}</div>}
 
-        <button type="button" className="authpage-btn-primary" onClick={handleSubmit} disabled={loading}>
+        {isSignup&&(
+          <label style={{display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',marginBottom:4}}>
+            <input type="checkbox" checked={agreed} onChange={function(e){setAgreed(e.target.checked);}} style={{marginTop:3,width:16,height:16,flexShrink:0,accentColor:'#C45E28',cursor:'pointer'}}/>
+            <span style={{fontSize:13,lineHeight:1.5,color:'var(--mid, #6b5a45)'}}>
+              By creating an account, you agree to Woven's <a href="/?legal=terms" target="_blank" rel="noopener noreferrer" style={{color:'#C45E28'}}>Terms of Service</a> and acknowledge Woven's <a href="/?legal=privacy" target="_blank" rel="noopener noreferrer" style={{color:'#C45E28'}}>Privacy Policy</a>. Woven collects information about how you use the product to help us understand, improve, and develop Woven.
+            </span>
+          </label>
+        )}
+
+        <button type="button" className="authpage-btn-primary" onClick={handleSubmit} disabled={loading||(isSignup&&!agreed)}>
           {loading?'Please wait...':(isSignup?'Create account':'Log In')}
         </button>
 
@@ -105,6 +117,8 @@ function AuthScreen({onAuth}){
           )}
         </div>
       </div>
+
+      <LegalFooter style={{marginTop:32}}/>
 
     </div>
   </div>
