@@ -627,27 +627,27 @@ export function SpoolThumbnailUpload({ strand, onUpload, onClick }) {
   );
 }
 
-export function PrimaryButton({ icon, children, onClick, disabled, type, style }) {
+export function PrimaryButton({ icon, children, onClick, disabled, type, style, ...rest }) {
   return (
-    <button type={type || 'button'} className="wv-btn wv-btn-primary" onClick={onClick} disabled={disabled} style={style}>
+    <button type={type || 'button'} className="wv-btn wv-btn-primary" onClick={onClick} disabled={disabled} style={style} {...rest}>
       {icon && <span className="mi">{icon}</span>}
       <span>{children}</span>
     </button>
   );
 }
 
-export function SecondaryButton({ icon, children, onClick, disabled, type, style }) {
+export function SecondaryButton({ icon, children, onClick, disabled, type, style, ...rest }) {
   return (
-    <button type={type || 'button'} className="wv-btn wv-btn-secondary" onClick={onClick} disabled={disabled} style={style}>
+    <button type={type || 'button'} className="wv-btn wv-btn-secondary" onClick={onClick} disabled={disabled} style={style} {...rest}>
       {icon && <span className="mi">{icon}</span>}
       <span>{children}</span>
     </button>
   );
 }
 
-export function TertiaryButton({ children, onClick, disabled, type, style }) {
+export function TertiaryButton({ children, onClick, disabled, type, style, ...rest }) {
   return (
-    <button type={type || 'button'} className="wv-btn wv-btn-tertiary" onClick={onClick} disabled={disabled} style={style}>
+    <button type={type || 'button'} className="wv-btn wv-btn-tertiary" onClick={onClick} disabled={disabled} style={style} {...rest}>
       {children}
     </button>
   );

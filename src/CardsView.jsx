@@ -12,6 +12,7 @@ import LooseThreadDrawer from './LooseThreadDrawer'
 import { Popover, Check, Avatar, StatusDotWithArchive, ArchiveConfirmModal, PrimaryButton, TertiaryButton } from './SharedUI'
 import { genId, stripHtml, initials, uploadImage } from './utils'
 import { sortDraftsBySequence, projIsNumbered, projIsManualOrder, projSequence, projThumbnails, draftDateOf, formatDraftDate, projStatuses, projStatus, projLabel } from './projectConfig'
+import { useTour } from './useTour'
 
 // ── Draft tree helpers ──
 export function buildTree(drafts){
@@ -798,7 +799,7 @@ export function LooseThreadsSection({threads,app,view,structureMode,filter}){
       way down" destination, so there's no point hiding anything here. */}
   <div className="loose-threads-grid" style={{display:'flex',flexWrap:'wrap',gap:10}}>
     {/* Ghost add tile */}
-    <div className="loose-thread-tile" onClick={openCreateFlow} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
+    <div data-tour="add-loose-thread-tile" className="loose-thread-tile" onClick={openCreateFlow} style={{background:'transparent',border:'2px dashed #A88060',padding:'10px 15px',borderRadius:15,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,width:220,flexShrink:0,minHeight:80,transition:'border-color .15s'}}
       onMouseEnter={function(e){e.currentTarget.style.borderColor='#c45e28';}}
       onMouseLeave={function(e){e.currentTarget.style.borderColor='#A88060';}}>
       <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
@@ -823,7 +824,7 @@ export function EmptyDrafts({onAdd}){
   <span className="mi" style={{fontSize:48,color:'var(--placeholder)'}}>edit_note</span>
   <div style={{fontFamily:'var(--serif)',fontSize:22,color:'var(--mid)'}}>No drafts yet</div>
   <div style={{fontSize:14,color:'var(--mid)',marginBottom:12}}>Start writing by adding your first draft.</div>
-  <PrimaryButton icon="add" onClick={onAdd} style={{width:'auto'}}>Add first draft</PrimaryButton>
+  <PrimaryButton data-tour="add-first-draft-btn" icon="add" onClick={onAdd} style={{width:'auto'}}>Add first draft</PrimaryButton>
 </div>
   );
 }
@@ -855,6 +856,11 @@ export default function CardsView({app}){
   var ltDrafts=allDrafts.filter(function(d){return !d.archived&&d.status==='loose_thread';});
   var tree=buildTree(allDrafts.filter(function(d){return d.status!=='loose_thread'&&!d.archived;}));
   function addDraft(){var nid=genId();app.addDraft(app.projId,{id:nid,projectId:app.projId,title:'',synopsis:'',status:'first_draft',order:seqDrafts.length+1,parentId:null,nestExpanded:true,body:'',wordCount:0,strandTags:[],customFields:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});app.openDraft(nid);}
+  useTour(app,'post-setup',[
+    {element:'[data-tour="add-loose-thread-tile"]',popover:{title:'Save a Loose Thread',description:'Got a spark of an idea but nowhere to put it yet? Drop it here — you can flesh it out or place it into the story later.',side:'top',align:'start'}},
+    {element:'[data-tour="fab-add-btn"]',popover:{title:'Add a Spool',description:'Click here and choose "New Spool Item" to add a character, location, or anything else this project tracks.',side:'left',align:'end'}},
+    {element:'[data-tour="add-first-draft-btn"]',popover:{title:'Start drafting',description:'When you are ready to write, add your first draft here.',side:'top',align:'start'}}
+  ],{ready:tree.length===0&&ltDrafts.length===0});
   function moveUp(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<=0)return;app.reorderDraft(app.projId,did,sorted[idx-1].order||0);}
   function moveDown(did){var sorted=seqDrafts.slice().sort(function(a,b){return (a.order||0)-(b.order||0);});var idx=sorted.findIndex(function(d){return d.id===did;});if(idx<0||idx>=sorted.length-1)return;app.reorderDraft(app.projId,did,sorted[idx+1].order||0);}
   var displayed=(sort==='order'?sortDraftsBySequence(applyFS(tree,filter,sort,app.currentProject),app.currentProject):applyFS(tree,filter,sort,app.currentProject)).filter(function(p){

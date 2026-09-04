@@ -13,6 +13,7 @@ function textToHtml(text){
 import LooseThreadDrawer from './LooseThreadDrawer'
 import ProjectDrawer from './ProjectDrawer'
 import LooseThreadsQuickAccess from './LooseThreadsQuickAccess'
+import { useTour } from './useTour'
 
 function dayLbl(offset){var days=['Su','Mo','Tu','We','Th','Fr','Sa'];var d=new Date();d.setDate(d.getDate()-offset);return days[d.getDay()];}
 function getGreeting(){var h=new Date().getHours();if(h<12)return 'Good morning';if(h<17)return 'Good afternoon';return 'Good evening';}
@@ -328,6 +329,9 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
   function getWC(pid){return(app.allDrafts[pid]||[]).filter(function(d){return !d.archived;}).reduce(function(s,d){return s+(d.wordCount||0);},0);}
   function openProject(pid){app.loadProjectData(pid);app.setProjId(pid);app.setView('cards');}
   var editProj=editingProjId?app.projects.find(function(p){return p.id===editingProjId;}):null;
+  useTour(app,'dashboard-start',[
+    {element:'[data-tour="new-project-btn"]',popover:{title:'Start your first project',description:'This is where every story begins — give it a title and a type, and Woven sets up your Spools, Loose Threads, and drafting space.',side:'bottom',align:'start'}}
+  ],{ready:app.projects.filter(function(p){return !p.archived;}).length===0});
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
   <nav className="nav" style={{justifyContent:'space-between'}}>
@@ -343,7 +347,7 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
       <div className="dash-subtitle dash-greeting-desktop">What will you weave today?</div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
         <span className="dash-section-hdr">Your Projects</span>
-        <div className="almond-primary-btn"><PrimaryButton icon="add" onClick={onNewProject} style={{width:'auto'}}>New Project</PrimaryButton></div>
+        <div className="almond-primary-btn"><PrimaryButton data-tour="new-project-btn" icon="add" onClick={onNewProject} style={{width:'auto'}}>New Project</PrimaryButton></div>
       </div>
       <div className="proj-grid">
         {app.projects.filter(function(p){return !p.archived;}).map(function(p){var wc=getWC(p.id);return(

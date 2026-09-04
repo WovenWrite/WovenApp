@@ -101,7 +101,7 @@ export default function AddMenuFab({app}){
   );})}
 </div>
     )}
-    <button onClick={function(){setOpen(!open);}} title="Add" style={{width:52,height:52,borderRadius:'50%',background:'#DF6321',border:'none',boxShadow:'0 4px 14px rgba(42,31,16,.25)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'background .15s ease,transform .15s ease'}}
+    <button data-tour="fab-add-btn" onClick={function(){setOpen(!open);}} title="Add" style={{width:52,height:52,borderRadius:'50%',background:'#DF6321',border:'none',boxShadow:'0 4px 14px rgba(42,31,16,.25)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'background .15s ease,transform .15s ease'}}
       onMouseEnter={function(e){e.currentTarget.style.background='#6B4A26';}}
       onMouseLeave={function(e){e.currentTarget.style.background='#DF6321';}}>
       <span className="material-symbols-outlined" style={{fontSize:26,color:'#F5EDE0',transform:open?'rotate(45deg)':'none',transition:'transform .15s ease'}}>add</span>

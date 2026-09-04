@@ -54,6 +54,13 @@ export function markTourSeen(app, tourId) {
   app.setProfile(Object.assign({}, app.profile, { seenTours: seen.concat([tourId]) }));
 }
 
+// Clears seenTours so all micro-tours will play again on next visit to
+// each of their trigger points. Used by the "Restart tour" control in
+// ProfileDrawer.
+export function resetAllTours(app) {
+  app.setProfile(Object.assign({}, app.profile, { seenTours: [] }));
+}
+
 // Call from a step's onNextClick when the next step's target won't exist
 // until a state change (opening a drawer, etc.) finishes rendering.
 export function advanceWhenReady(driverObj, selector, maxTries) {
@@ -76,14 +83,18 @@ export function advanceWhenReady(driverObj, selector, maxTries) {
 // opts.startDelay: ms to wait before first measuring the DOM (default 350).
 export function useTour(app, tourId, steps, opts) {
   opts = opts || {};
-  var startedRef = useRef(false);
+  // Guards against a single effect run starting two overlapping polls —
+  // NOT a "have we ever started" latch, so that resetAllTours (which
+  // clears seenTours) can re-trigger a tour on a component that never
+  // unmounted (e.g. Dashboard sitting behind the Profile drawer).
+  var runningRef = useRef(false);
 
   useEffect(function () {
-    if (startedRef.current) return;
     if (!app || !app.profile) return;
     if (opts.ready === false) return;
     if (hasTourBeenSeen(app, tourId)) return;
     if (!steps || !steps.length) return;
+    if (runningRef.current) return;
 
     injectTourCss();
 
@@ -96,14 +107,14 @@ export function useTour(app, tourId, steps, opts) {
         var firstEl = document.querySelector(steps[0].element);
         if (firstEl) {
           clearInterval(poll);
-          startedRef.current = true;
+          runningRef.current = true;
           var driverObj = driver({
             showProgress: true,
             allowClose: true,
             overlayOpacity: 0.5,
             stagePadding: 6,
             steps: steps,
-            onDestroyed: function () { markTourSeen(app, tourId); }
+            onDestroyed: function () { runningRef.current = false; markTourSeen(app, tourId); }
           });
           if (opts.onCreated) opts.onCreated(driverObj);
           driverObj.drive();

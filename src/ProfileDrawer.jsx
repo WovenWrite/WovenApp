@@ -15,6 +15,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Drawer, Field, HelpText, SecondaryButton, SpoolThumbnailUpload } from './SharedUI';
+import { resetAllTours } from './useTour';
 
 export default function ProfileDrawer({ app, focusField, open, onClose, topOffset }) {
   var profile = app.profile || {};
@@ -27,6 +28,7 @@ export default function ProfileDrawer({ app, focusField, open, onClose, topOffse
   useEffect(function () { setHeadshot(profile.headshot || null); }, [profile.headshot]);
 
   var sg = useState(app.goal || 500); var goalVal = sg[0]; var setGoalVal = sg[1];
+  var str = useState(false); var tourReset = str[0]; var setTourReset = str[1];
   var goalRef = useRef(null);
   useEffect(function () {
     if (open && focusField === 'goal' && goalRef.current) {
@@ -113,6 +115,17 @@ export default function ProfileDrawer({ app, focusField, open, onClose, topOffse
           }}
         />
         <HelpText style={{ marginTop: 4 }}>Words per day</HelpText>
+      </div>
+
+      <div>
+        <span className="wv-field-lbl">Product tour</span>
+        <div style={{ fontSize: 16, color: 'var(--mid)', marginBottom: 8 }}>Replay the guided tips across the dashboard, drafting, and Spools.</div>
+        <SecondaryButton
+          icon="replay"
+          onClick={function () { resetAllTours(app); setTourReset(true); setTimeout(function () { setTourReset(false); }, 2500); }}
+        >
+          {tourReset ? 'Tour reset — it\u2019ll replay as you go' : 'Restart tour'}
+        </SecondaryButton>
       </div>
 
       {/* ── Not yet migrated — awaiting spec for segmented controls, toggles, and chips ── */}
