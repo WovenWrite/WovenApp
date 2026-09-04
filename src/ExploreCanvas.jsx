@@ -19,6 +19,7 @@ import {
 } from '@xyflow/react'
 import { Drawer, DeleteConfirmModal, StrandResultRow, HelpText, SearchSortBar } from './SharedUI'
 import { STATUSES, genId, initials, getSupabase } from './utils'
+import { loadDB } from './App'
 
 // ─────────────────────────────────────────────────────────────
 // STYLES
@@ -222,6 +223,13 @@ const CANVAS_CSS = `
 .ex-node-menu-btn .mi{font-size:16px;color:var(--mid);}
 .ex-node-menu-btn--inline{position:static;flex-shrink:0;background:transparent;}
 .ex-node-menu-btn--inline:hover,.ex-node-menu-btn--inline:focus-visible{background:var(--bg2);}
+/* Shapes/lines/arrows specifically hide the menu button until the node is
+   hovered, rather than the subtle-but-always-visible default above — this
+   trades away touch-device discoverability (no hover state there) for a
+   cleaner look on a canvas that can get busy with a lot of these. */
+.ex-node-menu-btn--hover-only{opacity:0;}
+.ex-shape-node:hover .ex-node-menu-btn--hover-only,
+.ex-shape-node:focus-within .ex-node-menu-btn--hover-only{opacity:.6;}
 
 /* Shape node */
 .ex-shape-node{position:relative;box-shadow:0 2px 8px rgba(42,31,16,.08);}
@@ -756,7 +764,7 @@ function ShapeNode({ id, data, selected }) {
         lineStyle={{ border: '1px dashed var(--indigo)' }}
         handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
       <Handles />
-      <button className="ex-node-menu-btn nodrag" title="Options" onClick={openMenu}>
+      <button className="ex-node-menu-btn ex-node-menu-btn--hover-only nodrag" title="Options" onClick={openMenu}>
         <span className="mi">more_vert</span>
       </button>
     </div>
@@ -817,7 +825,7 @@ function LineNode({ id, data, selected }) {
           markerEnd={variant === 'arrow' ? `url(#${markerId})` : undefined} />
       </svg>
       <Handles />
-      <button className="ex-node-menu-btn nodrag" title="Options" onClick={openMenu}>
+      <button className="ex-node-menu-btn ex-node-menu-btn--hover-only nodrag" title="Options" onClick={openMenu}>
         <span className="mi">more_vert</span>
       </button>
     </div>
@@ -1364,6 +1372,21 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [ctx, setCtx] = useState(null)
+  // Double-click an edge to give it a text label — React Flow's built-in
+  // edge types (default/straight/etc.) already render a `label` on the
+  // edge automatically, so this is purely the editing affordance: a small
+  // floating input at the click point, no custom edge component needed.
+  const [editingEdgeLabel, setEditingEdgeLabel] = useState(null)
+  const onEdgeDoubleClick = useCallback((e, edge) => {
+    e.stopPropagation()
+    setEditingEdgeLabel({ edgeId: edge.id, x: e.clientX, y: e.clientY, text: edge.label || '' })
+  }, [])
+  function saveEdgeLabel() {
+    if (!editingEdgeLabel) return
+    const text = editingEdgeLabel.text.trim()
+    setEdges(eds => eds.map(ed => ed.id !== editingEdgeLabel.edgeId ? ed : { ...ed, label: text || undefined }))
+    setEditingEdgeLabel(null)
+  }
   const canvasRef = useRef(null)
   const saveTimer = useRef(null)
   const boardIdRef = useRef(boardId)
@@ -1461,7 +1484,9 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
         setNodes(nds => nds.filter(n => n.id !== d.nodeId))
       }
       lineDrawRef.current = null
-      onToolReset()
+      // Tool stays active after a successful draw (same as every other
+      // place-mode tool now) so multiple lines/shapes/etc can be placed
+      // in a row without reselecting the tool each time.
     }
 
 
@@ -1650,8 +1675,13 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
         diamond:   { width: 120, height: 120 },
         triangle:  { width: 120, height: 104 },
       }[variant] || { width: 120, height: 120 }
+      // Centered on the click point, not top-left-anchored to it — a
+      // 140x100 rectangle whose corner (not middle) lands under your
+      // cursor reads as "dropped in the wrong place" even though the
+      // position value itself is accurate.
       setNodes(nds => [...nds, {
-        id: genId(), type: 'shapeNode', position,
+        id: genId(), type: 'shapeNode',
+        position: { x: position.x - defaultSize.width / 2, y: position.y - defaultSize.height / 2 },
         style: defaultSize,
         data: { variant, colorId: 'sky' },
       }])
@@ -1659,7 +1689,9 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     // line/arrow are now their own top-level tools (not 'shape:*'),
     // handled entirely by the capture-phase mousedown/mousemove/mouseup
     // listener above — this click handler never sees them.
-    onToolReset()
+    //
+    // Tool stays active after placing (matches every place-mode tool now)
+    // so multiple items can be dropped in a row without reselecting.
   }, [activeTool, screenToFlowPosition, setNodes, setEdges, onToolReset])
 
   const isPlaceMode = isPlaceModeTool(activeTool)
@@ -1669,6 +1701,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       <ReactFlow
         nodes={nodes} edges={edges}
         onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+        onEdgeDoubleClick={onEdgeDoubleClick}
         onConnect={onConnect} onDrop={onDrop} onDragOver={onDragOver}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
@@ -1680,7 +1713,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       >
         <Background variant={BackgroundVariant.Dots} gap={36} size={1.5}
           color="rgba(160,120,70,0.3)" style={{ background: 'var(--bg0)' }} />
-        <Controls showInteractive={false} />
+        <Controls showInteractive={false} position="top-left" />
         <MiniMap nodeColor={n => n.data?.color || 'var(--bg3)'}
           maskColor="rgba(253,248,240,0.7)" style={{ background: 'var(--bg1)' }} />
       </ReactFlow>
@@ -1693,6 +1726,24 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
           onUpdateNode={updateNode}
           onDeleteNode={deleteNode}
         />
+      )}
+
+      {editingEdgeLabel && (
+        <div style={{ position: 'fixed', left: editingEdgeLabel.x, top: editingEdgeLabel.y, transform: 'translate(-50%, -50%)', zIndex: 50 }}>
+          <input
+            autoFocus
+            className="wv-field-box"
+            value={editingEdgeLabel.text}
+            placeholder="Label this connection..."
+            style={{ width: 200, fontSize: 13, boxShadow: '0 4px 16px rgba(42,31,16,.25)' }}
+            onChange={e => setEditingEdgeLabel(prev => ({ ...prev, text: e.target.value }))}
+            onBlur={saveEdgeLabel}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); saveEdgeLabel() }
+              if (e.key === 'Escape') { e.preventDefault(); setEditingEdgeLabel(null) }
+            }}
+          />
+        </div>
       )}
     </div>
   )
@@ -1713,21 +1764,31 @@ export default function ExploreCanvas({ app }) {
   const looseThreads = allDrafts.filter(d => d.status === 'loose_thread')
 
   // One toolbar button per Spool collection, using the icon/colour/name set
-  // on that collection in the Strands page. Order mirrors the Strands page's
-  // own saved tab order (same localStorage key) so the two stay consistent.
+  // on that collection in the Strands page. Order mirrors the Strands
+  // page's own saved tab order — read via loadDB (Supabase-first, with
+  // localStorage as its own internal fallback) rather than reading
+  // localStorage directly here, since a device that hasn't cached that
+  // key locally would otherwise silently fall back to unsorted order even
+  // though Supabase has the real saved order.
+  const [collOrder, setCollOrder] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    loadDB(`woven:collOrder:${projId}`, null).then(saved => {
+      if (!cancelled) setCollOrder(Array.isArray(saved) ? saved : null)
+    })
+    return () => { cancelled = true }
+  }, [projId])
+
   const collections = useMemo(() => {
     let names = Object.keys(strandsObj)
-    try {
-      const saved = JSON.parse(localStorage.getItem(`woven:collOrder:${projId}`) || 'null')
-      if (Array.isArray(saved)) {
-        names = saved.filter(n => names.includes(n)).concat(names.filter(n => !saved.includes(n)))
-      }
-    } catch {}
+    if (Array.isArray(collOrder)) {
+      names = collOrder.filter(n => names.includes(n)).concat(names.filter(n => !collOrder.includes(n)))
+    }
     return names.map(name => {
       const tpl = templates.find(t => t.name === name)
       return { name, icon: tpl?.icon || 'auto_stories', color: tpl?.color || '#7A5A38' }
     })
-  }, [strandsObj, templates, projId])
+  }, [strandsObj, templates, collOrder])
 
   const [boards, setBoards]           = useState(INIT_BOARDS)
   const [activeBoard, setActiveBoard] = useState(INIT_ID)
