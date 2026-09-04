@@ -1375,6 +1375,24 @@ function App(){
   function updateProjectType(pid,type){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{type:type});});saveDB('woven:projects',next);return next;});}
   function archiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:true});});saveDB('woven:projects',next);return next;});}
   function unarchiveProject(pid){setProjects(function(prev){var next=prev.map(function(p){return p.id!==pid?p:Object.assign({},p,{archived:false});});saveDB('woven:projects',next);return next;});}
+  // Permanent delete — only reachable from the archive, so the project is
+  // already archived and out of active use. Cleans up the project's cover
+  // image and any draft thumbnails within it (matching deleteDraftPermanently's
+  // pattern), clears its drafts/strands/templates rows, and drops it from
+  // the projects list itself. If the deleted project happens to be the
+  // currently loaded one, bounces back to the dashboard first.
+  function deleteProjectPermanently(pid){
+    var proj=projects.find(function(p){return p.id===pid;});
+    if(proj&&proj.image){try{deleteStorageImage(proj.image);}catch(e){console.error('deleteStorageImage failed, continuing anyway:',e);}}
+    (allDrafts[pid]||[]).forEach(function(d){
+      if(d.thumbnail){try{deleteStorageImage(d.thumbnail);}catch(e){console.error('deleteStorageImage failed, continuing anyway:',e);}}
+    });
+    if(projId===pid){setView('dashboard');setProjId(null);setDraftId(null);}
+    setProjects(function(prev){var next=prev.filter(function(p){return p.id!==pid;});saveDB('woven:projects',next);return next;});
+    setAllDrafts(function(prev){var next=Object.assign({},prev);delete next[pid];saveDB('woven:drafts:'+pid,[]);return next;});
+    setAllStrands(function(prev){var next=Object.assign({},prev);delete next[pid];saveDB('woven:strands:'+pid,{});return next;});
+    setAllTemplates(function(prev){var next=Object.assign({},prev);delete next[pid];saveDB('woven:templates:'+pid,[]);return next;});
+  }
   function addDraftFieldDef(pid,fieldDef){
     setProjects(function(prev){var next=prev.map(function(p){if(p.id!==pid)return p;var defs=(p.draftFieldDefs||[]).concat([fieldDef]);return Object.assign({},p,{draftFieldDefs:defs});});saveDB('woven:projects',next);return next;});
     // Add empty value to all existing drafts
@@ -1446,7 +1464,7 @@ function App(){
   function openProfile(field){setProfileFocus(field);setShowProfile(true);}
 
   var currentProject=projects.find(function(p){return p.id===projId;})||null;
-  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,deleteDraftPermanently:deleteDraftPermanently,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,promoteStrand:promoteStrand,updateStrand:updateStrand,addStrand:addStrand,deleteStrand:deleteStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
+  var app={view:view,setView:setView,projId:projId,setProjId:setProjId,draftId:draftId,setDraftId:setDraftId,projects:projects,goal:goal,setGoal:setGoal,sessions:sessions,profile:profile,setProfile:setProfile,allDrafts:allDrafts,allStrands:allStrands,setAllStrands:setAllStrands,allTemplates:allTemplates,currentProject:currentProject,goBack:goBack,openDraft:openDraft,loadProjectData:loadProjectDataById,updateDraft:updateDraft,deleteDraftPermanently:deleteDraftPermanently,addDraft:addDraft,duplicateDraft:duplicateDraft,reorderDraft:reorderDraft,nestDraft:nestDraft,promoteStrand:promoteStrand,updateStrand:updateStrand,addStrand:addStrand,deleteStrand:deleteStrand,addTemplate:addTemplate,updateTemplate:updateTemplate,createProject:createProject,updateProjectTitle:updateProjectTitle,updateProjectSynopsis:updateProjectSynopsis,updateProjectImage:updateProjectImage,updateProjectType:updateProjectType,updateProjectConfig:updateProjectConfig,archiveProject:archiveProject,unarchiveProject:unarchiveProject,deleteProjectPermanently:deleteProjectPermanently,addDraftFieldDef:addDraftFieldDef,updateDraftFieldDef:updateDraftFieldDef,removeDraftFieldDef:removeDraftFieldDef,reorderDraftFieldDefs:reorderDraftFieldDefs,recordSession:recordSession,globalLT:globalLT,updateGlobalLT:updateGlobalLT,signOut:signOut,currentUser:currentUser,dataLoading:dataLoading,clearTodaySession:clearTodaySession,strandsFocusColl:strandsFocusColl,setStrandsFocusColl:setStrandsFocusColl,sharedCollectionSources:sharedCollectionSources,collectionsSharedFromProject:collectionsSharedFromProject};
 
   function signOut(){
     supabase.auth.signOut().then(function(){

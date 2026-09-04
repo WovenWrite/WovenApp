@@ -763,6 +763,17 @@ function ShapeNode({ id, data, selected }) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// ANCHOR NODE — invisible 0-footprint node used only as an edge endpoint
+// for freeform arrow/line drawing (see the line-tool click handling in
+// FlowCanvas below). Never shown to the user and never independently
+// selectable/draggable — it exists purely so a real React Flow edge can
+// be routed to an exact clicked point instead of to a visible shape.
+// ─────────────────────────────────────────────────────────────
+function AnchorNode() {
+  return <div style={{ width: 1, height: 1, pointerEvents: 'none' }} />
+}
+
+// ─────────────────────────────────────────────────────────────
 // TEXT NODE — chromeless editable text, for labelling shapes,
 // connectors, or freestanding notes on the canvas.
 // ─────────────────────────────────────────────────────────────
@@ -1296,6 +1307,16 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
   const boardIdRef = useRef(boardId)
   useEffect(() => { boardIdRef.current = boardId }, [boardId])
 
+  // Freeform line/arrow drawing is click-start, click-end rather than the
+  // single-click placement every other shape uses — first click records
+  // the start point here, second click (in onPaneClick below) draws the
+  // actual edge. Switching tools mid-draw abandons the pending start
+  // rather than leaving it stuck waiting for a click that'll never come.
+  const [pendingLineStart, setPendingLineStart] = useState(null)
+  useEffect(() => {
+    if (activeTool !== 'shape:arrow' && activeTool !== 'shape:line') setPendingLineStart(null)
+  }, [activeTool])
+
   // Build live item lookup — always reflects latest app data
   const findItem = useCallback((id) => {
     for (const [collectionName, items] of Object.entries(strandsObj)) {
@@ -1351,6 +1372,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     imageNode:  ImageNode,
     shapeNode:  ShapeNode,
     textNode:   TextNode,
+    anchorNode: AnchorNode,
   }), [findItem, app, projId])
 
   function updateNode(nodeId, patch) {
@@ -1373,6 +1395,23 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       style: { stroke: 'var(--bg4)', strokeWidth: 2 },
     }, eds))
   }, [setEdges])
+
+  // Freeform arrow/line edges are backed by invisible anchor nodes (see
+  // onPaneClick below) — when such an edge is removed, its anchor nodes
+  // become orphaned invisible nodes unless cleaned up here alongside it.
+  const handleEdgesChange = useCallback((changes) => {
+    const removeIds = changes.filter(c => c.type === 'remove').map(c => c.id)
+    if (removeIds.length) {
+      const anchorIdsToRemove = new Set()
+      edges.forEach(e => {
+        if (removeIds.includes(e.id) && e.data?.isFreeformLine && e.data?.anchorIds) {
+          e.data.anchorIds.forEach(id => anchorIdsToRemove.add(id))
+        }
+      })
+      if (anchorIdsToRemove.size) setNodes(nds => nds.filter(n => !anchorIdsToRemove.has(n.id)))
+    }
+    onEdgesChange(changes)
+  }, [edges, onEdgesChange, setNodes])
 
   const onDragOver = useCallback((e) => {
     e.preventDefault(); e.dataTransfer.dropEffect = 'copy'
@@ -1443,13 +1482,36 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     }
     if (activeTool.startsWith('shape:')) {
       const variant = activeTool.split(':')[1]
+      if (variant === 'arrow' || variant === 'line') {
+        // Two-click flow: first click sets the start point and waits;
+        // second click draws the actual edge between the two exact
+        // clicked points via a pair of invisible anchor nodes, so this
+        // is a real edge (same data model as connecting two cards) not
+        // a resizable shape standing in for one.
+        if (!pendingLineStart) {
+          setPendingLineStart(position)
+          return
+        }
+        const startId = genId(), endId = genId()
+        setNodes(nds => [...nds,
+          { id: startId, type: 'anchorNode', position: pendingLineStart, draggable: false, selectable: false, connectable: false, data: {} },
+          { id: endId,   type: 'anchorNode', position,                   draggable: false, selectable: false, connectable: false, data: {} },
+        ])
+        setEdges(eds => [...eds, {
+          id: genId(), source: startId, target: endId, type: 'straight',
+          style: { stroke: 'var(--bg4)', strokeWidth: 3 },
+          markerEnd: variant === 'arrow' ? { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 14, height: 14 } : undefined,
+          data: { isFreeformLine: true, anchorIds: [startId, endId] },
+        }])
+        setPendingLineStart(null)
+        onToolReset()
+        return
+      }
       const defaultSize = {
         rectangle: { width: 140, height: 100 },
         ellipse:   { width: 120, height: 120 },
         diamond:   { width: 120, height: 120 },
         triangle:  { width: 120, height: 104 },
-        arrow:     { width: 160, height: 28 },
-        line:      { width: 160, height: 24 },
       }[variant] || { width: 120, height: 120 }
       setNodes(nds => [...nds, {
         id: genId(), type: 'shapeNode', position,
@@ -1458,7 +1520,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       }])
     }
     onToolReset()
-  }, [activeTool, screenToFlowPosition, setNodes, onToolReset])
+  }, [activeTool, screenToFlowPosition, setNodes, setEdges, onToolReset, pendingLineStart])
 
   const isPlaceMode = isPlaceModeTool(activeTool)
 
@@ -1466,7 +1528,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     <div ref={canvasRef} style={{ width: '100%', height: '100%' }}>
       <ReactFlow
         nodes={nodes} edges={edges}
-        onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+        onNodesChange={onNodesChange} onEdgesChange={handleEdgesChange}
         onConnect={onConnect} onDrop={onDrop} onDragOver={onDragOver}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}

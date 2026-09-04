@@ -24,8 +24,19 @@ export default function ProfileDrawer({ app, focusField, open, onClose, topOffse
   var authEmail = (app.currentUser && app.currentUser.email) || profile.email || '';
   var se = useState(authEmail); var email = se[0]; var setEmail = se[1];
   var sh = useState(profile.headshot || null); var headshot = sh[0]; var setHeadshot = sh[1];
-  // Sync headshot when profile updates (e.g. after login loads fresh data)
-  useEffect(function () { setHeadshot(profile.headshot || null); }, [profile.headshot]);
+  // Re-sync every tracked field when the app-level profile changes — not
+  // just headshot. Without this, opening the drawer before the Supabase
+  // profile load finishes locks these fields into their empty defaults
+  // forever, and the next autoSave silently overwrites the real saved
+  // values with those defaults.
+  useEffect(function () {
+    setFirstName(profile.firstName || '');
+    setLastName(profile.lastName || '');
+    setHeadshot(profile.headshot || null);
+    setEditorMode(profile.editorMode || 'rt');
+    setReminderEnabled(profile.reminderEnabled || false);
+    setReminderTime(profile.reminderTime || '9:00 PM');
+  }, [app.profile]);
 
   var sg = useState(app.goal || 500); var goalVal = sg[0]; var setGoalVal = sg[1];
   var str = useState(false); var tourReset = str[0]; var setTourReset = str[1];
@@ -47,7 +58,7 @@ export default function ProfileDrawer({ app, focusField, open, onClose, topOffse
   }, [open, focusField]);
 
   function autoSave(overrides) {
-    var updated = Object.assign({
+    var updated = Object.assign({}, app.profile, {
       firstName: firstName, lastName: lastName, email: email, plan: profile.plan || 'Free',
       editorMode: editorMode, reminderEnabled: reminderEnabled, reminderTime: reminderTime,
       headshot: headshot

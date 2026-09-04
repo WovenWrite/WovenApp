@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Drawer, PrimaryButton } from './SharedUI'
 import { genId, initials, todayStr, countWords } from './utils'
 
@@ -166,6 +166,25 @@ function GlobalLooseThreads({app}){
   var sim=useState(window.innerWidth<768);var isMobile=sim[0];var setIsMobile=sim[1];
   useEffect(function(){function onResize(){setIsMobile(window.innerWidth<768);}window.addEventListener('resize',onResize);return function(){window.removeEventListener('resize',onResize);};},[]);
   var visibleLT=(isMobile&&!showMore)?allLT.slice(0,3):allLT;
+  // Desktop clips by height (single row, maxHeight:140), not item count, so
+  // whether "Show all" has anything left to reveal depends on the row's
+  // actual rendered height, not a fixed threshold — a wide screen can fit
+  // more than 3 tiles in one row with nothing left to show. Mobile instead
+  // slices by count above, so it keeps its own simpler check.
+  var rowRef=useRef(null);
+  var sov=useState(false);var isOverflowing=sov[0];var setIsOverflowing=sov[1];
+  useEffect(function(){
+    if(isMobile)return;
+    function measure(){
+      var el=rowRef.current;
+      if(!el)return;
+      setIsOverflowing(el.scrollHeight>144);
+    }
+    measure();
+    window.addEventListener('resize',measure);
+    return function(){window.removeEventListener('resize',measure);};
+  },[allLT.length,isMobile]);
+  var showAllDisabled=isMobile?allLT.length<=3:!isOverflowing;
   function handleAddLT(){
     var id=genId();
     setPendingLT({id:id,title:'',synopsis:'',createdAt:new Date().toISOString(),archived:false});
@@ -201,11 +220,11 @@ function GlobalLooseThreads({app}){
     <span className="dash-section-hdr">Loose Threads</span>
     {allLT.length>0&&<span style={{fontFamily:'DM Sans, sans-serif',fontSize:14,fontWeight:600,color:'var(--indigo)',background:'rgba(196,94,40,.10)',padding:'3px 10px',borderRadius:12,whiteSpace:'nowrap'}}>{allLT.length} {allLT.length===1?'thread':'threads'}</span>}
     <div style={{flex:1}}/>
-    <div className="almond-primary-btn"><PrimaryButton disabled={allLT.length<=3} onClick={function(){setShowMore(!showMore);}} style={{width:'auto'}}>
+    <div className="almond-primary-btn"><PrimaryButton disabled={showAllDisabled} onClick={function(){setShowMore(!showMore);}} style={{width:'auto'}}>
       {showMore?'Show less':'Show all'}
     </PrimaryButton></div>
   </div>
-  <div className="loose-threads-row" style={{display:'flex',flexWrap:'wrap',gap:10,overflow:showMore?'visible':'hidden',maxHeight:showMore?'none':140,paddingBottom:4}}>
+  <div ref={rowRef} className="loose-threads-row" style={{display:'flex',flexWrap:'wrap',gap:10,overflow:showMore?'visible':'hidden',maxHeight:showMore?'none':140,paddingBottom:4}}>
     <div className="loose-thread-tile" onClick={handleAddLT} style={{background:"transparent",border:"2px dashed #A88060",padding:"10px 15px",borderRadius:15,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,minWidth:120,flexShrink:0,minHeight:80}} onMouseEnter={function(e){e.currentTarget.style.borderColor="#c45e28";}} onMouseLeave={function(e){e.currentTarget.style.borderColor="#A88060";}}>
       <span className="material-symbols-outlined" style={{fontSize:28,color:'#A88060'}}>add_circle</span>
     </div>
@@ -310,6 +329,11 @@ function ArchiveDrawer({app,open,onClose}){
   <button className="btn btn-ghost btn-sm" onClick={function(){app.unarchiveProject(p.id);}}>
     <span className="mi" style={{fontSize:14}}>unarchive</span>Restore
   </button>
+  <button className="btn-icon" style={{color:'var(--danger)',flexShrink:0}} title="Delete permanently" onClick={function(){
+    if(window.confirm('Permanently delete "'+(p.title||'Untitled')+'" and everything in it? This can\'t be undone.'))app.deleteProjectPermanently(p.id);
+  }}>
+    <span className="mi" style={{fontSize:16}}>delete</span>
+  </button>
 </div>
   );})}
 </div>
@@ -329,14 +353,17 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
   function getWC(pid){return(app.allDrafts[pid]||[]).filter(function(d){return !d.archived;}).reduce(function(s,d){return s+(d.wordCount||0);},0);}
   function openProject(pid){app.loadProjectData(pid);app.setProjId(pid);app.setView('cards');}
   var editProj=editingProjId?app.projects.find(function(p){return p.id===editingProjId;}):null;
+  var dashTourDriverRef=useRef(null);
   useTour(app,'dashboard-start',[
-    {element:'[data-tour="new-project-btn"]',popover:{title:'Start your first project',description:'This is where every story begins — give it a title and a type, and Woven sets up your Spools, Loose Threads, and drafting space.',side:'bottom',align:'start'}}
-  ],{ready:true});
+    {element:'[data-tour="new-project-btn"]',popover:{title:'Start your first project',description:'This is where every story begins — give it a title and a type, and Woven sets up your Spools, Loose Threads, and drafting space.',side:'bottom',align:'start'}},
+    {element:'[data-tour="profile-avatar-btn"]',popover:{title:'Set your writing goal',description:'Head here to set a daily word goal and writing reminders.',side:'bottom',align:'end',
+      onNextClick:function(){onOpenProfile('goal');dashTourDriverRef.current&&dashTourDriverRef.current.moveNext();}}}
+  ],{ready:true,onCreated:function(d){dashTourDriverRef.current=d;}});
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
   <nav className="nav" style={{justifyContent:'space-between'}}>
     <WovenLogo size={26} color="#2A1F10"/>
-    <div className="avatar" onClick={function(){onOpenProfile(null);}}>
+    <div data-tour="profile-avatar-btn" className="avatar" onClick={function(){onOpenProfile(null);}}>
       {profile.headshot?<img src={profile.headshot} alt=""/>:initials(firstName+' '+(profile.lastName||''))}
       <div className="avatar-overlay"><span className="mi">edit</span></div>
     </div>
