@@ -763,24 +763,62 @@ function ShapeNode({ id, data, selected }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ANCHOR NODE — invisible 0-footprint node used only as an edge endpoint
-// for freeform arrow/line drawing (see the line-tool click handling in
-// FlowCanvas below). Never shown to the user and never independently
-// selectable/draggable — it exists purely so a real React Flow edge can
-// be routed to an exact clicked point instead of to a visible shape.
+// LINE NODE — a freeform arrow or line, drawn as a real node (not an
+// edge). Edges in React Flow always render in a layer below every node
+// with no per-edge way to change that, so a line built as an edge could
+// never draw above existing cards/shapes — moving it to the node system
+// puts it in the same z-order as everything else, drawn newest-on-top
+// like any other element.
 //
-// Renders the same <Handles /> every other node type in this file uses
-// (WovenCardNode, ShapeNode, TextNode, etc.) — this turned out to be the
-// actual bug behind the edge never appearing. Every other node here has
-// real Handle elements for React Flow to route an edge's connection
-// point to; this was the only one that had none at all, so React Flow
-// had nowhere to attach the edge and silently declined to draw it, with
-// completely valid node/edge data otherwise.
+// data.x1/y1/x2/y2 are the two endpoints in the node's own local space
+// (0,0 = the node's top-left corner), independent of the node's bounding
+// box orientation — this is what lets the line run at any angle rather
+// than only corner-to-corner of its box.
 // ─────────────────────────────────────────────────────────────
-function AnchorNode() {
+function LineNode({ id, data, selected }) {
+  const variant = data.variant || 'line'
+  const markerId = `ex-line-arrowhead-${id}`
+
+  function openMenu(e) {
+    e.stopPropagation()
+    e.currentTarget.dispatchEvent(new CustomEvent('woven:ctx', {
+      bubbles: true,
+      detail: { nodeId: id, nodeType: 'lineNode', x: e.clientX, y: e.clientY, data }
+    }))
+  }
+
   return (
-    <div style={{ width: 1, height: 1, pointerEvents: 'none' }}>
+    <div
+      className="ex-shape-node ex-shape-node--line"
+      style={{
+        outline: selected ? '2px solid var(--indigo)' : 'none', outlineOffset: 6,
+        width: '100%', height: '100%',
+      }}
+      onContextMenu={e => {
+        e.preventDefault(); e.stopPropagation()
+        e.target.dispatchEvent(new CustomEvent('woven:ctx', {
+          bubbles: true,
+          detail: { nodeId: id, nodeType: 'lineNode', x: e.clientX, y: e.clientY, data }
+        }))
+      }}
+    >
+      <svg width="100%" height="100%" style={{ display: 'block', overflow: 'visible', position: 'absolute', top: 0, left: 0 }}>
+        {variant === 'arrow' && (
+          <defs>
+            <marker id={markerId} markerWidth="9" markerHeight="9" refX="6" refY="4.5"
+              orient="auto" markerUnits="userSpaceOnUse">
+              <path d="M0,0 L9,4.5 L0,9 Z" fill="var(--bg4)" />
+            </marker>
+          </defs>
+        )}
+        <line x1={data.x1} y1={data.y1} x2={data.x2} y2={data.y2}
+          stroke="var(--bg4)" strokeWidth="3" strokeLinecap="round"
+          markerEnd={variant === 'arrow' ? `url(#${markerId})` : undefined} />
+      </svg>
       <Handles />
+      <button className="ex-node-menu-btn nodrag" title="Options" onClick={openMenu}>
+        <span className="mi">more_vert</span>
+      </button>
     </div>
   )
 }
@@ -1363,9 +1401,16 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     const el = canvasRef.current
     if (!el) return
 
+    // screenToFlowPosition already accounts for the canvas's own position
+    // internally — it wants raw event.clientX/clientY, not coordinates
+    // pre-adjusted for the canvas's bounding box. Manually subtracting
+    // that box first (as this function used to, mirroring a pre-existing
+    // pattern elsewhere in this file) double-subtracts the offset,
+    // producing a fixed pixel error — which is exactly the "~50px too
+    // high" symptom. Confirmed against React Flow's own v11→v12
+        // migration notes, not a guess.
     function toFlowPos(e) {
-      const rect = canvasRef.current.getBoundingClientRect()
-      return screenToFlowPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+      return screenToFlowPosition({ x: e.clientX, y: e.clientY })
     }
 
     function onDown(e) {
@@ -1373,26 +1418,35 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       if (!initialLoadDoneRef.current) return
       e.preventDefault()
       e.stopPropagation()
-      const position = toFlowPos(e)
-      const startId = genId(), endId = genId(), edgeId = genId()
-      lineDrawRef.current = { startId, endId, edgeId, screenStart: { x: e.clientX, y: e.clientY } }
-      setNodes(nds => [...nds,
-        { id: startId, type: 'anchorNode', position, draggable: false, selectable: false, connectable: false, data: {} },
-        { id: endId,   type: 'anchorNode', position, draggable: false, selectable: false, connectable: false, data: {} },
-      ])
-      setEdges(eds => [...eds, {
-        id: edgeId, source: startId, target: endId, sourceHandle: 'bottom', targetHandle: 'top-t', type: 'straight',
-        style: { stroke: 'var(--bg4)', strokeWidth: 3 },
-        markerEnd: activeTool === 'arrow' ? { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 14, height: 14 } : undefined,
-        data: { isFreeformLine: true, anchorIds: [startId, endId] },
+      const start = toFlowPos(e)
+      const nodeId = genId()
+      lineDrawRef.current = { nodeId, variant: activeTool, start, screenStart: { x: e.clientX, y: e.clientY } }
+      // A line is a single node (bounding box + the two endpoints in that
+      // box's local coordinates), not an edge — edges in React Flow
+      // always render in a layer below every node, with no per-edge way
+      // to override that, so a "line" built as an edge could never draw
+      // above existing cards/shapes. As a node it participates in the
+      // same z-order as everything else: newer draws sit on top, like any
+      // other element on the canvas.
+      setNodes(nds => [...nds, {
+        id: nodeId, type: 'lineNode', position: start, style: { width: 1, height: 1 },
+        data: { variant: activeTool, x1: 0, y1: 0, x2: 0, y2: 0 },
       }])
     }
     function onMove(e) {
       const d = lineDrawRef.current
       if (!d) return
       e.stopPropagation()
-      const position = toFlowPos(e)
-      setNodes(nds => nds.map(n => n.id === d.endId ? { ...n, position } : n))
+      const cur = toFlowPos(e)
+      const x = Math.min(d.start.x, cur.x), y = Math.min(d.start.y, cur.y)
+      const width = Math.max(Math.abs(cur.x - d.start.x), 1)
+      const height = Math.max(Math.abs(cur.y - d.start.y), 1)
+      setNodes(nds => nds.map(n => n.id !== d.nodeId ? n : {
+        ...n,
+        position: { x, y },
+        style: { width, height },
+        data: { ...n.data, x1: d.start.x - x, y1: d.start.y - y, x2: cur.x - x, y2: cur.y - y },
+      }))
     }
     function onUp(e) {
       const d = lineDrawRef.current
@@ -1401,14 +1455,14 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       const dx = e.clientX - d.screenStart.x, dy = e.clientY - d.screenStart.y
       // A drag shorter than this reads as a stray click rather than an
       // intentional line, so it's discarded instead of leaving a
-      // zero-length edge behind.
+      // zero-length line behind.
       if (Math.sqrt(dx * dx + dy * dy) < 6) {
-        setNodes(nds => nds.filter(n => n.id !== d.startId && n.id !== d.endId))
-        setEdges(eds => eds.filter(ed => ed.id !== d.edgeId))
+        setNodes(nds => nds.filter(n => n.id !== d.nodeId))
       }
       lineDrawRef.current = null
       onToolReset()
     }
+
 
     el.addEventListener('mousedown', onDown, true)
     window.addEventListener('mousemove', onMove, true)
@@ -1485,7 +1539,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     imageNode:  ImageNode,
     shapeNode:  ShapeNode,
     textNode:   TextNode,
-    anchorNode: AnchorNode,
+    lineNode: LineNode,
   }), [findItem, app, projId])
 
   function updateNode(nodeId, patch) {
@@ -1509,23 +1563,6 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     }, eds))
   }, [setEdges])
 
-  // Freeform arrow/line edges are backed by invisible anchor nodes (see
-  // onPaneClick below) — when such an edge is removed, its anchor nodes
-  // become orphaned invisible nodes unless cleaned up here alongside it.
-  const handleEdgesChange = useCallback((changes) => {
-    const removeIds = changes.filter(c => c.type === 'remove').map(c => c.id)
-    if (removeIds.length) {
-      const anchorIdsToRemove = new Set()
-      edges.forEach(e => {
-        if (removeIds.includes(e.id) && e.data?.isFreeformLine && e.data?.anchorIds) {
-          e.data.anchorIds.forEach(id => anchorIdsToRemove.add(id))
-        }
-      })
-      if (anchorIdsToRemove.size) setNodes(nds => nds.filter(n => !anchorIdsToRemove.has(n.id)))
-    }
-    onEdgesChange(changes)
-  }, [edges, onEdgesChange, setNodes])
-
   const onDragOver = useCallback((e) => {
     e.preventDefault(); e.dataTransfer.dropEffect = 'copy'
   }, [])
@@ -1535,8 +1572,9 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     const raw = e.dataTransfer.getData('application/woven-item')
     if (!raw) return
     const item = JSON.parse(raw)
-    const rect = canvasRef.current.getBoundingClientRect()
-    const position = screenToFlowPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+    // Same fix as onPaneClick above — screenToFlowPosition wants raw
+    // client coordinates, not pre-adjusted ones.
+    const position = screenToFlowPosition({ x: e.clientX, y: e.clientY })
     setNodes(nds => [...nds, {
       id: genId(), type: 'wovenCard', position,
       data: {
@@ -1553,9 +1591,14 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
   useEffect(() => {
     if (!pendingAdd || !canvasRef.current) return
     const item = buildPayload(pendingAdd, 'strand', templates)
+    // screenToFlowPosition needs an absolute viewport position (like
+    // event.clientX/Y), not coordinates relative to the canvas element —
+    // clientWidth/2 alone is a relative offset, so this needs the
+    // canvas's own screen position added in to get the actual centre.
+    const rect = canvasRef.current.getBoundingClientRect()
     const position = screenToFlowPosition({
-      x: canvasRef.current.clientWidth / 2,
-      y: canvasRef.current.clientHeight / 2,
+      x: rect.left + canvasRef.current.clientWidth / 2,
+      y: rect.top + canvasRef.current.clientHeight / 2,
     })
     setNodes(nds => [...nds, {
       id: genId(), type: 'wovenCard', position,
@@ -1570,8 +1613,13 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
 
   const onPaneClick = useCallback((e) => {
     if (!isPlaceModeTool(activeTool)) return
-    const rect = canvasRef.current.getBoundingClientRect()
-    const position = screenToFlowPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+    // screenToFlowPosition already accounts for the canvas's own position
+    // internally — passing raw event.clientX/clientY is correct per React
+    // Flow's own docs/examples. The previous rect-subtraction here
+    // double-applied that offset, causing every sticky/image/text/shape
+    // placed this way to land some fixed number of pixels off from the
+    // actual click — the same bug just found and fixed in the line tool.
+    const position = screenToFlowPosition({ x: e.clientX, y: e.clientY })
     if (activeTool === 'sticky') {
       setNodes(nds => [...nds, {
         id: genId(), type: 'stickyNote', position,
@@ -1619,7 +1667,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     <div ref={canvasRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       <ReactFlow
         nodes={nodes} edges={edges}
-        onNodesChange={onNodesChange} onEdgesChange={handleEdgesChange}
+        onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
         onConnect={onConnect} onDrop={onDrop} onDragOver={onDragOver}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
