@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropertiesDrawer from './PropertiesDrawer'
 import { useTour, advanceWhenReady } from './useTour'
+import posthog from './analytics'
 import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
 import CommentsDrawer from './CommentsDrawer'
@@ -835,6 +836,7 @@ function DraftEditor({app}){
     var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
     var project=app&&app.currentProject;
     var exportDraft=getExportDraft();
+    posthog.capture('draft_exported',{format:'pdf'});
     if(window.doExport)window.doExport('PDF',[exportDraft],project,true,authorName);
   }
   function handleExportDocx(){
@@ -843,6 +845,7 @@ function DraftEditor({app}){
     var authorName=((profile.firstName||'')+' '+(profile.lastName||'')).trim();
     var project=app&&app.currentProject;
     var exportDraft=getExportDraft();
+    posthog.capture('draft_exported',{format:'docx'});
     if(window.doExport)window.doExport('Word (.docx)',[exportDraft],project,true,authorName);
   }
 

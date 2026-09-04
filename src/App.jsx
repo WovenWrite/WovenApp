@@ -20,6 +20,7 @@ import AddMenuFab from './AddMenuFab'
 import LooseThreadsQuickAccess from './LooseThreadsQuickAccess'
 import LegalPage from './legal/LegalPage'
 import FeedbackButton from './FeedbackButton'
+import posthog from './analytics'
 export { buildTree, ViewHeader, loadFilterState, persistFilterState, applyFS, LooseThreadsSection, DraftLoadingSpinner, EmptyDrafts } from './CardsView'
 import { AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio } from './SharedUI'
 import {
@@ -983,6 +984,14 @@ function App(){
   var sal=useState(true);var authLoading=sal[0];var setAuthLoading=sal[1];
   var sdl=useState(false);var dataLoading=sdl[0];var setDataLoading=sdl[1];
   var sv=useState('dashboard');var view=sv[0];var setView=sv[1];
+  // Manual $pageview capture — Woven navigates via this `view` state, not
+  // real URL changes, so PostHog's autocapture (tied to History API
+  // events) never fires on its own here. Gated on currentUser so we don't
+  // fire pageviews for the pre-login auth screen state churn.
+  useEffect(function(){
+    if(!currentUser)return;
+    posthog.capture('$pageview',{view:view});
+  },[view,currentUser]);
   var spi=useState(null);var projId=spi[0];var setProjId=spi[1];
   var sdi=useState(null);var draftId=sdi[0];var setDraftId=sdi[1];
   var spr=useState([]);var projects=spr[0];var setProjects=spr[1];
@@ -1108,10 +1117,12 @@ function App(){
         var wasAlreadyLoggedIn=!!window.__wovenUserId;
         window.__wovenUserId=session.user.id;
         setCurrentUser(session.user);
+        posthog.identify(session.user.id,{email:session.user.email,created_at:session.user.created_at});
         if(!wasAlreadyLoggedIn)loadAllData();
       } else if(event==='SIGNED_OUT'){
         window.__wovenUserId=null;
         setCurrentUser(null);
+        posthog.reset();
         setProjects([]);setAllDrafts({});setAllStrands({});setAllTemplates({});
         setSessions([]);setGlobalLT({});setGoalState(500);
         setProfileState({firstName:'',lastName:'',email:'',plan:'Free'});
@@ -1202,7 +1213,7 @@ function App(){
       return next;
     });
   }
-  function addDraft(pid,nd){setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).concat([nd]);next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});}
+  function addDraft(pid,nd){setAllDrafts(function(prev){var next=Object.assign({},prev);var ds=(next[pid]||[]).concat([nd]);next[pid]=ds;saveDB('woven:drafts:'+pid,ds);return next;});posthog.capture(nd.status==='loose_thread'?'loose_thread_created':'draft_created');}
   function duplicateDraft(pid,did){
     setAllDrafts(function(prev){
       var next=Object.assign({},prev);
@@ -1320,6 +1331,7 @@ function App(){
       propagateSharedStrands(next,ownerPid,coll,updated);
       return next;
     });
+    posthog.capture('spool_item_created',{collection:coll});
   }
   function deleteStrand(pid,coll,sid){
     var ownerPid=ownerOfCollection(pid,coll);
@@ -1414,6 +1426,7 @@ function App(){
     setAllDrafts(function(prev){var n=Object.assign({},prev);n[pid]=[];saveDB('woven:drafts:'+pid,[]);return n;});
     setAllStrands(function(prev){var n=Object.assign({},prev);n[pid]=seed.strandsObj;saveDB('woven:strands:'+pid,seed.strandsObj);return n;});
     setAllTemplates(function(prev){var n=Object.assign({},prev);n[pid]=seed.templates;saveDB('woven:templates:'+pid,seed.templates);return n;});
+    posthog.capture('project_created');
   }
   function setGoal(v){setGoalState(v);saveDB('woven:goal',v);}
   function updateGlobalLT(id,changes){setGlobalLT(function(prev){var next=Object.assign({},prev);next[id]=Object.assign({},next[id]||{},changes);saveDB('woven:global_lt',next);return next;});}
