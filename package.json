@@ -14,7 +14,7 @@
     "react-dom": "^19.2.4",
     "@xyflow/react": "^12.8.2",
     "driver.js": "^1.4.0",
-    "diff": "^5.2.0"
+    "diff": "^5.2.0",
     "posthog-js": "^1.194.0",
   },
   "devDependencies": {
