@@ -100,7 +100,7 @@ function AuthScreen({onAuth}){
           <label style={{display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',marginBottom:4}}>
             <input type="checkbox" checked={agreed} onChange={function(e){setAgreed(e.target.checked);}} style={{marginTop:3,width:16,height:16,flexShrink:0,accentColor:'#C45E28',cursor:'pointer'}}/>
             <span style={{fontSize:13,lineHeight:1.5,color:'var(--mid, #6b5a45)'}}>
-              By creating an account, you agree to Woven's <a href="/?legal=terms" target="_blank" rel="noopener noreferrer" style={{color:'#C45E28'}}>Terms of Service</a> and acknowledge Woven's <a href="/?legal=privacy" target="_blank" rel="noopener noreferrer" style={{color:'#C45E28'}}>Privacy Policy</a>. Woven collects information about how you use the product to help us understand, improve, and develop Woven.
+              By creating an account, you agree to Woven's <a href="https://www.wovenwrite.com/#terms" target="_blank" rel="noopener noreferrer" style={{color:'#C45E28'}}>Terms of Service</a> and acknowledge Woven's <a href="https://www.wovenwrite.com/#privacy" target="_blank" rel="noopener noreferrer" style={{color:'#C45E28'}}>Privacy Policy</a>. Woven collects information about how you use the product to help us understand, improve, and develop Woven.
             </span>
           </label>
         )}
