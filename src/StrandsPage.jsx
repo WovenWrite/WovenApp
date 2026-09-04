@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { AvatarEditModal, Drawer, HelpText, PrimaryButton, TertiaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio, Field, InputField, SelectField, Section, SpoolThumbnailUpload, DeleteConfirmModal, Check } from './SharedUI'
 import { FIELD_TYPES, defaultFields, initials, uploadImage } from './utils'
 import { saveDB, loadDB } from './App'
+import { useTour, advanceWhenReady } from './useTour'
 
 // genId, PRESET_COLORS come from utils too — pulled in below where needed.
 import { genId, PRESET_COLORS } from './utils'
@@ -677,6 +678,13 @@ function StrandsPage({app,allProjects}){
   function commitColor(c){setEditingSpoolColor(c);if(activeTpl)app.updateTemplate(pid,activeTpl.id,{color:c});}
   function commitIcon(ic){setEditingSpoolIcon(ic);if(activeTpl)app.updateTemplate(pid,activeTpl.id,{icon:ic});}
   function commitSharedWith(list){setSharedWith(list);if(activeTpl)app.updateTemplate(pid,activeTpl.id,{sharedWith:list});}
+  var collTourDriverRef=useRef(null);
+  useTour(app,'coll-customize',[
+    {element:'[data-tour="edit-spool-btn"]',popover:{title:'Customize this Spool',description:'Change its icon, color, and the fields every item in this collection tracks.',side:'left',align:'start',
+      onNextClick:function(){openCollSettings();advanceWhenReady(collTourDriverRef.current,'[data-tour="coll-icon-thumb"]');}}},
+    {element:'[data-tour="coll-icon-thumb"]',popover:{title:'Icon & color',description:'Click the thumbnail to pick a new icon and color for this collection.',side:'right',align:'start'}},
+    {element:'[data-tour="coll-fields-section"]',popover:{title:'Fields',description:'Add, reorder, or remove the fields items in this collection can have — text, dropdowns, or links to other Spools.',side:'top',align:'start'}}
+  ],{ready:!!activeColl&&!showCollSettings,onCreated:function(d){collTourDriverRef.current=d;}});
   // A field can't be deleted while any existing strand in this collection
   // still has data in it — deleting it would silently destroy that data.
   function fieldHasContent(fieldId){
@@ -743,7 +751,7 @@ function StrandsPage({app,allProjects}){
 
   {/* Hero: icon/colour thumbnail (click opens combined icon+colour picker) + name, with the field list stacked directly beneath the title, to the right of the thumbnail */}
   <div style={{display:'flex',gap:20,alignItems:'flex-start',marginBottom:32,position:'relative'}}>
-    <CollectionIconThumb color={editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'} icon={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onClick={function(){setShowIconSearch(true);}}/>
+    <div data-tour="coll-icon-thumb"><CollectionIconThumb color={editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'} icon={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} onClick={function(){setShowIconSearch(true);}}/></div>
     {showIconSearch&&<IconSearchPopup currentIcon={editingSpoolIcon||activeTpl&&activeTpl.icon||'auto_stories'} currentColor={editingSpoolColor||activeTpl&&activeTpl.color||'#c45e28'} onSelectIcon={function(ic){commitIcon(ic);}} onSelectColor={function(c){commitColor(c);}} onClose={function(){setShowIconSearch(false);}}/>}
     <div style={{flex:1,minWidth:0,paddingTop:8}}>
       <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,color:'#6B4A26',marginBottom:24}}>{activeColl}</div>
@@ -772,7 +780,7 @@ function StrandsPage({app,allProjects}){
         );
       })()}
 
-      <div className="wv-field-wrap">
+      <div data-tour="coll-fields-section" className="wv-field-wrap">
       <label className="wv-field-lbl">Fields</label>
       <div style={{marginTop:12}}>
       {editingFields.map(function(f,i){return(
@@ -899,7 +907,7 @@ function StrandsPage({app,allProjects}){
   var findSelectPanel=(
 <Drawer variant="inline" title={activeColl} width={activeStrand?undefined:'flex'}
   toolbar={<SearchSortBar value={search} onChange={function(e){setSearch(e.target.value);}} sortSlot={<><StrandFieldFilter fields={fields} strandFilter={strandFilter} setStrandFilter={setStrandFilter}/><StrandSortFilter sort={strandSort} setSort={updateStrandSort} strandFilter={strandFilter} setStrandFilter={setStrandFilter} fields={fields}/></>}/>}
-  footer={<div style={{display:'flex',flexDirection:'column',gap:8}}><PrimaryButton icon="add" onClick={addStrand}>{addItemLabel}</PrimaryButton><TertiaryButton onClick={openCollSettings} style={{color:'#A88060',justifyContent:'center',display:'flex',alignItems:'center',gap:8,width:'100%'}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Spool</TertiaryButton></div>}>
+  footer={<div style={{display:'flex',flexDirection:'column',gap:8}}><PrimaryButton icon="add" onClick={addStrand}>{addItemLabel}</PrimaryButton><TertiaryButton data-tour="edit-spool-btn" onClick={openCollSettings} style={{color:'#A88060',justifyContent:'center',display:'flex',alignItems:'center',gap:8,width:'100%'}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Spool</TertiaryButton></div>}>
   {filtered.length===0?(
     <HelpText>{collStrands.length===0?'No entries yet.':'No results for "'+search+'".'}</HelpText>
   ):(
@@ -934,7 +942,7 @@ function StrandsPage({app,allProjects}){
 <div className="strands-tab-add" onClick={function(){setNewColl(true);}} title="New Spool">+</div>
     )}
     <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',marginBottom:6}}>
-      <TertiaryButton onClick={openCollSettings} style={{color:'#A88060',display:'flex',alignItems:'center',gap:8}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Spool</TertiaryButton>
+      <TertiaryButton data-tour="edit-spool-btn" onClick={openCollSettings} style={{color:'#A88060',display:'flex',alignItems:'center',gap:8}}><span className="mi" style={{fontSize:18}}>settings</span>Edit Spool</TertiaryButton>
       <PrimaryButton icon="add" onClick={addStrand} style={{width:'auto'}}>{addItemLabel}</PrimaryButton>
     </div>
   </div>
@@ -946,7 +954,7 @@ function StrandsPage({app,allProjects}){
       <span className="name">{activeColl}</span>
       <span className="mi" style={{fontSize:18}}>unfold_more</span>
     </button>
-    <button className="btn-icon" onClick={openCollSettings} title="Spool settings"><span className="mi" style={{fontSize:18}}>settings</span></button>
+    <button data-tour="edit-spool-btn" className="btn-icon" onClick={openCollSettings} title="Spool settings"><span className="mi" style={{fontSize:18}}>settings</span></button>
   </div>
   )}
   {isMobile&&newColl&&<NewSpoolModal onConfirm={function(name,icon,color){

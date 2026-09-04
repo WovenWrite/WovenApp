@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropertiesDrawer from './PropertiesDrawer'
+import { useTour, advanceWhenReady } from './useTour'
 import StrandsDrawer from './StrandsDrawer'
 import VersionsDrawer from './VersionsDrawer'
 import CommentsDrawer from './CommentsDrawer'
@@ -88,9 +89,9 @@ function EditableTitle({value,onChange,color}){
 }
 
 // ── Icon Button ──
-function IconBtn({icon,title,onClick,active,color}){
+function IconBtn({icon,title,onClick,active,color,dataTour}){
   return(
-<button onClick={onClick} title={title} style={{display:'flex',alignItems:'center',justifyContent:'center',padding:10,background:active?'rgba(196,94,40,.12)':'transparent',border:'none',borderRadius:8,cursor:'pointer',color:color||(active?T.amber:T.text),transition:'background .15s,color .15s',flexShrink:0}}
+<button data-tour={dataTour} onClick={onClick} title={title} style={{display:'flex',alignItems:'center',justifyContent:'center',padding:10,background:active?'rgba(196,94,40,.12)':'transparent',border:'none',borderRadius:8,cursor:'pointer',color:color||(active?T.amber:T.text),transition:'background .15s,color .15s',flexShrink:0}}
   onMouseOver={function(e){if(!active){e.currentTarget.style.background='rgba(42,31,16,.06)';}}}
   onMouseOut={function(e){if(!active){e.currentTarget.style.background='transparent';}}}>
   <span className="mi" style={{fontSize:22}}>{icon}</span>
@@ -394,6 +395,13 @@ function DraftEditor({app}){
   var spp=useState(false);var showProperties=spp[0];var setShowProperties=spp[1];
   var sps=useState(false);var showSpool=sps[0];var setShowSpool=sps[1];
   var ssd=useState(null);var strandDetailId=ssd[0];var setStrandDetailId=ssd[1];
+  var tourDriverRef=useRef(null);
+  useTour(app,'draft-basics',[
+    {element:'[data-tour="props-btn"]',popover:{title:'Properties',description:'Status, synopsis, and any custom fields for this draft live here.',side:'bottom',align:'end',
+      onNextClick:function(){setShowProperties(true);advanceWhenReady(tourDriverRef.current,'[data-tour="tag-spool-chip"]');}}},
+    {element:'[data-tour="tag-spool-chip"]',popover:{title:'Tag a Spool',description:'Link a character, location, or anything else to this draft — click the + to search and tag.',side:'left',align:'start'}},
+    {element:'[data-tour="add-field-btn"]',popover:{title:'Custom fields',description:'Add fields of your own — POV character, chapter number, whatever this project needs to track per draft.',side:'top',align:'start'}}
+  ],{ready:!!did,onCreated:function(d){tourDriverRef.current=d;}});
   var sf=useState(window.innerWidth<720);var flowMode=sf[0];var setFlowMode=sf[1];
   // Auto flow on resize
   useEffect(function(){
@@ -970,7 +978,7 @@ function DraftEditor({app}){
         <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onCompareTwo={handleCompareBranches}/>
         <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowComments(false);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
         <IconBtn icon="comment" title="Comments" onClick={function(){setShowComments(!showComments);setShowVersions(false);setShowProperties(false);setShowSpool(false);}} active={showComments}/>
-        <IconBtn icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowComments(false);setShowSpool(false);}} active={showProperties}/>
+        <IconBtn dataTour="props-btn" icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowComments(false);setShowSpool(false);}} active={showProperties}/>
         <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowComments(false);setShowProperties(false);if(showSpool)setStrandDetailId(null);}} active={showSpool}/>
       </div>
       {/* Mobile collapsed menu */}

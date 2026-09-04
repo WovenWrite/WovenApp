@@ -120,6 +120,7 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
             <span style={{ fontSize: 11, color: 'var(--mid)', marginLeft: 6 }}>+{taggedStrands.length - 6}</span>
           )}
           <span
+            data-tour="tag-spool-chip"
             className="chip"
             onClick={function () { setAddChipOpen(!addChipOpen); }}
             style={{ background: 'var(--bg3)', color: 'var(--mid)', border: '1px solid var(--border)', marginLeft: taggedStrands.length > 0 ? 8 : 0 }}>
@@ -230,7 +231,7 @@ export default function PropertiesDrawer({ app, draft, variant, open, onClose, o
         );
       })}
 
-      <SecondaryButton icon="add" onClick={function () { setShowAddField(true); }}>Add new field</SecondaryButton>
+      <SecondaryButton data-tour="add-field-btn" icon="add" onClick={function () { setShowAddField(true); }}>Add new field</SecondaryButton>
       {draftFieldDefs.length > 0 && (
         <TertiaryButton onClick={function () { setShowEditFields(true); }}>Edit existing fields</TertiaryButton>
       )}
