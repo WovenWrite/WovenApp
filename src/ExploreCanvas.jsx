@@ -1349,7 +1349,8 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
 
   useEffect(() => {
     const el = canvasRef.current
-    if (!el) return
+    if (!el) { console.log('[woven-line-debug] canvasRef.current is null, listener NOT attached'); return }
+    console.log('[woven-line-debug] attaching listeners | activeTool:', activeTool)
 
     function toFlowPos(e) {
       const rect = canvasRef.current.getBoundingClientRect()
@@ -1357,10 +1358,12 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     }
 
     function onDown(e) {
-      if (activeTool !== 'line' && activeTool !== 'arrow') return
+      console.log('[woven-line-debug] onDown fired | activeTool:', activeTool, '| target:', e.target && e.target.className)
+      if (activeTool !== 'line' && activeTool !== 'arrow') { console.log('[woven-line-debug] onDown: tool not line/arrow, ignoring'); return }
       e.preventDefault()
       e.stopPropagation()
       const position = toFlowPos(e)
+      console.log('[woven-line-debug] onDown: starting draw at', position)
       const startId = genId(), endId = genId(), edgeId = genId()
       lineDrawRef.current = { startId, endId, edgeId, screenStart: { x: e.clientX, y: e.clientY } }
       setNodes(nds => [...nds,
@@ -1373,6 +1376,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
         markerEnd: activeTool === 'arrow' ? { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 14, height: 14 } : undefined,
         data: { isFreeformLine: true, anchorIds: [startId, endId] },
       }])
+      console.log('[woven-line-debug] onDown: nodes+edge created, ids:', startId, endId, edgeId)
     }
     function onMove(e) {
       const d = lineDrawRef.current
@@ -1383,15 +1387,21 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     }
     function onUp(e) {
       const d = lineDrawRef.current
+      console.log('[woven-line-debug] onUp fired | lineDrawRef was:', d)
       if (!d) return
       e.stopPropagation()
       const dx = e.clientX - d.screenStart.x, dy = e.clientY - d.screenStart.y
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      console.log('[woven-line-debug] onUp: drag distance =', dist)
       // A drag shorter than this reads as a stray click rather than an
       // intentional line, so it's discarded instead of leaving a
       // zero-length edge behind.
-      if (Math.sqrt(dx * dx + dy * dy) < 6) {
+      if (dist < 6) {
+        console.log('[woven-line-debug] onUp: distance too short, discarding line')
         setNodes(nds => nds.filter(n => n.id !== d.startId && n.id !== d.endId))
         setEdges(eds => eds.filter(ed => ed.id !== d.edgeId))
+      } else {
+        console.log('[woven-line-debug] onUp: keeping line, distance was sufficient')
       }
       lineDrawRef.current = null
       onToolReset()
@@ -1730,7 +1740,7 @@ export default function ExploreCanvas({ app }) {
   }
 
   function toggleDrawer(panel) { setActiveDrawer(d => d === panel ? null : panel) }
-  function handleToolSelect(tool) { setActiveTool(t => t === tool ? 'select' : tool) }
+  function handleToolSelect(tool) { setActiveTool(t => { var next = t === tool ? 'select' : tool; console.log('[woven-line-debug] tool select:', tool, '| was:', t, '| now:', next); return next; }) }
   function handleDragStart(e, item) {
     e.dataTransfer.setData('application/woven-item', JSON.stringify(item))
     e.dataTransfer.effectAllowed = 'copy'
