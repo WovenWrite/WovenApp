@@ -19,6 +19,7 @@ import CardsView, { StrandTagPicker } from './CardsView'
 import AddMenuFab from './AddMenuFab'
 import LooseThreadsQuickAccess from './LooseThreadsQuickAccess'
 import LegalPage from './legal/LegalPage'
+import FeedbackButton from './FeedbackButton'
 export { buildTree, ViewHeader, loadFilterState, persistFilterState, applyFS, LooseThreadsSection, DraftLoadingSpinner, EmptyDrafts } from './CardsView'
 import { AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio } from './SharedUI'
 import {
@@ -1545,6 +1546,7 @@ function App(){
   <GlobalStyles/>
   {inner}
   <ProfileDrawer app={app} focusField={profileFocus} open={showProfile} topOffset={54} onClose={function(){setShowProfile(false);}}/>
+  <FeedbackButton app={app}/>
   {showNewProject&&<ProjectWizard app={app} onClose={function(){setShowNewProject(false);}}/>}
 </div>
   );

@@ -1208,6 +1208,11 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, colle
   const shapeWrapRef = useRef(null)
   const shapeActive = activeTool.startsWith('shape:')
 
+  // Belt-and-suspenders: whatever else might leave a hover-triggered
+  // tooltip stuck (an unmount mid-hover, a fast click, etc.), leaving
+  // Explore altogether always clears the shared tooltip.
+  useEffect(() => () => hideTt(), [])
+
   useEffect(() => {
     if (!shapePickerOpen) return
     function onAny(e) {
@@ -1236,6 +1241,12 @@ function Toolbar({ activeTool, onToolSelect, activeDrawer, onDrawerToggle, colle
   function pickShape(variant) {
     onToolSelect(`shape:${variant}`)
     setShapePickerOpen(false)
+    // The popover item is still hovered at the moment of click, but
+    // closing the popover unmounts it before a mouseleave can fire — so
+    // the shared #woven-tt tooltip never gets told to hide, and since
+    // that element lives outside this view, it was staying stuck ("Line",
+    // "Arrow", etc.) even after navigating away from Explore entirely.
+    hideTt()
   }
 
   return (
