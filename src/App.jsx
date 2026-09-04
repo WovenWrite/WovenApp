@@ -18,6 +18,7 @@ import TableView from './TableView'
 import CardsView, { StrandTagPicker } from './CardsView'
 import AddMenuFab from './AddMenuFab'
 import LooseThreadsQuickAccess from './LooseThreadsQuickAccess'
+import LegalPage from './legal/LegalPage'
 export { buildTree, ViewHeader, loadFilterState, persistFilterState, applyFS, LooseThreadsSection, DraftLoadingSpinner, EmptyDrafts } from './CardsView'
 import { AvatarEditModal, AddFieldInline, Drawer, HelpText, PrimaryButton, StrandResultRow, SearchSortBar, OptionsEditor, Radio } from './SharedUI'
 import {
@@ -1462,6 +1463,10 @@ function App(){
   var urlParams=new URLSearchParams(window.location.search);
   var shareId=urlParams.get('share');
   if(shareId)return(<div className="woven-root"><div id="woven-tt" style={{position:"fixed",display:"none",background:"#7A5A38",color:"#fdf8f0",fontSize:11,padding:"4px 10px",borderRadius:6,pointerEvents:"none",zIndex:99999,transform:"translateX(-50%)",fontFamily:"DM Sans, sans-serif",whiteSpace:"nowrap"}}/><GlobalStyles/><SharedDraftView shareId={shareId}/></div>);
+  // Check for legal page link (Terms of Service / Privacy Policy) — reachable
+  // whether or not the visitor is logged in, same reasoning as shareId above.
+  var legalPage=urlParams.get('legal');
+  if(legalPage)return(<div className="woven-root"><GlobalStyles/><LegalPage page={legalPage}/></div>);
 
   if(authLoading)return(
 <div style={{display:'flex',flexDirection:'column',height:'100vh',background:'var(--bg0)',overflow:'hidden'}}>
