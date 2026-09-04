@@ -1384,11 +1384,13 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       if (!d) return
       e.stopPropagation()
       const position = toFlowPos(e)
+      d.moveCount = (d.moveCount || 0) + 1
+      d.lastPosition = position
       setNodes(nds => nds.map(n => n.id === d.endId ? { ...n, position } : n))
     }
     function onUp(e) {
       const d = lineDrawRef.current
-      console.log('[woven-line-debug] onUp fired | lineDrawRef was:', d)
+      console.log('[woven-line-debug] onUp fired | lineDrawRef was:', d, '| onMove fired', d ? d.moveCount || 0 : 0, 'times, last end position:', d && d.lastPosition)
       if (!d) return
       e.stopPropagation()
       const dx = e.clientX - d.screenStart.x, dy = e.clientY - d.screenStart.y
@@ -1403,6 +1405,8 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
         setEdges(eds => eds.filter(ed => ed.id !== d.edgeId))
       } else {
         console.log('[woven-line-debug] onUp: keeping line, distance was sufficient')
+        setNodes(nds => { console.log('[woven-line-debug] onUp: final nodes array for this line:', nds.filter(n => n.id === d.startId || n.id === d.endId).map(n => ({ id: n.id, type: n.type, position: n.position, measured: n.measured, width: n.width, height: n.height }))); return nds })
+        setEdges(eds => { console.log('[woven-line-debug] onUp: final edge object:', eds.find(ed => ed.id === d.edgeId)); return eds })
       }
       lineDrawRef.current = null
       onToolReset()
