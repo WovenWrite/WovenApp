@@ -1405,8 +1405,35 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
         setEdges(eds => eds.filter(ed => ed.id !== d.edgeId))
       } else {
         console.log('[woven-line-debug] onUp: keeping line, distance was sufficient')
-        setNodes(nds => { console.log('[woven-line-debug] onUp: final nodes array for this line:', nds.filter(n => n.id === d.startId || n.id === d.endId).map(n => ({ id: n.id, type: n.type, position: n.position, measured: n.measured, width: n.width, height: n.height }))); return nds })
-        setEdges(eds => { console.log('[woven-line-debug] onUp: final edge object:', eds.find(ed => ed.id === d.edgeId)); return eds })
+        setNodes(nds => {
+          var mine = nds.filter(n => n.id === d.startId || n.id === d.endId).map(n => ({ id: n.id, type: n.type, position: n.position, measured: n.measured, width: n.width, height: n.height }))
+          console.log('[woven-line-debug] onUp: final nodes for this line (stringified):', JSON.stringify(mine))
+          return nds
+        })
+        setEdges(eds => {
+          var mine = eds.find(ed => ed.id === d.edgeId)
+          console.log('[woven-line-debug] onUp: final edge (stringified):', JSON.stringify(mine))
+          return eds
+        })
+        // Re-check measurement ~300ms later too, in case measurement is
+        // just slow rather than never happening — this tells us which.
+        setTimeout(() => {
+          setNodes(nds => {
+            var mine = nds.filter(n => n.id === d.startId || n.id === d.endId).map(n => ({ id: n.id, position: n.position, measured: n.measured }))
+            console.log('[woven-line-debug] +300ms: nodes now:', JSON.stringify(mine))
+            return nds
+          })
+          // Check the actual rendered DOM directly — tells us definitively
+          // whether React Flow ever created real elements for these, vs
+          // whether they're only ever existing in React state.
+          var startEl = document.querySelector('[data-id="' + d.startId + '"]')
+          var endEl = document.querySelector('[data-id="' + d.endId + '"]')
+          var edgeEl = document.querySelector('[data-id="' + d.edgeId + '"]')
+          console.log('[woven-line-debug] +300ms DOM check: startNode el?', !!startEl, '| endNode el?', !!endEl, '| edge el?', !!edgeEl)
+          if (edgeEl) console.log('[woven-line-debug] edge element outerHTML:', edgeEl.outerHTML.slice(0, 500))
+          console.log('[woven-line-debug] total .react-flow__edge elements on page:', document.querySelectorAll('.react-flow__edge').length)
+          console.log('[woven-line-debug] total .react-flow__node elements on page:', document.querySelectorAll('.react-flow__node').length)
+        }, 300)
       }
       lineDrawRef.current = null
       onToolReset()
