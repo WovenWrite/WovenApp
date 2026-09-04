@@ -768,9 +768,21 @@ function ShapeNode({ id, data, selected }) {
 // FlowCanvas below). Never shown to the user and never independently
 // selectable/draggable — it exists purely so a real React Flow edge can
 // be routed to an exact clicked point instead of to a visible shape.
+//
+// Renders the same <Handles /> every other node type in this file uses
+// (WovenCardNode, ShapeNode, TextNode, etc.) — this turned out to be the
+// actual bug behind the edge never appearing. Every other node here has
+// real Handle elements for React Flow to route an edge's connection
+// point to; this was the only one that had none at all, so React Flow
+// had nowhere to attach the edge and silently declined to draw it, with
+// completely valid node/edge data otherwise.
 // ─────────────────────────────────────────────────────────────
 function AnchorNode() {
-  return <div style={{ width: 1, height: 1, pointerEvents: 'none' }} />
+  return (
+    <div style={{ width: 1, height: 1, pointerEvents: 'none' }}>
+      <Handles />
+    </div>
+  )
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1349,8 +1361,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
 
   useEffect(() => {
     const el = canvasRef.current
-    if (!el) { console.log('[woven-line-debug] canvasRef.current is null, listener NOT attached'); return }
-    console.log('[woven-line-debug] attaching listeners | activeTool:', activeTool)
+    if (!el) return
 
     function toFlowPos(e) {
       const rect = canvasRef.current.getBoundingClientRect()
@@ -1358,13 +1369,11 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     }
 
     function onDown(e) {
-      console.log('[woven-line-debug] onDown fired | activeTool:', activeTool, '| target:', e.target && e.target.className, '| loadDone:', initialLoadDoneRef.current)
-      if (activeTool !== 'line' && activeTool !== 'arrow') { console.log('[woven-line-debug] onDown: tool not line/arrow, ignoring'); return }
-      if (!initialLoadDoneRef.current) { console.log('[woven-line-debug] onDown: board state still loading, ignoring draw to avoid the race that was overwriting it'); return }
+      if (activeTool !== 'line' && activeTool !== 'arrow') return
+      if (!initialLoadDoneRef.current) return
       e.preventDefault()
       e.stopPropagation()
       const position = toFlowPos(e)
-      console.log('[woven-line-debug] onDown: starting draw at', position)
       const startId = genId(), endId = genId(), edgeId = genId()
       lineDrawRef.current = { startId, endId, edgeId, screenStart: { x: e.clientX, y: e.clientY } }
       setNodes(nds => [...nds,
@@ -1372,68 +1381,30 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
         { id: endId,   type: 'anchorNode', position, draggable: false, selectable: false, connectable: false, data: {} },
       ])
       setEdges(eds => [...eds, {
-        id: edgeId, source: startId, target: endId, type: 'straight',
+        id: edgeId, source: startId, target: endId, sourceHandle: 'bottom', targetHandle: 'top-t', type: 'straight',
         style: { stroke: 'var(--bg4)', strokeWidth: 3 },
         markerEnd: activeTool === 'arrow' ? { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 14, height: 14 } : undefined,
         data: { isFreeformLine: true, anchorIds: [startId, endId] },
       }])
-      console.log('[woven-line-debug] onDown: nodes+edge created, ids:', startId, endId, edgeId)
     }
     function onMove(e) {
       const d = lineDrawRef.current
       if (!d) return
       e.stopPropagation()
       const position = toFlowPos(e)
-      d.moveCount = (d.moveCount || 0) + 1
-      d.lastPosition = position
       setNodes(nds => nds.map(n => n.id === d.endId ? { ...n, position } : n))
     }
     function onUp(e) {
       const d = lineDrawRef.current
-      console.log('[woven-line-debug] onUp fired | lineDrawRef was:', d, '| onMove fired', d ? d.moveCount || 0 : 0, 'times, last end position:', d && d.lastPosition)
       if (!d) return
       e.stopPropagation()
       const dx = e.clientX - d.screenStart.x, dy = e.clientY - d.screenStart.y
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      console.log('[woven-line-debug] onUp: drag distance =', dist)
       // A drag shorter than this reads as a stray click rather than an
       // intentional line, so it's discarded instead of leaving a
       // zero-length edge behind.
-      if (dist < 6) {
-        console.log('[woven-line-debug] onUp: distance too short, discarding line')
+      if (Math.sqrt(dx * dx + dy * dy) < 6) {
         setNodes(nds => nds.filter(n => n.id !== d.startId && n.id !== d.endId))
         setEdges(eds => eds.filter(ed => ed.id !== d.edgeId))
-      } else {
-        console.log('[woven-line-debug] onUp: keeping line, distance was sufficient')
-        setNodes(nds => {
-          var mine = nds.filter(n => n.id === d.startId || n.id === d.endId).map(n => ({ id: n.id, type: n.type, position: n.position, measured: n.measured, width: n.width, height: n.height }))
-          console.log('[woven-line-debug] onUp: final nodes for this line (stringified):', JSON.stringify(mine))
-          return nds
-        })
-        setEdges(eds => {
-          var mine = eds.find(ed => ed.id === d.edgeId)
-          console.log('[woven-line-debug] onUp: final edge (stringified):', JSON.stringify(mine))
-          return eds
-        })
-        // Re-check measurement ~300ms later too, in case measurement is
-        // just slow rather than never happening — this tells us which.
-        setTimeout(() => {
-          setNodes(nds => {
-            var mine = nds.filter(n => n.id === d.startId || n.id === d.endId).map(n => ({ id: n.id, position: n.position, measured: n.measured }))
-            console.log('[woven-line-debug] +300ms: nodes now:', JSON.stringify(mine))
-            return nds
-          })
-          // Check the actual rendered DOM directly — tells us definitively
-          // whether React Flow ever created real elements for these, vs
-          // whether they're only ever existing in React state.
-          var startEl = document.querySelector('[data-id="' + d.startId + '"]')
-          var endEl = document.querySelector('[data-id="' + d.endId + '"]')
-          var edgeEl = document.querySelector('[data-id="' + d.edgeId + '"]')
-          console.log('[woven-line-debug] +300ms DOM check: startNode el?', !!startEl, '| endNode el?', !!endEl, '| edge el?', !!edgeEl)
-          if (edgeEl) console.log('[woven-line-debug] edge element outerHTML:', edgeEl.outerHTML.slice(0, 500))
-          console.log('[woven-line-debug] total .react-flow__edge elements on page:', document.querySelectorAll('.react-flow__edge').length)
-          console.log('[woven-line-debug] total .react-flow__node elements on page:', document.querySelectorAll('.react-flow__node').length)
-        }, 300)
       }
       lineDrawRef.current = null
       onToolReset()
@@ -1477,7 +1448,6 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       setNodes(saved?.nodes || [])
       setEdges(saved?.edges || [])
       initialLoadDoneRef.current = true
-      console.log('[woven-line-debug] board state load resolved, nodes:', (saved?.nodes || []).length)
     })
   }, [projId, boardId])
 
@@ -1783,7 +1753,7 @@ export default function ExploreCanvas({ app }) {
   }
 
   function toggleDrawer(panel) { setActiveDrawer(d => d === panel ? null : panel) }
-  function handleToolSelect(tool) { setActiveTool(t => { var next = t === tool ? 'select' : tool; console.log('[woven-line-debug] tool select:', tool, '| was:', t, '| now:', next); return next; }) }
+  function handleToolSelect(tool) { setActiveTool(t => t === tool ? 'select' : tool) }
   function handleDragStart(e, item) {
     e.dataTransfer.setData('application/woven-item', JSON.stringify(item))
     e.dataTransfer.effectAllowed = 'copy'
