@@ -13,7 +13,7 @@
 // version, so the shortcut has nothing left to add.
 import { useState, useEffect } from "react";
 
-export default function LooseThreadsQuickAccess({app,targetId,count}){
+export default function LooseThreadsQuickAccess({app,targetId,count,boundToSelector}){
   var pid=app.projId;
   var resolvedTargetId=targetId||'loose-threads-inline';
   // count is an explicit override so this can be reused in contexts (like
@@ -21,6 +21,24 @@ export default function LooseThreadsQuickAccess({app,targetId,count}){
   // app.allDrafts — falls back to the original per-project computation
   // when not provided, so the existing Storyboard usage is untouched.
   var resolvedCount=count!==undefined?count:(app.allDrafts[pid]||[]).filter(function(d){return !d.archived&&d.status==='loose_thread';}).length;
+
+  // boundToSelector (e.g. '.dash-main') constrains the bar to match a
+  // specific column's width/position instead of spanning the full
+  // viewport — used on the Dashboard, where full-width previously
+  // overlapped the sidebar's "New Project" button and the avatar. Measured
+  // directly off the DOM since there's no CSS variable for this column's
+  // width to key off of.
+  var sb=useState(null);var bounds=sb[0];var setBounds=sb[1];
+  useEffect(function(){
+    if(!boundToSelector)return;
+    function measure(){
+      var el=document.querySelector(boundToSelector);
+      if(el){var r=el.getBoundingClientRect();setBounds({left:r.left,width:r.width});}
+    }
+    measure();
+    window.addEventListener('resize',measure);
+    return function(){window.removeEventListener('resize',measure);};
+  },[boundToSelector]);
 
   var sh=useState(false);var hidden=sh[0];var setHidden=sh[1];
   useEffect(function(){
@@ -40,8 +58,10 @@ export default function LooseThreadsQuickAccess({app,targetId,count}){
 
   if(hidden)return null;
 
+  var boundStyle=boundToSelector&&bounds?{left:bounds.left,right:'auto',width:bounds.width}:{left:16,right:16};
+
   return(
-<button onClick={scrollToLooseThreads} style={{position:'fixed',left:16,right:16,bottom:16,zIndex:390,display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8,padding:'14px 20px',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:16,boxShadow:'0 6px 20px rgba(42,31,16,.14)',cursor:'pointer',transition:'background .15s'}}
+<button onClick={scrollToLooseThreads} style={Object.assign({position:'fixed',bottom:16,zIndex:390,display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8,padding:'14px 20px',background:'var(--bg1)',border:'1px solid var(--border)',borderRadius:16,boxShadow:'0 6px 20px rgba(42,31,16,.14)',cursor:'pointer',transition:'background .15s'},boundStyle)}
   onMouseOver={function(e){e.currentTarget.style.background='var(--bg2)';}}
   onMouseOut={function(e){e.currentTarget.style.background='var(--bg1)';}}>
   <span className="material-symbols-outlined" style={{fontSize:18,color:'var(--teal)'}}>push_pin</span>

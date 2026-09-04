@@ -9,7 +9,6 @@
 //   Layer 2 'structure'  — what a draft is called, ordering, cover images
 //   Layer 2 'statuses'   — rename, recolour, reorder, add, remove (loose_thread is locked)
 //   Layer 2 'properties' — draft custom fields
-//   Layer 2 'goals'      — deadline and writing pace
 //
 //   <ProjectDrawer proj={proj} app={app} open={true} onClose={fn} />
 //
@@ -24,8 +23,8 @@ import {
   Radio, CustomColorPicker, OptionsEditor
 } from './SharedUI';
 import {
-  PROJ_TYPES, SEQUENCE_MODES, GOAL_MODES, DEFAULT_STATUSES,
-  projConfig, projStatuses, projLabel, projGoal, daysUntilDue, isSystemStatus
+  PROJ_TYPES, SEQUENCE_MODES, DEFAULT_STATUSES,
+  projConfig, projStatuses, projLabel, isSystemStatus
 } from './projectConfig';
 import { FIELD_TYPES, PRESET_COLORS, genId } from './utils';
 
@@ -347,64 +346,6 @@ export default function ProjectDrawer({ proj, app, variant, open, onClose, topOf
     );
   }
 
-  // ── Layer 2: goals ──
-  if (view === 'goals') {
-    return (
-      <Drawer variant={variant || 'overlay'} open={open} title="Deadline and pace" onBack={back} onClose={onClose} topOffset={topOffset}>
-        <div>
-          <span className="wv-field-lbl">Deadline</span>
-          <input
-            type="date"
-            value={cfg.dueDate || ''}
-            onChange={function (e) { setConfig({ dueDate: e.target.value || null }); }}
-            style={{ width: '100%' }}
-          />
-          <HelpText style={{ marginTop: 6 }}>Nothing happens at the deadline — it is yours to aim at.</HelpText>
-        </div>
-
-        <div>
-          <span className="wv-field-lbl">Writing pace</span>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {GOAL_MODES.map(function (m) {
-              return (
-                <div key={m.id}>
-                  <Radio
-                    on={cfg.goalMode === m.id}
-                    onClick={function () { setConfig(m.id === 'none' ? { goalMode: 'none', goalWords: 0 } : { goalMode: m.id }); }}
-                    label={m.label}
-                  />
-                  <div style={{ fontSize: 12, color: 'var(--mid)', marginLeft: 28, marginTop: -2 }}>{m.desc}</div>
-                </div>
-              );
-            })}
-          </div>
-          {cfg.goalMode !== 'none' && (
-            <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input
-                key={pid + '-gw'}
-                type="number"
-                min="0"
-                defaultValue={cfg.goalWords || ''}
-                placeholder={cfg.goalMode === 'daily' ? '500' : '3500'}
-                style={{ width: 120 }}
-                onBlur={function (e) {
-                  var n = parseInt(e.target.value, 10);
-                  setConfig({ goalWords: n > 0 ? n : 0 });
-                }}
-              />
-              <span style={{ fontSize: 13, color: 'var(--mid)' }}>
-                words per {cfg.goalMode === 'daily' ? 'day' : 'week'}
-              </span>
-            </div>
-          )}
-          <HelpText style={{ marginTop: 8 }}>
-            This is separate from your overall daily goal on the dashboard.
-          </HelpText>
-        </div>
-      </Drawer>
-    );
-  }
-
   // ── Layer 1: overview ──
   var totalWords = drafts.reduce(function (s, d) { return s + (d.wordCount || 0); }, 0);
   var sequenced = drafts.filter(function (d) { return d.status !== 'loose_thread'; });
@@ -412,9 +353,6 @@ export default function ProjectDrawer({ proj, app, variant, open, onClose, topOf
   var byStatus = statuses.map(function (s) {
     return { status: s, count: drafts.filter(function (d) { return d.status === s.id; }).length };
   }).filter(function (r) { return r.count > 0; });
-
-  var days = daysUntilDue(proj);
-  var goal = projGoal(proj);
 
   var footer = (
     <button
@@ -512,24 +450,6 @@ export default function ProjectDrawer({ proj, app, variant, open, onClose, topOf
             </div>
           )}
 
-          {(days !== null || goal) && (
-            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {days !== null && (
-                <div style={{ fontSize: 12, color: days < 0 ? 'var(--danger)' : 'var(--body-text)' }}>
-                  <span className="mi" style={{ fontSize: 13, verticalAlign: '-2px', marginRight: 5 }}>event</span>
-                  {days < 0
-                    ? Math.abs(days) + ' day' + (Math.abs(days) === 1 ? '' : 's') + ' past deadline'
-                    : days === 0 ? 'Deadline is today' : days + ' day' + (days === 1 ? '' : 's') + ' to deadline'}
-                </div>
-              )}
-              {goal && (
-                <div style={{ fontSize: 12, color: 'var(--body-text)' }}>
-                  <span className="mi" style={{ fontSize: 13, verticalAlign: '-2px', marginRight: 5 }}>flag</span>
-                  {goal.label}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
@@ -539,7 +459,6 @@ export default function ProjectDrawer({ proj, app, variant, open, onClose, topOf
         <CategoryLink title="Structure" onClick={function () { setView('structure'); }} />
         <CategoryLink title="Statuses" onClick={function () { setView('statuses'); }} />
         <CategoryLink title={one + ' properties'} onClick={function () { setView('properties'); }} />
-        <CategoryLink title="Deadline and pace" onClick={function () { setView('goals'); }} />
       </div>
 
       {/* ── Not built yet ── */}

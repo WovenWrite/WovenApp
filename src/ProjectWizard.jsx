@@ -16,7 +16,7 @@ import {
   InputField, Field, SelectField, Toggle, CardOptionGroup, useDrawerStyles
 } from './SharedUI';
 import {
-  PROJ_TYPES, SEQUENCE_MODES, GOAL_MODES, presetFor, buildConfig, presetDraftFields, defaultFields
+  PROJ_TYPES, SEQUENCE_MODES, presetFor, buildConfig, presetDraftFields, defaultFields
 } from './projectConfig';
 import { genId, FIELD_TYPES } from './utils';
 
@@ -35,11 +35,8 @@ var STEP_TITLES = [
   'What are you writing?',
   'Name your project',
   'Add context to your project',
-  'How it is structured',
-  'Deadline and pace'
+  'How it is structured'
 ];
-
-var FIELD_MAX_W = 220;
 
 export default function ProjectWizard({ app, onClose }) {
   useDrawerStyles();
@@ -57,11 +54,6 @@ export default function ProjectWizard({ app, onClose }) {
   var sth = useState(true); var thumbnails = sth[0]; var setThumbnails = sth[1];
   var sls = useState('Draft'); var labelOne = sls[0]; var setLabelOne = sls[1];
   var sfd = useState([]); var fields = sfd[0]; var setFields = sfd[1];
-
-  // Goals step
-  var sdd = useState(''); var dueDate = sdd[0]; var setDueDate = sdd[1];
-  var sgm = useState('none'); var goalMode = sgm[0]; var setGoalMode = sgm[1];
-  var sgw = useState(''); var goalWords = sgw[0]; var setGoalWords = sgw[1];
 
   var titleRef = useRef(null);
   var otherRef = useRef(null);
@@ -131,17 +123,13 @@ export default function ProjectWizard({ app, onClose }) {
     var many = one + 's';
     var labels = (one === 'Draft') ? {} : { draft: one, drafts: many };
 
-    var words = parseInt(goalWords, 10);
-    if (!(words > 0)) words = 0;
-    var mode = words > 0 ? goalMode : 'none';
-
     var config = buildConfig(typeId, {
       sequenceMode: seqMode,
       draftThumbnails: thumbnails,
       labels: labels,
-      dueDate: dueDate || null,
-      goalMode: mode,
-      goalWords: words
+      dueDate: null,
+      goalMode: 'none',
+      goalWords: 0
     });
 
     var typeLabel = (typeId === 'other' && otherName.trim())
@@ -178,15 +166,10 @@ export default function ProjectWizard({ app, onClose }) {
     <div className="modal-overlay">
       <div className="modal-backdrop" onClick={onClose} />
       <div className="modal-box">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: step === 4 ? 4 : 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600 }}>{stepTitle()}</div>
           <button className="btn-icon" onClick={onClose}><span className="mi">close</span></button>
         </div>
-        {step === 4 && (
-          <div style={{ fontSize: 13, color: 'var(--mid)', marginBottom: 18 }}>
-            Both are completely optional.
-          </div>
-        )}
 
         <div style={{ minHeight: 220 }}>
 
@@ -368,52 +351,6 @@ export default function ProjectWizard({ app, onClose }) {
 
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <button className="btn btn-ghost" onClick={function () { setStep(2); }}>Back</button>
-                <button className="btn btn-primary" onClick={function () { setStep(4); }}>Next</button>
-              </div>
-            </div>
-          )}
-
-          {step === 4 && (
-            <div>
-              <div style={{ marginBottom: 18 }}>
-                <InputField
-                  label="Deadline"
-                  type="date"
-                  value={dueDate}
-                  onChange={function (e) { setDueDate(e.target.value); }}
-                  style={{ maxWidth: FIELD_MAX_W }}
-                />
-              </div>
-
-              <div style={{ marginBottom: 18 }}>
-                <SelectField
-                  label="Writing pace"
-                  value={goalMode}
-                  onChange={function (e) { setGoalMode(e.target.value); }}
-                  style={{ maxWidth: FIELD_MAX_W }}
-                >
-                  {GOAL_MODES.map(function (m) { return <option key={m.id} value={m.id}>{m.label}</option>; })}
-                </SelectField>
-                {goalMode !== 'none' && (
-                  <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <InputField
-                      wrap={false}
-                      type="number"
-                      min="0"
-                      value={goalWords}
-                      onChange={function (e) { setGoalWords(e.target.value); }}
-                      placeholder={goalMode === 'daily' ? '500' : '3500'}
-                      style={{ width: 120 }}
-                    />
-                    <span style={{ fontSize: 13, color: 'var(--mid)' }}>
-                      words per {goalMode === 'daily' ? 'day' : 'week'}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <button className="btn btn-ghost" onClick={function () { setStep(3); }}>Back</button>
                 <button className="btn btn-primary" onClick={create} disabled={!title.trim()}>Create Project</button>
               </div>
             </div>

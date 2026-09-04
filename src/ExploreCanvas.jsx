@@ -672,16 +672,7 @@ function ImageNode({ id, data, selected }) {
 function ShapeNode({ id, data, selected }) {
   const scheme = STICKY_COLORS.find(c => c.id === (data.colorId ?? 'sky')) || STICKY_COLORS[4]
   const variant = data.variant || 'rectangle'
-  const clipPath = variant === 'diamond'
-    ? 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)'
-    : variant === 'triangle'
-    ? 'polygon(50% 0%, 100% 100%, 0% 100%)'
-    : variant === 'arrow'
-    ? 'polygon(0% 35%, 65% 35%, 65% 10%, 100% 50%, 65% 90%, 65% 65%, 0% 65%)'
-    : variant === 'line'
-    ? 'inset(42% 0% 42% 0%)'
-    : 'none'
-  const borderRadius = variant === 'ellipse' ? '50%' : variant === 'rectangle' ? 8 : 0
+  const isLineLike = variant === 'arrow' || variant === 'line'
 
   function openMenu(e) {
     e.stopPropagation()
@@ -690,6 +681,59 @@ function ShapeNode({ id, data, selected }) {
       detail: { nodeId: id, nodeType: 'shapeNode', x: e.clientX, y: e.clientY, data }
     }))
   }
+
+  // Arrow and line are thin strokes, not filled shapes — a filled
+  // clip-path polygon in a min-60x60 box read as a big solid chevron/bar
+  // rather than a connector-style line, so these two variants get their
+  // own lightweight SVG-stroke rendering instead of the shared
+  // background+clipPath treatment below.
+  if (isLineLike) {
+    const markerId = `ex-arrowhead-${id}`
+    return (
+      <div
+        className="ex-shape-node ex-shape-node--line"
+        style={{
+          outline: selected ? '2px solid var(--indigo)' : 'none', outlineOffset: 6,
+          width: '100%', height: '100%', minWidth: 60, minHeight: 24,
+        }}
+        onContextMenu={e => {
+          e.preventDefault(); e.stopPropagation()
+          e.target.dispatchEvent(new CustomEvent('woven:ctx', {
+            bubbles: true,
+            detail: { nodeId: id, nodeType: 'shapeNode', x: e.clientX, y: e.clientY, data }
+          }))
+        }}
+      >
+        <svg width="100%" height="100%" style={{ display: 'block', overflow: 'visible' }} preserveAspectRatio="none">
+          {variant === 'arrow' && (
+            <defs>
+              <marker id={markerId} markerWidth="9" markerHeight="9" refX="6" refY="4.5"
+                orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,0 L9,4.5 L0,9 Z" fill={scheme.border} />
+              </marker>
+            </defs>
+          )}
+          <line x1="3%" y1="50%" x2={variant === 'arrow' ? '92%' : '97%'} y2="50%"
+            stroke={scheme.border} strokeWidth="3" strokeLinecap="round"
+            markerEnd={variant === 'arrow' ? `url(#${markerId})` : undefined} />
+        </svg>
+        <NodeResizer isVisible={selected} minWidth={40} minHeight={20}
+          lineStyle={{ border: '1px dashed var(--indigo)' }}
+          handleStyle={{ width: 13, height: 13, background: 'var(--indigo)', border: '2px solid var(--bg1)', borderRadius: 3 }} />
+        <Handles />
+        <button className="ex-node-menu-btn nodrag" title="Options" onClick={openMenu}>
+          <span className="mi">more_vert</span>
+        </button>
+      </div>
+    )
+  }
+
+  const clipPath = variant === 'diamond'
+    ? 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)'
+    : variant === 'triangle'
+    ? 'polygon(50% 0%, 100% 100%, 0% 100%)'
+    : 'none'
+  const borderRadius = variant === 'ellipse' ? '50%' : variant === 'rectangle' ? 8 : 0
 
   return (
     <div
@@ -1404,8 +1448,8 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
         ellipse:   { width: 120, height: 120 },
         diamond:   { width: 120, height: 120 },
         triangle:  { width: 120, height: 104 },
-        arrow:     { width: 160, height: 60 },
-        line:      { width: 160, height: 40 },
+        arrow:     { width: 160, height: 28 },
+        line:      { width: 160, height: 24 },
       }[variant] || { width: 120, height: 120 }
       setNodes(nds => [...nds, {
         id: genId(), type: 'shapeNode', position,

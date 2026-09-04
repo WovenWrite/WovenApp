@@ -15,13 +15,13 @@ export default function LegalFooter({ variant, style }) {
 
   return (
     <div style={Object.assign({ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, fontSize: 12, fontFamily: 'DM Sans, sans-serif' }, style)}>
-      <a href="/?legal=terms" target="_blank" rel="noopener noreferrer" style={{ color: linkColor, textDecoration: 'none' }}
+      <a href="https://www.wovenwrite.com/#terms" target="_blank" rel="noopener noreferrer" style={{ color: linkColor, textDecoration: 'none' }}
         onMouseOver={function (e) { e.currentTarget.style.textDecoration = 'underline'; }}
         onMouseOut={function (e) { e.currentTarget.style.textDecoration = 'none'; }}>
         Terms of Service
       </a>
       <span style={{ color: dividerColor }}>·</span>
-      <a href="/?legal=privacy" target="_blank" rel="noopener noreferrer" style={{ color: linkColor, textDecoration: 'none' }}
+      <a href="https://www.wovenwrite.com/#privacy" target="_blank" rel="noopener noreferrer" style={{ color: linkColor, textDecoration: 'none' }}
         onMouseOver={function (e) { e.currentTarget.style.textDecoration = 'underline'; }}
         onMouseOut={function (e) { e.currentTarget.style.textDecoration = 'none'; }}>
         Privacy Policy

@@ -24,7 +24,8 @@ var FIELD_TYPE_INFO={
   date:{icon:'calendar_month',help:'A specific date — birthday, event, deadline.'},
   boolean:{icon:'toggle_on',help:'A simple yes/no choice.'},
   select:{icon:'list',help:'Pick one option from a defined list.'},
-  strand_ref:{icon:'hub',help:'Link to another spool item — relationships, connections.'}
+  strand_ref:{icon:'hub',help:'Link to another spool item — relationships, connections.'},
+  url:{icon:'link',help:'A web address — reference material, research, external links.'}
 };
 
 // ── CollectionIconThumb ──
@@ -645,11 +646,31 @@ function StrandsPage({app,allProjects}){
   </div>
 </div>
     );
-    if(f.type==='select')return(
+    if(f.type==='select'){
+      if(f.multiple){
+        var selArr=Array.isArray(val)?val:(val?[val]:[]);
+        return(
+<div key={sid+'-'+f.id} className="wv-field-wrap">
+  <label className="wv-field-lbl">{f.label}</label>
+  <Dropdown options={(f.options||[]).map(function(o){return{id:o,label:o};})} selected={selArr} multi={true} placeholder="Select..." onChange={function(next){updateField(sid,f.id,next);}}/>
+</div>
+        );
+      }
+      return(
 <SelectField key={sid+'-'+f.id} label={f.label} defaultValue={val} style={{fontFamily:"'DM Sans',sans-serif"}} onChange={function(e){updateField(sid,f.id,e.target.value);}}>
   <option value="">Select...</option>
   {(f.options||[]).map(function(o){return <option key={o} value={o}>{o}</option>;})}
 </SelectField>
+      );
+    }
+    if(f.type==='url')return(
+<div key={sid+'-'+f.id} className="wv-field-wrap">
+  <label className="wv-field-lbl">{f.label}</label>
+  <div style={{display:'flex',gap:6,alignItems:'center'}}>
+    <InputField wrap={false} type="url" defaultValue={val} placeholder="https://..." style={{flex:1}} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>
+    {val&&<a href={val} target="_blank" rel="noopener noreferrer" className="btn-icon" title="Open link"><span className="mi" style={{fontSize:18}}>open_in_new</span></a>}
+  </div>
+</div>
     );
     if(f.type==='date')return <InputField key={sid+'-'+f.id} label={f.label} type="date" defaultValue={val} onChange={function(e){updateField(sid,f.id,e.target.value);}}/>;
     if(f.type==='number')return <InputField key={sid+'-'+f.id} label={f.label} type="number" defaultValue={val} placeholder={'Add '+f.label.toLowerCase()+'...'} onBlur={function(e){updateField(sid,f.id,e.target.value);}}/>;
@@ -794,7 +815,7 @@ function StrandsPage({app,allProjects}){
     <span className="material-symbols-outlined" style={{fontSize:18,color:'#A88060',flexShrink:0}}>{(FIELD_TYPE_INFO[f.type]||{}).icon||'text_fields'}</span>
     <InputField wrap={false} defaultValue={f.label} style={{maxWidth:200,fontSize:16}} onBlur={function(e){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{label:e.target.value});commitFields(nf);}}/>
     <div style={{width:170,flexShrink:0}}>
-      <Dropdown options={FIELD_TYPES.map(function(t){return{id:t.id,label:t.label};})} selected={f.type} multi={false} onChange={function(newType){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:newType,refSpool:null,refMultiple:false,options:null});commitFields(nf);}}/>
+      <Dropdown options={FIELD_TYPES.map(function(t){return{id:t.id,label:t.label};})} selected={f.type} multi={false} onChange={function(newType){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{type:newType,refSpool:null,refMultiple:false,options:null,multiple:false});commitFields(nf);}}/>
     </div>
     <button className="btn-icon" title="Delete field" onClick={function(){requestDeleteField(i);}}><span className="mi" style={{fontSize:18}}>delete</span></button>
   </div>
@@ -811,6 +832,9 @@ function StrandsPage({app,allProjects}){
   {f.type==='select'&&(
     <div style={{marginLeft:28,marginTop:8}}>
       <OptionsEditor options={f.options} onChange={function(opts){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{options:opts});commitFields(nf);}}/>
+      <label style={{fontSize:16,display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap',cursor:'pointer',marginTop:8}} onClick={function(){var nf=editingFields.slice();nf[i]=Object.assign({},nf[i],{multiple:!f.multiple});commitFields(nf);}}>
+        <Check on={!!f.multiple}/> Allow multiple selections
+      </label>
     </div>
   )}
 </div>

@@ -319,6 +319,12 @@ function ShareDropdown({onExportPDF,onExportDocx,shareLink,onGenerateLink,onDepu
 
 
 // ── NavCollapseMenu (mobile ≤720px) ──
+// Comments are hidden for the solo-writer beta launch — buggy, limited use
+// case without a second reader. Flip this back on to restore all entry
+// points (toolbar icon, mobile menu, inline "leave a comment" affordance,
+// and the drawer itself) without touching anything else.
+var COMMENTS_ENABLED = false;
+
 function NavCollapseMenu({branches,activeBranchId,onSwitch,onCreate,onSetPrimary,onVersions,onComments,onProperties,onSpool}){
   var so=useState(false);var open=so[0];var setOpen=so[1];
   var ref=useRef(null);
@@ -327,10 +333,10 @@ function NavCollapseMenu({branches,activeBranchId,onSwitch,onCreate,onSetPrimary
   var items=[
     {icon:'account_tree',label:hasBranches?(branches.length+' strands'):'Create strand',action:function(){onCreate&&onCreate('Strand '+(branches?branches.length+1:2));setOpen(false);}},
     {icon:'history',label:'Versions',action:function(){onVersions();setOpen(false);}},
-    {icon:'comment',label:'Comments',action:function(){onComments&&onComments();setOpen(false);}},
     {icon:'settings',label:'Properties',action:function(){onProperties();setOpen(false);}},
     {icon:'gesture',label:'Spools',action:function(){onSpool();setOpen(false);}},
   ];
+  if(COMMENTS_ENABLED)items.splice(2,0,{icon:'comment',label:'Comments',action:function(){onComments&&onComments();setOpen(false);}});
   return(
 <div ref={ref} className="nav-collapse" style={{display:'none',position:'relative'}}>
   <button onClick={function(){setOpen(!open);}} style={{display:'flex',alignItems:'center',justifyContent:'center',padding:10,background:'transparent',border:'none',cursor:'pointer',color:T.text,borderRadius:8}}>
@@ -977,7 +983,7 @@ function DraftEditor({app}){
       <div className="nav-drawers" style={{display:'flex',alignItems:'center',gap:10}}>
         <BranchDropdown branches={branches} activeBranchId={activeBranchId} onSwitch={handleSwitchBranch} onCreate={handleCreateBranch} onSetPrimary={handleSetPrimary} onCompareTwo={handleCompareBranches}/>
         <IconBtn icon="history" title="Version history" onClick={function(){setShowVersions(!showVersions);setShowComments(false);setShowProperties(false);setShowSpool(false);}} active={showVersions}/>
-        <IconBtn icon="comment" title="Comments" onClick={function(){setShowComments(!showComments);setShowVersions(false);setShowProperties(false);setShowSpool(false);}} active={showComments}/>
+        {COMMENTS_ENABLED&&<IconBtn icon="comment" title="Comments" onClick={function(){setShowComments(!showComments);setShowVersions(false);setShowProperties(false);setShowSpool(false);}} active={showComments}/>}
         <IconBtn dataTour="props-btn" icon="settings" title="Properties" onClick={function(){setShowProperties(!showProperties);setShowVersions(false);setShowComments(false);setShowSpool(false);}} active={showProperties}/>
         <IconBtn icon="gesture" title="Spools" onClick={function(){setShowSpool(!showSpool);setShowVersions(false);setShowComments(false);setShowProperties(false);if(showSpool)setStrandDetailId(null);}} active={showSpool}/>
       </div>
@@ -1074,7 +1080,7 @@ function DraftEditor({app}){
               dangerouslySetInnerHTML={{__html:previewVersion.body}}
             />
           )}
-          {commentBtnPos&&!previewVersion&&(
+          {COMMENTS_ENABLED&&commentBtnPos&&!previewVersion&&(
             <button
               ref={commentBtnRef}
               onMouseDown={function(e){e.preventDefault();handleAddComment();}}
@@ -1117,7 +1123,7 @@ function DraftEditor({app}){
           )}
           <Popover
             anchorRef={commentBtnRef}
-            open={showCommentComposer}
+            open={COMMENTS_ENABLED&&showCommentComposer}
             onClose={closeCommentComposer}
             title="Add comment"
             width={260}
@@ -1155,7 +1161,7 @@ function DraftEditor({app}){
     {!flowMode&&showVersions&&(
       <VersionsDrawer draftId={did} variant="inline" onClose={function(){setShowVersions(false);}} onRestore={handleRestoreVersion} onSaveVersion={handleManualSnapshot} onCompare={setCompareData} onPreview={setPreviewVersion} onExitPreview={function(){setPreviewVersion(null);}}/>
     )}
-    {!flowMode&&showComments&&(
+    {COMMENTS_ENABLED&&!flowMode&&showComments&&(
       <CommentsDrawer draftId={did} variant="inline" focusCommentId={focusCommentId} refreshTick={commentsRefreshTick} onDismiss={handleDismissComment} onReopen={handleReopenComment} onClose={function(){setShowComments(false);setFocusCommentId(null);}}/>
     )}
   </div>

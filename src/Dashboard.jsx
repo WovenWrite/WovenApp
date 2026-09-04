@@ -386,7 +386,7 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
   </div>
   {editProj&&<ProjectDrawer proj={editProj} app={app} open={true} variant="overlay" topOffset={54} onClose={function(){setEditingProjId(null);}}/>}
   <ArchiveDrawer app={app} open={archiveOpen} onClose={function(){setArchiveOpen(false);}}/>
-  <LooseThreadsQuickAccess app={app} targetId="dash-loose-threads" count={Object.values(app.globalLT||{}).filter(function(d){return !d.archived;}).length}/>
+  <LooseThreadsQuickAccess app={app} targetId="dash-loose-threads" boundToSelector=".dash-main" count={Object.values(app.globalLT||{}).filter(function(d){return !d.archived;}).length}/>
 </div>
   );
 }
