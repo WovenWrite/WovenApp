@@ -225,6 +225,7 @@ const CANVAS_CSS = `
 
 /* Shape node */
 .ex-shape-node{position:relative;box-shadow:0 2px 8px rgba(42,31,16,.08);}
+.ex-shape-node--line{box-shadow:none;}
 
 /* Text node — no chrome, just editable text on the canvas */
 .ex-text-node{position:relative;display:flex;flex-direction:column;min-width:60px;min-height:30px;}
