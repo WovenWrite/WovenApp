@@ -16,20 +16,22 @@
 // produce pageview data. A manual $pageview capture is wired into
 // App.jsx's view-state instead (see the useEffect watching `view`).
 //
-// ── Setup — one thing you need to do ──
-// Replace the placeholder below with your real Project API key from
-// PostHog → Project settings → Project API key. This key is meant to be
-// public/client-side (unlike a Supabase service-role key) — PostHog's own
-// docs show it hardcoded the same way, so this is standard practice, not
-// a shortcut.
+// ── Setup ──
+// Project API key is already set below (from PostHog → Project settings
+// → Project token). This key is meant to be public/client-side (unlike a
+// Supabase service-role key) — PostHog's own docs show it hardcoded the
+// same way, so this is standard practice, not a shortcut. If you ever
+// rotate it, just swap the value below.
 
 import posthog from 'posthog-js';
 
-var POSTHOG_KEY = 'YOUR_POSTHOG_PROJECT_API_KEY';
+var POSTHOG_KEY = 'phc_mpKVyWR6EFXkZutzW9x3krK8FyPex9oJDPUZNAfUhKEc';
 
 if (typeof window !== 'undefined' && POSTHOG_KEY && POSTHOG_KEY.indexOf('YOUR_POSTHOG') !== 0) {
   posthog.init(POSTHOG_KEY, {
     api_host: 'https://us.i.posthog.com',
+    defaults: '2026-05-30',
+    person_profiles: 'identified_only', // don't create profiles for anonymous (pre-login) visitors
     autocapture: true,
     capture_pageview: false, // handled manually — see App.jsx's view-state effect
   });
