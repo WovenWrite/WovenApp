@@ -27,13 +27,16 @@ export default function LooseThreadsQuickAccess({app,targetId,count,boundToSelec
   // viewport — used on the Dashboard, where full-width previously
   // overlapped the sidebar's "New Project" button and the avatar. Measured
   // directly off the DOM since there's no CSS variable for this column's
-  // width to key off of.
+  // width to key off of. Inset a bit further than the raw column edges so
+  // it reads as sitting inside the column with some cushion, rather than
+  // flush against its exact boundaries.
+  var BOUND_INSET=16;
   var sb=useState(null);var bounds=sb[0];var setBounds=sb[1];
   useEffect(function(){
     if(!boundToSelector)return;
     function measure(){
       var el=document.querySelector(boundToSelector);
-      if(el){var r=el.getBoundingClientRect();setBounds({left:r.left,width:r.width});}
+      if(el){var r=el.getBoundingClientRect();setBounds({left:r.left+BOUND_INSET,width:Math.max(0,r.width-BOUND_INSET*2)});}
     }
     measure();
     window.addEventListener('resize',measure);

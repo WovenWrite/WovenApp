@@ -1319,41 +1319,61 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
   useEffect(() => { boardIdRef.current = boardId }, [boardId])
 
   // Freeform line/arrow drawing is a drag: mousedown sets the start point,
-  // dragging live-updates a real preview edge, mouseup finalizes it. (A
-  // two-click version was tried first but collided with React Flow's
-  // default double-click-to-zoom — two quick clicks in the same spot read
-  // as a dblclick, which is standard canvas behavior we don't want to
-  // strip away just for this tool.) Listens on canvasRef directly rather
-  // than a React Flow pane prop, since drag needs to keep tracking the
-  // mouse even if it leaves the pane element mid-drag.
+  // dragging live-updates a real preview edge, mouseup finalizes it.
+  //
+  // History: a two-click version was tried first, but collided with React
+  // Flow's default double-click-to-zoom. A drag version followed, wired
+  // via a native 'mousedown' listener on the wrapper div — but React Flow
+  // v12 (@xyflow/react) handles its own pane interactions internally, and
+  // that raw listener never reliably saw the event. There's also no
+  // official onPaneMouseDown/onPaneMouseUp prop to hook into (checked
+  // against the current API reference — only onPaneMouseMove/Enter/Leave
+  // exist).
+  //
+  // xyflow's own "Rectangle" whiteboard example solves exactly this by
+  // rendering the drawing tool as an element *inside* the <ReactFlow />
+  // tree rather than around it — an absolutely-positioned overlay that
+  // sits above the pane in the DOM/z-index stack, so it receives mouse
+  // events first, guaranteed, regardless of React Flow's own internal
+  // event handling. That's the approach below: LineDrawOverlay is only
+  // rendered while the arrow/line tool is active, covers the canvas, and
+  // uses plain onMouseDown (a real React prop, always fires). Once a drag
+  // starts, window-level mousemove/mouseup listeners take over so the
+  // drag keeps tracking even if the cursor leaves the overlay's bounds.
+  const isLineTool = activeTool === 'shape:arrow' || activeTool === 'shape:line'
   const lineDrawRef = useRef(null)
+
+  function toFlowPos(e) {
+    const rect = canvasRef.current.getBoundingClientRect()
+    return screenToFlowPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+  }
+
+  const handleLineOverlayMouseDown = useCallback((e) => {
+    e.preventDefault()
+    // Stop this from bubbling further up React Flow's own internal pane
+    // handling. The overlay is a child inside <ReactFlow />'s tree (see
+    // the comment above), which means without this, the same mousedown
+    // that starts the drag here can also be picked up by React Flow's own
+    // pane-click delegation — which was resetting the tool back to
+    // 'select' immediately, before a drag could even happen.
+    e.stopPropagation()
+    const variant = activeTool.split(':')[1]
+    const position = toFlowPos(e)
+    const startId = genId(), endId = genId(), edgeId = genId()
+    lineDrawRef.current = { startId, endId, edgeId, screenStart: { x: e.clientX, y: e.clientY } }
+    setNodes(nds => [...nds,
+      { id: startId, type: 'anchorNode', position, draggable: false, selectable: false, connectable: false, data: {} },
+      { id: endId,   type: 'anchorNode', position, draggable: false, selectable: false, connectable: false, data: {} },
+    ])
+    setEdges(eds => [...eds, {
+      id: edgeId, source: startId, target: endId, type: 'straight',
+      style: { stroke: 'var(--bg4)', strokeWidth: 3 },
+      markerEnd: variant === 'arrow' ? { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 14, height: 14 } : undefined,
+      data: { isFreeformLine: true, anchorIds: [startId, endId] },
+    }])
+  }, [activeTool, screenToFlowPosition, setNodes, setEdges])
+
   useEffect(() => {
-    const el = canvasRef.current
-    if (!el) return
-
-    function toFlowPos(e) {
-      const rect = canvasRef.current.getBoundingClientRect()
-      return screenToFlowPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top })
-    }
-
-    function onDown(e) {
-      if (activeTool !== 'shape:arrow' && activeTool !== 'shape:line') return
-      if (e.target.closest('.react-flow__node') || e.target.closest('.react-flow__edge')) return
-      const variant = activeTool.split(':')[1]
-      const position = toFlowPos(e)
-      const startId = genId(), endId = genId(), edgeId = genId()
-      lineDrawRef.current = { startId, endId, edgeId, screenStart: { x: e.clientX, y: e.clientY } }
-      setNodes(nds => [...nds,
-        { id: startId, type: 'anchorNode', position, draggable: false, selectable: false, connectable: false, data: {} },
-        { id: endId,   type: 'anchorNode', position, draggable: false, selectable: false, connectable: false, data: {} },
-      ])
-      setEdges(eds => [...eds, {
-        id: edgeId, source: startId, target: endId, type: 'straight',
-        style: { stroke: 'var(--bg4)', strokeWidth: 3 },
-        markerEnd: variant === 'arrow' ? { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 14, height: 14 } : undefined,
-        data: { isFreeformLine: true, anchorIds: [startId, endId] },
-      }])
-    }
     function onMove(e) {
       const d = lineDrawRef.current
       if (!d) return
@@ -1374,16 +1394,13 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       lineDrawRef.current = null
       onToolReset()
     }
-
-    el.addEventListener('mousedown', onDown)
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
     return () => {
-      el.removeEventListener('mousedown', onDown)
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
     }
-  }, [activeTool, screenToFlowPosition, setNodes, setEdges, onToolReset])
+  }, [screenToFlowPosition, setNodes, setEdges, onToolReset])
 
   // Build live item lookup — always reflects latest app data
   const findItem = useCallback((id) => {
@@ -1571,7 +1588,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
   const isPlaceMode = isPlaceModeTool(activeTool)
 
   return (
-    <div ref={canvasRef} style={{ width: '100%', height: '100%' }}>
+    <div ref={canvasRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       <ReactFlow
         nodes={nodes} edges={edges}
         onNodesChange={onNodesChange} onEdgesChange={handleEdgesChange}
@@ -1589,6 +1606,12 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
         <Controls showInteractive={false} />
         <MiniMap nodeColor={n => n.data?.color || 'var(--bg3)'}
           maskColor="rgba(253,248,240,0.7)" style={{ background: 'var(--bg1)' }} />
+        {isLineTool && (
+          <div
+            onMouseDown={handleLineOverlayMouseDown}
+            style={{ position: 'absolute', inset: 0, zIndex: 5, cursor: 'crosshair' }}
+          />
+        )}
       </ReactFlow>
 
       {ctx && (

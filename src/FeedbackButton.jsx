@@ -37,6 +37,31 @@ import { useState } from 'react';
 import { supabase } from './utils';
 import { PrimaryButton, Field, Check } from './SharedUI';
 
+// Reuses the same shared #woven-tt tooltip element and imperative
+// show/hide pattern as everywhere else in the app (see ExploreCanvas.jsx's
+// own showTt/hideTt for the original) — centered under the target rather
+// than right-aligned, since this button isn't flush against a screen edge
+// the way the Explore toolbar is.
+function showTt(e, text) {
+  var tt = document.getElementById('woven-tt');
+  if (!tt) return;
+  var r = e.currentTarget.getBoundingClientRect();
+  tt.textContent = text;
+  tt.style.display = 'block';
+  tt.style.right = 'auto';
+  tt.style.left = (r.left + r.width / 2) + 'px';
+  tt.style.transform = 'translateX(-50%)';
+  tt.style.top = (r.top - 34) + 'px';
+}
+function hideTt() {
+  var tt = document.getElementById('woven-tt');
+  if (!tt) return;
+  tt.style.display = 'none';
+  tt.style.left = '';
+  tt.style.right = '';
+  tt.style.transform = '';
+}
+
 var RATING_LABELS = { 1: 'Not great', 2: '', 3: 'Okay', 4: '', 5: 'Love it' };
 var USE_OPTIONS = ['Writing', 'Research', 'Planning / outlining', 'Organizing ideas or notes', 'Creative work', 'Academic work'];
 
@@ -102,15 +127,16 @@ export default function FeedbackButton({ app }) {
 
   return (
     <>
-      <button onClick={function () { setOpen(true); }} title="Give feedback"
-        style={{ position: 'fixed', bottom: fabBottom, left: 28, zIndex: 400, width: 48, height: 48, borderRadius: '50%', background: 'var(--bg1)', border: '1px solid var(--border)', boxShadow: '0 4px 14px rgba(42,31,16,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#6B4A26', transition: 'background .15s' }}
-        onMouseEnter={function (e) { e.currentTarget.style.background = 'var(--bg2)'; }}
-        onMouseLeave={function (e) { e.currentTarget.style.background = 'var(--bg1)'; }}>
+      <button onClick={function () { setOpen(true); hideTt(); }}
+        onMouseEnter={function (e) { showTt(e, 'Provide Feedback'); }} onMouseLeave={hideTt}
+        style={{ position: 'fixed', bottom: fabBottom, left: 28, zIndex: 400, width: 48, height: 48, borderRadius: '50%', background: '#C45E28', border: 'none', boxShadow: '0 4px 14px rgba(42,31,16,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#F5EDE0', transition: 'background .15s' }}
+        onMouseOver={function (e) { e.currentTarget.style.background = '#6B4A26'; }}
+        onMouseOut={function (e) { e.currentTarget.style.background = '#C45E28'; }}>
         <span className="material-symbols-outlined" style={{ fontSize: 22 }}>chat</span>
       </button>
 
       {open && (
-        <div className="modal-overlay">
+        <div className="modal-overlay" style={{ zIndex: 1000 }}>
           <div className="modal-backdrop" onClick={close} />
           <div className="modal-box" style={{ width: 420, maxHeight: '85vh', overflowY: 'auto' }}>
             {submitted ? (
