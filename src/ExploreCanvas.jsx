@@ -1358,8 +1358,9 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     }
 
     function onDown(e) {
-      console.log('[woven-line-debug] onDown fired | activeTool:', activeTool, '| target:', e.target && e.target.className)
+      console.log('[woven-line-debug] onDown fired | activeTool:', activeTool, '| target:', e.target && e.target.className, '| loadDone:', initialLoadDoneRef.current)
       if (activeTool !== 'line' && activeTool !== 'arrow') { console.log('[woven-line-debug] onDown: tool not line/arrow, ignoring'); return }
+      if (!initialLoadDoneRef.current) { console.log('[woven-line-debug] onDown: board state still loading, ignoring draw to avoid the race that was overwriting it'); return }
       e.preventDefault()
       e.stopPropagation()
       const position = toFlowPos(e)
@@ -1430,11 +1431,22 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     return null
   }, [strandsObj, drafts, looseThreads, templates])
 
-  // Load state on board change
+  // Load state on board change. Guarded against a race where this async
+  // load resolves *after* the user has already interacted with the
+  // canvas (e.g. drawing a line right after opening Explore) — without
+  // initialLoadDoneRef, that late resolution would silently overwrite
+  // whatever they'd just added with the last-saved (older) state, with no
+  // error of any kind since nothing actually throws. The line-drawing
+  // mousedown handler checks this ref and won't start a draw until the
+  // load for the current board has actually finished.
+  const initialLoadDoneRef = useRef(false)
   useEffect(() => {
+    initialLoadDoneRef.current = false
     canvasLoad(`canvas:state:${projId}:${boardId}`, null).then(saved => {
       setNodes(saved?.nodes || [])
       setEdges(saved?.edges || [])
+      initialLoadDoneRef.current = true
+      console.log('[woven-line-debug] board state load resolved, nodes:', (saved?.nodes || []).length)
     })
   }, [projId, boardId])
 
