@@ -1307,15 +1307,72 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
   const boardIdRef = useRef(boardId)
   useEffect(() => { boardIdRef.current = boardId }, [boardId])
 
-  // Freeform line/arrow drawing is click-start, click-end rather than the
-  // single-click placement every other shape uses — first click records
-  // the start point here, second click (in onPaneClick below) draws the
-  // actual edge. Switching tools mid-draw abandons the pending start
-  // rather than leaving it stuck waiting for a click that'll never come.
-  const [pendingLineStart, setPendingLineStart] = useState(null)
+  // Freeform line/arrow drawing is a drag: mousedown sets the start point,
+  // dragging live-updates a real preview edge, mouseup finalizes it. (A
+  // two-click version was tried first but collided with React Flow's
+  // default double-click-to-zoom — two quick clicks in the same spot read
+  // as a dblclick, which is standard canvas behavior we don't want to
+  // strip away just for this tool.) Listens on canvasRef directly rather
+  // than a React Flow pane prop, since drag needs to keep tracking the
+  // mouse even if it leaves the pane element mid-drag.
+  const lineDrawRef = useRef(null)
   useEffect(() => {
-    if (activeTool !== 'shape:arrow' && activeTool !== 'shape:line') setPendingLineStart(null)
-  }, [activeTool])
+    const el = canvasRef.current
+    if (!el) return
+
+    function toFlowPos(e) {
+      const rect = canvasRef.current.getBoundingClientRect()
+      return screenToFlowPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+    }
+
+    function onDown(e) {
+      if (activeTool !== 'shape:arrow' && activeTool !== 'shape:line') return
+      if (e.target.closest('.react-flow__node') || e.target.closest('.react-flow__edge')) return
+      const variant = activeTool.split(':')[1]
+      const position = toFlowPos(e)
+      const startId = genId(), endId = genId(), edgeId = genId()
+      lineDrawRef.current = { startId, endId, edgeId, screenStart: { x: e.clientX, y: e.clientY } }
+      setNodes(nds => [...nds,
+        { id: startId, type: 'anchorNode', position, draggable: false, selectable: false, connectable: false, data: {} },
+        { id: endId,   type: 'anchorNode', position, draggable: false, selectable: false, connectable: false, data: {} },
+      ])
+      setEdges(eds => [...eds, {
+        id: edgeId, source: startId, target: endId, type: 'straight',
+        style: { stroke: 'var(--bg4)', strokeWidth: 3 },
+        markerEnd: variant === 'arrow' ? { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 14, height: 14 } : undefined,
+        data: { isFreeformLine: true, anchorIds: [startId, endId] },
+      }])
+    }
+    function onMove(e) {
+      const d = lineDrawRef.current
+      if (!d) return
+      const position = toFlowPos(e)
+      setNodes(nds => nds.map(n => n.id === d.endId ? { ...n, position } : n))
+    }
+    function onUp(e) {
+      const d = lineDrawRef.current
+      if (!d) return
+      const dx = e.clientX - d.screenStart.x, dy = e.clientY - d.screenStart.y
+      // A drag shorter than this reads as a stray click rather than an
+      // intentional line, so it's discarded instead of leaving a
+      // zero-length edge behind.
+      if (Math.sqrt(dx * dx + dy * dy) < 6) {
+        setNodes(nds => nds.filter(n => n.id !== d.startId && n.id !== d.endId))
+        setEdges(eds => eds.filter(ed => ed.id !== d.edgeId))
+      }
+      lineDrawRef.current = null
+      onToolReset()
+    }
+
+    el.addEventListener('mousedown', onDown)
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      el.removeEventListener('mousedown', onDown)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [activeTool, screenToFlowPosition, setNodes, setEdges, onToolReset])
 
   // Build live item lookup — always reflects latest app data
   const findItem = useCallback((id) => {
@@ -1482,31 +1539,9 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
     }
     if (activeTool.startsWith('shape:')) {
       const variant = activeTool.split(':')[1]
-      if (variant === 'arrow' || variant === 'line') {
-        // Two-click flow: first click sets the start point and waits;
-        // second click draws the actual edge between the two exact
-        // clicked points via a pair of invisible anchor nodes, so this
-        // is a real edge (same data model as connecting two cards) not
-        // a resizable shape standing in for one.
-        if (!pendingLineStart) {
-          setPendingLineStart(position)
-          return
-        }
-        const startId = genId(), endId = genId()
-        setNodes(nds => [...nds,
-          { id: startId, type: 'anchorNode', position: pendingLineStart, draggable: false, selectable: false, connectable: false, data: {} },
-          { id: endId,   type: 'anchorNode', position,                   draggable: false, selectable: false, connectable: false, data: {} },
-        ])
-        setEdges(eds => [...eds, {
-          id: genId(), source: startId, target: endId, type: 'straight',
-          style: { stroke: 'var(--bg4)', strokeWidth: 3 },
-          markerEnd: variant === 'arrow' ? { type: MarkerType.ArrowClosed, color: 'var(--bg4)', width: 14, height: 14 } : undefined,
-          data: { isFreeformLine: true, anchorIds: [startId, endId] },
-        }])
-        setPendingLineStart(null)
-        onToolReset()
-        return
-      }
+      // arrow/line are handled by the mousedown/mousemove/mouseup drag
+      // listener above, not by this click handler
+      if (variant === 'arrow' || variant === 'line') return
       const defaultSize = {
         rectangle: { width: 140, height: 100 },
         ellipse:   { width: 120, height: 120 },
@@ -1520,7 +1555,7 @@ function FlowCanvas({ boardId, projId, activeTool, onToolReset, templates, stran
       }])
     }
     onToolReset()
-  }, [activeTool, screenToFlowPosition, setNodes, setEdges, onToolReset, pendingLineStart])
+  }, [activeTool, screenToFlowPosition, setNodes, setEdges, onToolReset])
 
   const isPlaceMode = isPlaceModeTool(activeTool)
 
