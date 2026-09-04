@@ -331,7 +331,7 @@ export default function Dashboard({app,onOpenProfile,onNewProject}){
   var editProj=editingProjId?app.projects.find(function(p){return p.id===editingProjId;}):null;
   useTour(app,'dashboard-start',[
     {element:'[data-tour="new-project-btn"]',popover:{title:'Start your first project',description:'This is where every story begins — give it a title and a type, and Woven sets up your Spools, Loose Threads, and drafting space.',side:'bottom',align:'start'}}
-  ],{ready:app.projects.filter(function(p){return !p.archived;}).length===0});
+  ],{ready:true});
   return(
 <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
   <nav className="nav" style={{justifyContent:'space-between'}}>
